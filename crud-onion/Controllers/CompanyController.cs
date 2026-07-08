@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Onion.BussinesLogic.Services.Abstract;
 using Onion.Domain;
 using Onion.Common.Services;
@@ -22,35 +23,33 @@ namespace Onion.Controllers
             _globalizationService = globalizationService;
         }
 
+        // NOTE: This endpoint exposes all companies in the system. It must be restricted to platform administrators
+        // (Module 3) before being enabled. For now, require platform admin role and return 501 to ensure it is not accidentally used.
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        [Authorize(Roles = "SuperAdmin")]
+        public Task<IActionResult> GetAll()
         {
-            var items = await _service.GetAllAsync();
-            if (!items.Any())
-            {
-                throw new HttpResponseException
-                {
-                    Errors = new Onion.Common.Models.Error[] { _globalizationService.GetErrorInCurrentLanguage(ErrorCodes.CompaniesNotFound) },
-                    StatusCode = System.Net.HttpStatusCode.BadRequest
-                };
-            }
-            try
-            {
-                return Ok(Onion.Common.Models.ApiResponse<object>.Ok(items));
-            }
-            catch (System.Exception)
-            {
-                throw new HttpResponseException
-                {
-                    Errors = new Onion.Common.Models.Error[] { _globalizationService.GetErrorInCurrentLanguage(ErrorCodes.UnknownException) },
-                    StatusCode = System.Net.HttpStatusCode.InternalServerError
-                };
-            }
+            // TODO(MODULE-3): Implement platform-admin-only listing of companies. Endpoint intentionally disabled until then.
+            return Task.FromResult<IActionResult>(StatusCode(501, Onion.Common.Models.ApiResponse<object>.Fail("Endpoint disabled until platform admin roles are implemented")));
         }
 
         [HttpGet("{id}")]
         public async Task<IActionResult> Get(int id)
         {
+            // Allow access if the caller is the owner of the company (CompanyId claim matches)
+            // or if the caller has the SuperAdmin platform role. Otherwise forbid access.
+            var companyIdClaim = User?.FindFirst("CompanyId")?.Value;
+            var isSuperAdmin = User?.IsInRole("SuperAdmin") ?? false;
+
+            if (!isSuperAdmin)
+            {
+                if (!int.TryParse(companyIdClaim, out var callerCompanyId) || callerCompanyId != id)
+                {
+                    // Do not reveal existence of other companies — forbid access for non-admins.
+                    return Forbid();
+                }
+            }
+
             var item = await _service.GetByIdAsync(id);
             if (item == null) return NotFound(Onion.Common.Models.ApiResponse<object>.Fail("Company not found"));
             return Ok(Onion.Common.Models.ApiResponse<object>.Ok(item));

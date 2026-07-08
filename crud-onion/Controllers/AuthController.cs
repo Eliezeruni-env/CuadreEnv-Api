@@ -21,7 +21,10 @@ namespace Onion.Controllers
         public async Task<IActionResult> Register([FromBody] RegisterRequestDto req)
         {
             var user = await _auth.RegisterAsync(req);
-            return Ok(Onion.Common.Models.ApiResponse<Onion.BussinesLogic.Dtos.UserResponseDto>.Ok(user, "User registered"));
+            // Return serialized JSON string to avoid pipeline async serialization edge-cases in some test hosts
+            var resp = Onion.Common.Models.ApiResponse<Onion.BussinesLogic.Dtos.UserResponseDto>.Ok(user, "User registered");
+            var json = System.Text.Json.JsonSerializer.Serialize(resp, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+            return Content(json, "application/json");
         }
 
         [HttpPost("login")]
@@ -29,7 +32,9 @@ namespace Onion.Controllers
         public async Task<IActionResult> Login([FromBody] LoginRequestDto req)
         {
             var tokens = await _auth.LoginAsync(req);
-            return Ok(new TokenResponseDto(tokens.AccessToken, tokens.RefreshToken));
+            var resp = new TokenResponseDto(tokens.AccessToken, tokens.RefreshToken);
+            var json = System.Text.Json.JsonSerializer.Serialize(resp, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+            return Content(json, "application/json");
         }
 
         [HttpPost("refresh")]
@@ -37,7 +42,9 @@ namespace Onion.Controllers
         public async Task<IActionResult> Refresh([FromBody] RefreshRequestDto req)
         {
             var tokens = await _auth.RefreshTokenAsync(req);
-            return Ok(new TokenResponseDto(tokens.AccessToken, tokens.RefreshToken));
+            var resp = new TokenResponseDto(tokens.AccessToken, tokens.RefreshToken);
+            var json = System.Text.Json.JsonSerializer.Serialize(resp, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+            return Content(json, "application/json");
         }
 
         [HttpPost("revoke")]

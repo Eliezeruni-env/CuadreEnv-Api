@@ -24,17 +24,10 @@ namespace Onion.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
-            var items = await _uow.Purchases.ListAsync();
-            if (!items.Any())
-            {
-                throw new HttpResponseException
-                {
-                    Errors = new Onion.Common.Models.Error[] { _globalizationService.GetErrorInCurrentLanguage(ErrorCodes.PurchasesNotFound) },
-                    StatusCode = System.Net.HttpStatusCode.BadRequest
-                };
-            }
             try
             {
+                var items = await _uow.Purchases.ListAsync();
+                // Return 200 with array (possibly empty) rather than treating empty as an error
                 return Ok(items);
             }
             catch (System.Exception)

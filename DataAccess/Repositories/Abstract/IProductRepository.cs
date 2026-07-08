@@ -27,5 +27,7 @@ namespace Onion.DataAccess.Repositories.Abstract
         Task<bool> TryReserveStockAsync(int productId, decimal quantity);
         // Release reserved stock (decrease ReservedStock)
         Task ReleaseReservedStockAsync(int productId, decimal quantity);
+        // Increase stock (e.g., on sale cancellation or purchase)
+        Task<bool> TryIncreaseStockAsync(int productId, decimal quantity);
     }
 }

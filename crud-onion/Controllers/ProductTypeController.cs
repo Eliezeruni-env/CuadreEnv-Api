@@ -23,18 +23,10 @@ namespace Onion.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
-            var items = await _service.GetAllAsync();
-            if (!items.Any())
-            {
-                throw new HttpResponseException
-                {
-                    Errors = new Onion.Common.Models.Error[] { _globalizationService.GetErrorInCurrentLanguage(ErrorCodes.ProductTypesNotFound) },
-                    StatusCode = System.Net.HttpStatusCode.BadRequest
-                };
-            }
             try
             {
-                return Ok(await _service.GetAllAsync());
+                var items = await _service.GetAllAsync();
+                return Ok(items);
             }
             catch (System.Exception)
             {

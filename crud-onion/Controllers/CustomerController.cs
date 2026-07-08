@@ -21,29 +21,18 @@ namespace Onion.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null)
         {
-            var items = await _service.GetAllAsync();
-            if (!items.Any())
-            {
-                throw new HttpResponseException
-                {
-                    Errors = new Onion.Common.Models.Error[] { _globalizationService.GetErrorInCurrentLanguage(ErrorCodes.CustomersNotFound) },
-                    StatusCode = System.Net.HttpStatusCode.BadRequest
-                };
-            }
-            try
-            {
-                return Ok(items);
-            }
-            catch (System.Exception)
-            {
-                throw new HttpResponseException
-                {
-                    Errors = new Onion.Common.Models.Error[] { _globalizationService.GetErrorInCurrentLanguage(ErrorCodes.UnknownException) },
-                    StatusCode = System.Net.HttpStatusCode.InternalServerError
-                };
-            }
+            var result = await _service.GetPagedAsync(pageNumber, pageSize, search);
+            // Return paged result even if Items is empty. Empty pages are normal for new companies.
+            return Ok(result);
+        }
+
+        [HttpGet("active")]
+        public async Task<IActionResult> GetActive([FromQuery] int days = 30)
+        {
+            var items = await _service.GetActiveCustomersAsync(days);
+            return Ok(items);
         }
 
         [HttpGet("{id}")]

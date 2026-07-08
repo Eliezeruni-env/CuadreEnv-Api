@@ -10,4 +10,9 @@
     <ProjectReference Include="..\Onion.Common\Onion.Common.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Customers\" />
+    <Folder Include="Sales\" />
+  </ItemGroup>
+
 </Project>

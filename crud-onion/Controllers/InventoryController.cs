@@ -38,5 +38,26 @@ namespace Onion.Controllers
             await _warehouseService.TransferStockAsync(req, User?.Identity?.Name ?? "system");
             return Ok();
         }
+
+        [HttpGet("low-stock")]
+        public async Task<IActionResult> GetLowStock()
+        {
+            var items = await _warehouseService.GetLowStockAsync();
+            return Ok(items);
+        }
+
+        [HttpGet("movements")]
+        public async Task<IActionResult> GetMovements([FromQuery] int? productId = null, [FromQuery] int? warehouseId = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] string? type = null)
+        {
+            var items = await _warehouseService.GetMovementHistoryAsync(productId, warehouseId, from, to, type);
+            return Ok(items);
+        }
+
+        [HttpGet("audit-movements")]
+        public async Task<IActionResult> GetAuditMovements([FromQuery] int? productId = null, [FromQuery] int? warehouseId = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] string? type = null)
+        {
+            var items = await _warehouseService.GetInventoryMovementsAsync(productId, warehouseId, from, to, type);
+            return Ok(items);
+        }
     }
 }

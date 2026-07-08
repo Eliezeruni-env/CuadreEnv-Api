@@ -66,6 +66,7 @@ namespace Onion.Controllers.Middleware
             catch (System.Exception ex)
             {
                 _logger.LogError(ex, "Unhandled exception processing request {Path}", context.Request?.Path);
+                // (Diagnostic logging removed) - previously logged full exception ToString() for TestHost debugging
                 context.Response.StatusCode = StatusCodes.Status500InternalServerError;
                 context.Response.ContentType = "application/json";
 

@@ -20,6 +20,10 @@ public static class ServicesConfiguration
         });
 
         services.AddScoped<IProductService, ProductService>();
+        services.AddScoped<ISubscriptionService, SubscriptionService>();
+        services.AddScoped<Onion.Common.Features.IFeatureService, FeatureService>();
+        services.AddScoped<Onion.BussinesLogic.Services.Abstract.IAccountReceivableService, Onion.BussinesLogic.Services.Concrete.AccountReceivableService>();
+        services.AddScoped<IReportService, ReportService>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IAuthService, AuthService>();
 
@@ -31,11 +35,12 @@ public static class ServicesConfiguration
         // Cash services
         services.AddScoped<ICashRegisterService, CashRegisterService>();
         services.AddScoped<ICashMovementService, CashMovementService>();
-
         // Register test-friendly repositories/services if needed
 
         // Domain services
         services.AddScoped<IUserService, UserService>();
+        // Email service (optional SMTP)
+        services.AddSingleton<Onion.Common.Services.IEmailService, Onion.Common.Services.SmtpEmailService>();
         services.AddScoped<ICompanyService, CompanyService>();
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<ISupplierService, SupplierService>();

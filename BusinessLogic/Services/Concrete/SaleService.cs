@@ -85,6 +85,31 @@ namespace Onion.BussinesLogic.Services.Concrete
                         var ok = await _uow.Products.TryReduceStockAsync(r.productId, r.qty);
                         if (!ok)
                             throw new CustomException(new Onion.Common.Models.Error { Code = "INSUFFICIENT_STOCK", Message = $"Insufficient stock when finalizing product {r.productId}", Language = "ES" });
+                    try
+                    {
+                        // Determine performing user from sale.CreateBy if numeric
+                        int performedBy = 0;
+                        if (!string.IsNullOrWhiteSpace(sale.CreateBy) && int.TryParse(sale.CreateBy, out var parsed))
+                            performedBy = parsed;
+
+                        // Record inventory movement (audit)
+                        var mv = new Onion.Domain.Inventory.InventoryMovement
+                        {
+                            CompanyId = sale.CompanyId,
+                            Type = Onion.Domain.Inventory.MovementType.Sale,
+                            ProductId = r.productId,
+                            Quantity = r.qty,
+                            WarehouseId = 0,
+                            PerformedByUserId = performedBy,
+                            Reference = sale.Id.ToString(),
+                            Comment = "Sale deduction."
+                        };
+                        await _uow.InventoryMovements.AddAsync(mv);
+                    }
+                    catch
+                    {
+                        _logger?.LogWarning("Failed to record inventory movement for product {ProductId} on sale {SaleId}", r.productId, sale.Id);
+                    }
                     }
                 }
                 catch
@@ -109,6 +134,29 @@ namespace Onion.BussinesLogic.Services.Concrete
                     };
 
                     await _uow.CashMovements.AddAsync(cashMovement);
+                }
+
+                // Assign invoice folio (simple sequence per company)
+                try
+                {
+                    var seqList = await _uow.InvoiceSequences.FindAsync(x => x.CompanyId == sale.CompanyId);
+                    var seq = seqList.FirstOrDefault();
+                    if (seq == null)
+                    {
+                        seq = new Onion.Domain.Invoices.InvoiceSequence { CompanyId = sale.CompanyId, LastFolio = 1 };
+                        await _uow.InvoiceSequences.AddAsync(seq);
+                        sale.InvoiceFolio = seq.LastFolio.ToString();
+                    }
+                    else
+                    {
+                        seq.LastFolio += 1;
+                        _uow.InvoiceSequences.Update(seq);
+                        sale.InvoiceFolio = seq.LastFolio.ToString();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Failed to assign invoice folio for sale");
                 }
 
                 await _uow.SaveChangesAsync();
@@ -142,6 +190,45 @@ namespace Onion.BussinesLogic.Services.Concrete
             var existing = await _uow.Sales.GetByIdAsync(id) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "Sale not found", Language = "ES" });
             _uow.Sales.Remove(existing);
             await _uow.SaveChangesAsync();
+        }
+
+        public async Task CancelAsync(int saleId, string reason)
+        {
+            var sale = await _uow.Sales.GetByIdAsync(saleId) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "Sale not found", Language = "ES" });
+            if (sale.Status == SaleStatus.PAID || sale.Status == SaleStatus.PARTIAL || sale.Status == SaleStatus.PENDING)
+            {
+                // Reverse stock for each sale detail
+                foreach (var d in sale.Details)
+                {
+                    // increase stock back
+                    await _uow.Products.TryIncreaseStockAsync(d.ProductId, d.Quantity);
+                    // record inventory movement
+                    try
+                    {
+                        var mv = new Onion.Domain.Inventory.InventoryMovement
+                        {
+                            CompanyId = sale.CompanyId,
+                            Type = Onion.Domain.Inventory.MovementType.In,
+                            ProductId = d.ProductId,
+                            Quantity = d.Quantity,
+                            WarehouseId = 0,
+                            PerformedByUserId = 0,
+                            Reference = sale.Id.ToString(),
+                            Comment = $"Sale cancelled: {reason}"
+                        };
+                        await _uow.InventoryMovements.AddAsync(mv);
+                    }
+                    catch { }
+                }
+
+                sale.Status = SaleStatus.CANCELLED;
+                _uow.Sales.Update(sale);
+                await _uow.SaveChangesAsync();
+            }
+            else
+            {
+                throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_OPERATION", Message = "Sale cannot be cancelled", Language = "ES" });
+            }
         }
 
         public async Task AddPaymentAsync(int saleId, Payment payment)

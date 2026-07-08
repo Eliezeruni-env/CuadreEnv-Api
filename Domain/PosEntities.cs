@@ -15,6 +15,10 @@ namespace Onion.Domain
     {
         public string Name { get; set; }
         public string? Phone { get; set; }
+        public string? Email { get; set; }
+        public string? Address { get; set; }
+        public string? Identification { get; set; }
+        public string? Notes { get; set; }
         public bool IsGeneric { get; set; }
         public decimal CurrentDebt { get; set; }
         public int CompanyId { get; set; }
@@ -44,13 +48,14 @@ namespace Onion.Domain
         public decimal Cost { get; set; }
     }
 
-    public enum SaleStatus { PENDING, PARTIAL, PAID, OVERDUE }
+    public enum SaleStatus { PENDING, PARTIAL, PAID, OVERDUE, CANCELLED }
     public enum PaymentType { CASH, CREDIT }
     public enum PaymentMethod { CASH, TRANSFER, CARD, OTHER }
 
     public class Sale : BaseEntity
     {
         public int? CustomerId { get; set; }
+        public DateTime Date { get; set; } = DateTime.UtcNow;
         public decimal Total { get; set; }
         public decimal PaidAmount { get; set; }
         public SaleStatus Status { get; set; }
@@ -58,6 +63,7 @@ namespace Onion.Domain
         public DateTime? DueDate { get; set; }
         public int? CashRegisterId { get; set; }
         public int CompanyId { get; set; }
+        public string InvoiceFolio { get; set; } = string.Empty;
         public List<SaleDetail> Details { get; set; } = new List<SaleDetail>();
     }
 
@@ -117,5 +123,13 @@ namespace Onion.Domain
         public virtual Company? Company { get; set; }
         public int CreditDaysLimit { get; set; } = 30;
         public bool BlockSalesIfOverdue { get; set; }
+        // Module 10 settings
+        public string Currency { get; set; } = "USD";
+        public string TimeZone { get; set; } = "UTC";
+        public string InvoiceNumberFormat { get; set; } = "{company}-{sequential}";
+        public string? LogoUrl { get; set; }
+        public string? CommercialName { get; set; }
+        public int DefaultStockAlertThreshold { get; set; } = 5;
+        public decimal DefaultTaxPercentage { get; set; } = 0m;
     }
 }

@@ -24,17 +24,9 @@ namespace Onion.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
-            var items = await _uow.Returns.ListAsync();
-            if (!items.Any())
-            {
-                throw new HttpResponseException
-                {
-                    Errors = new Onion.Common.Models.Error[] { _globalizationService.GetErrorInCurrentLanguage(ErrorCodes.ReturnsNotFound) },
-                    StatusCode = System.Net.HttpStatusCode.BadRequest
-                };
-            }
             try
             {
+                var items = await _uow.Returns.ListAsync();
                 return Ok(items);
             }
             catch (System.Exception)

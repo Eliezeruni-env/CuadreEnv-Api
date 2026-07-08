@@ -13,5 +13,6 @@ namespace Onion.BussinesLogic.Services.Abstract
         Task DeleteAsync(int id);
         // Payment-related convenience
         Task AddPaymentAsync(int saleId, Payment payment);
+        Task CancelAsync(int saleId, string reason);
     }
 }

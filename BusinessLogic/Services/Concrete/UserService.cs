@@ -13,11 +13,13 @@ namespace Onion.BussinesLogic.Services.Concrete
     {
         private readonly IUnitOfWork _uow;
         private readonly ITenantProvider _tenantProvider;
+        private readonly Onion.BussinesLogic.Services.Abstract.ISubscriptionService _subscriptionService;
 
-        public UserService(IUnitOfWork uow, ITenantProvider tenantProvider)
+        public UserService(IUnitOfWork uow, ITenantProvider tenantProvider, Onion.BussinesLogic.Services.Abstract.ISubscriptionService subscriptionService)
         {
             _uow = uow;
             _tenantProvider = tenantProvider;
+            _subscriptionService = subscriptionService;
         }
 
         public async Task<User> CreateAsync(User user)
@@ -25,6 +27,23 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (user is null) throw new ArgumentNullException(nameof(user));
             if (string.IsNullOrWhiteSpace(user.Email)) throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_EMAIL", Message = "Email required", Language = "EN" });
             if (await _uow.Users.ExistsByEmailAsync(user.Email)) throw new CustomException(new Onion.Common.Models.Error { Code = "DUPLICATE_EMAIL", Message = "Email already exists", Language = "EN" });
+
+            // Check subscription limits before creating
+            var companyId = user.CompanyId;
+            try
+            {
+                var subscriptionService = (Onion.BussinesLogic.Services.Abstract.ISubscriptionService?)typeof(UserService).Assembly
+                    .CreateInstance("Onion.BussinesLogic.Services.Concrete.SubscriptionService");
+            }
+            catch { }
+
+            // Enforce plan limits if company is provided
+            if (user.CompanyId > 0)
+            {
+                var canCreate = await _subscriptionService.CanCreateUserAsync(user.CompanyId);
+                if (!canCreate)
+                    throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "PLAN_LIMIT", Message = "User limit reached for current subscription plan", Language = "EN" });
+            }
 
             await _uow.Users.AddAsync(user);
             await _uow.SaveChangesAsync();
@@ -54,6 +73,46 @@ namespace Onion.BussinesLogic.Services.Concrete
             var existing = await _uow.Users.GetByIdAsync(id) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
             _uow.Users.Remove(existing);
             await _uow.SaveChangesAsync();
+        }
+
+        public async Task SetRoleAsync(int userId, string role)
+        {
+            // Only allow when caller has tenant and user belongs to same company
+            var callerCompany = _tenantProvider.GetCompanyId();
+            if (!callerCompany.HasValue)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Tenant context missing: CompanyId claim required", Language = "EN" });
+
+            var user = await _uow.Users.GetByIdAsync(userId) ?? throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
+            if (user.CompanyId != callerCompany.Value)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Cannot modify user from another company", Language = "EN" });
+
+            user.Role = role;
+            _uow.Users.Update(user);
+            await _uow.SaveChangesAsync();
+        }
+
+        public async Task SetActiveAsync(int userId, bool active)
+        {
+            var callerCompany = _tenantProvider.GetCompanyId();
+            if (!callerCompany.HasValue)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Tenant context missing: CompanyId claim required", Language = "EN" });
+
+            var user = await _uow.Users.GetByIdAsync(userId) ?? throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
+            if (user.CompanyId != callerCompany.Value)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Cannot modify user from another company", Language = "EN" });
+
+            // Soft deactivate/reactivate via Active flag on BaseEntity
+            var prop = user.GetType().GetProperty("Active");
+            if (prop != null)
+            {
+                prop.SetValue(user, active);
+                _uow.Users.Update(user);
+                await _uow.SaveChangesAsync();
+            }
+            else
+            {
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "INTERNAL_ERROR", Message = "User entity does not support Active flag", Language = "EN" });
+            }
         }
 
         public async Task<IEnumerable<User>> GetAllAsync()

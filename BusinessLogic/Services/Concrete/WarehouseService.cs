@@ -14,15 +14,60 @@ namespace Onion.BussinesLogic.Services.Concrete
     public class WarehouseService : IWarehouseService
     {
         private readonly IUnitOfWork _uow;
+        private readonly Onion.BussinesLogic.Services.Abstract.ISubscriptionService _subscriptionService;
 
-        public WarehouseService(IUnitOfWork uow)
+        public WarehouseService(IUnitOfWork uow, Onion.BussinesLogic.Services.Abstract.ISubscriptionService subscriptionService)
         {
             _uow = uow ?? throw new ArgumentNullException(nameof(uow));
+            _subscriptionService = subscriptionService;
+        }
+
+        public async Task<IEnumerable<Onion.Domain.Inventory.InventoryMovement>> GetInventoryMovementsAsync(int? productId = null, int? warehouseId = null, DateTime? from = null, DateTime? to = null, string? type = null)
+        {
+            var list = await _uow.InventoryMovements.ListAsync();
+            var q = list.AsQueryable();
+            if (productId.HasValue) q = q.Where(m => m.ProductId == productId.Value);
+            if (warehouseId.HasValue) q = q.Where(m => m.WarehouseId == warehouseId.Value);
+            if (from.HasValue) q = q.Where(m => m.OccurredAt >= from.Value);
+            if (to.HasValue) q = q.Where(m => m.OccurredAt <= to.Value);
+            if (!string.IsNullOrWhiteSpace(type)) q = q.Where(m => m.Type.ToString().Equals(type, StringComparison.OrdinalIgnoreCase));
+            return q.ToList();
+        }
+
+        public async Task<IEnumerable<ProductDto>> GetLowStockAsync()
+        {
+            var products = await _uow.Products.ListAsync();
+            var low = products.Where(p => p.Stock < p.MinimumQuantity).Select(p => new ProductDto
+            {
+                Id = p.Id,
+                Description = p.Description,
+                Barcode = p.Barcode,
+                CompanyId = p.CompanyId,
+                Stock = p.Stock,
+                MinimumQuantity = p.MinimumQuantity
+            });
+            return low;
+        }
+
+        public async Task<IEnumerable<MovementDto>> GetMovementHistoryAsync(int? productId = null, int? warehouseId = null, DateTime? from = null, DateTime? to = null, string? type = null)
+        {
+            var list = await _uow.Movements.ListAsync();
+            var q = list.AsQueryable();
+            if (productId.HasValue) q = q.Where(m => m.ProductId == productId.Value);
+            if (warehouseId.HasValue) q = q.Where(m => (m.FromWarehouseId == warehouseId.Value) || (m.ToWarehouseId == warehouseId.Value));
+            if (from.HasValue) q = q.Where(m => m.CreationDate >= from.Value);
+            if (to.HasValue) q = q.Where(m => m.CreationDate <= to.Value);
+            if (!string.IsNullOrWhiteSpace(type)) q = q.Where(m => m.Type.ToString().Equals(type, StringComparison.OrdinalIgnoreCase));
+
+            return q.Select(m => new MovementDto(m.Id, m.ProductId, m.FromWarehouseId, m.ToWarehouseId, m.Quantity, m.Type.ToString()));
         }
 
         public async Task<WarehouseDto> CreateWarehouseAsync(CreateWarehouseDto dto, int companyId)
         {
             if (dto is null) throw new ArgumentNullException(nameof(dto));
+            var canCreate = await _subscriptionService.CanCreateWarehouseAsync(companyId);
+            if (!canCreate) throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "PLAN_LIMIT", Message = "Warehouse limit reached for current subscription plan", Language = "EN" });
+
             var w = new Warehouse { Name = dto.Name?.Trim() ?? string.Empty, CompanyId = companyId };
             await _uow.Warehouses.AddAsync(w);
             await _uow.SaveChangesAsync();

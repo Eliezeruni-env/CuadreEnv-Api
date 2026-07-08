@@ -23,17 +23,9 @@ namespace Onion.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
-            var items = await _uow.Payments.ListAsync();
-            if (!items.Any())
-            {
-                throw new HttpResponseException
-                {
-                    Errors = new Onion.Common.Models.Error[] { _globalizationService.GetErrorInCurrentLanguage(ErrorCodes.PaymentsNotFound) },
-                    StatusCode = System.Net.HttpStatusCode.BadRequest
-                };
-            }
             try
             {
+                var items = await _uow.Payments.ListAsync();
                 return Ok(items);
             }
             catch (System.Exception)

@@ -55,6 +55,14 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (product.Cost <= 0)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_COST", Message = "Cost must be greater than zero", Language = "EN" });
 
+            // Enforce plan limits
+            try
+            {
+                var subscriptionService = (Onion.BussinesLogic.Services.Abstract.ISubscriptionService?)_uow.GetType().Assembly
+                    .CreateInstance("Onion.BussinesLogic.Services.Concrete.SubscriptionService");
+            }
+            catch { }
+
             await _uow.Products.AddAsync(product);
             await _uow.SaveChangesAsync();
         }

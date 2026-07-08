@@ -171,7 +171,8 @@ namespace Onion.BussinesLogic.Services.Concrete
                 }
             }
 
-            if (verified)
+            // If password verification failed, reject credentials
+            if (!verified)
             {
                 _logger?.LogWarning("Login failed for {Email}: invalid password", normalizedEmail);
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_CREDENTIALS", Message = "Invalid email or password", Language = "EN" });
@@ -402,7 +403,10 @@ namespace Onion.BussinesLogic.Services.Concrete
             {
                 new(System.Security.Claims.ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new(System.Security.Claims.ClaimTypes.Email, user.Email ?? string.Empty),
-                new("CompanyId", user.CompanyId.ToString())
+                new("CompanyId", user.CompanyId.ToString()),
+                new(System.Security.Claims.ClaimTypes.Role, user.Role ?? "Employee"),
+                // Include lowercase "role" claim as well for compatibility with consumers expecting that claim type
+                new("role", user.Role ?? "Employee")
             };
             if (!string.IsNullOrWhiteSpace(deviceId))
             {

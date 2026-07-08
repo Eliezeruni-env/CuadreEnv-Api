@@ -24,17 +24,9 @@ namespace Onion.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
-            var items = await _service.GetAllAsync();
-            if (!items.Any())
-            {
-                throw new HttpResponseException
-                {
-                    Errors = new Onion.Common.Models.Error[] { _globalizationService.GetErrorInCurrentLanguage(ErrorCodes.SalesNotFound) },
-                    StatusCode = System.Net.HttpStatusCode.BadRequest
-                };
-            }
             try
             {
+                var items = await _service.GetAllAsync();
                 return Ok(items);
             }
             catch (System.Exception)
@@ -104,5 +96,16 @@ namespace Onion.Controllers
             await _service.AddPaymentAsync(id, payment);
             return NoContent();
         }
+
+        // Cancel a sale (Manager or Admin)
+        [HttpPost("{id}/cancel")]
+        [Onion.Common.Authorization.RequireRole(Onion.Common.Authorization.Roles.Admin, Onion.Common.Authorization.Roles.Manager)]
+        public async Task<IActionResult> Cancel(int id, [FromBody] CancelRequest req)
+        {
+            await _service.CancelAsync(id, req.Reason ?? string.Empty);
+            return NoContent();
+        }
     }
+
+    public record CancelRequest(string? Reason);
 }

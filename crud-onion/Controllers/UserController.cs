@@ -20,20 +20,14 @@ namespace Onion.Controllers
             _globalizationService = globalizationService;
         }
 
+        public record ChangeRoleRequest(string Role);
+
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
-            var items = await _service.GetAllAsync();
-            if (!items.Any())
-            {
-                throw new HttpResponseException
-                {
-                    Errors = new Onion.Common.Models.Error[] { _globalizationService.GetErrorInCurrentLanguage(ErrorCodes.UsersNotFound) },
-                    StatusCode = System.Net.HttpStatusCode.BadRequest
-                };
-            }
             try
             {
+                var items = await _service.GetAllAsync();
                 return Ok(items);
             }
             catch (System.Exception)
@@ -44,6 +38,34 @@ namespace Onion.Controllers
                     StatusCode = System.Net.HttpStatusCode.InternalServerError
                 };
             }
+        }
+
+        // Change role (Admin only)
+        [HttpPut("{id}/role")]
+        [Onion.Common.Authorization.RequireRole("Admin")]
+        public async Task<IActionResult> ChangeRole(int id, [FromBody] ChangeRoleRequest req)
+        {
+            if (req == null || string.IsNullOrWhiteSpace(req.Role))
+                return BadRequest(Onion.Common.Models.ApiResponse<string>.Fail("Role required"));
+
+            await _service.SetRoleAsync(id, req.Role);
+            return NoContent();
+        }
+
+        [HttpPost("{id}/deactivate")]
+        [Onion.Common.Authorization.RequireRole("Admin")]
+        public async Task<IActionResult> Deactivate(int id)
+        {
+            await _service.SetActiveAsync(id, false);
+            return NoContent();
+        }
+
+        [HttpPost("{id}/reactivate")]
+        [Onion.Common.Authorization.RequireRole("Admin")]
+        public async Task<IActionResult> Reactivate(int id)
+        {
+            await _service.SetActiveAsync(id, true);
+            return NoContent();
         }
 
         [HttpGet("{id}")]

@@ -47,6 +47,11 @@ namespace Onion.DataAccess
         public DbSet<Onion.Domain.Warehouses.Warehouse> Warehouses { get; set; } = null!;
         public DbSet<Onion.Domain.Warehouses.Inventory> Inventories { get; set; } = null!;
         public DbSet<Onion.Domain.Warehouses.Movement> Movements { get; set; } = null!;
+        public DbSet<Onion.Domain.Inventory.InventoryMovement> InventoryMovements { get; set; } = null!;
+        public DbSet<Onion.Domain.Invoices.InvoiceSequence> InvoiceSequences { get; set; } = null!;
+        public DbSet<Onion.Domain.Finance.AccountReceivable> AccountReceivables { get; set; } = null!;
+        public DbSet<Onion.Domain.Billing.SubscriptionPlan> SubscriptionPlans { get; set; } = null!;
+        public DbSet<Onion.Domain.Billing.CompanySubscription> CompanySubscriptions { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -79,6 +84,21 @@ namespace Onion.DataAccess
                 .HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
 
             modelBuilder.Entity<Onion.Domain.Warehouses.Movement>()
+                .HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
+
+            modelBuilder.Entity<Onion.Domain.Inventory.InventoryMovement>()
+                .HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
+
+            modelBuilder.Entity<Onion.Domain.Invoices.InvoiceSequence>()
+                .HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
+
+            modelBuilder.Entity<Onion.Domain.Finance.AccountReceivable>()
+                .HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
+
+            modelBuilder.Entity<Onion.Domain.Billing.SubscriptionPlan>()
+                .HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
+
+            modelBuilder.Entity<Onion.Domain.Billing.CompanySubscription>()
                 .HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
 
             // Invitation entity exists under Domain.Invitations and must be tenant-scoped

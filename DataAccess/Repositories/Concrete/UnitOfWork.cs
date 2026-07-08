@@ -24,6 +24,11 @@ namespace Onion.DataAccess.Repositories.Concrete
         IRepository<Onion.Domain.CashMovement> CashMovements { get; }
         IRepository<Onion.Domain.CompanySettings> CompanySettingsRepo { get; }
         IRepository<Onion.Domain.Products.ProductType> ProductTypes { get; }
+        IRepository<Onion.Domain.Inventory.InventoryMovement> InventoryMovements { get; }
+        IRepository<Onion.Domain.Invoices.InvoiceSequence> InvoiceSequences { get; }
+        IRepository<Onion.Domain.Finance.AccountReceivable> AccountReceivables { get; }
+        IRepository<Onion.Domain.Billing.SubscriptionPlan> SubscriptionPlans { get; }
+        IRepository<Onion.Domain.Billing.CompanySubscription> CompanySubscriptions { get; }
         IWarehouseRepository Warehouses { get; }
         IInventoryRepository Inventories { get; }
         IMovementRepository Movements { get; }
@@ -52,6 +57,11 @@ namespace Onion.DataAccess.Repositories.Concrete
         public IRepository<Onion.Domain.CashMovement> CashMovements { get; }
         public IRepository<Onion.Domain.CompanySettings> CompanySettingsRepo { get; }
         public IRepository<Onion.Domain.Products.ProductType> ProductTypes { get; }
+        public IRepository<Onion.Domain.Inventory.InventoryMovement> InventoryMovements { get; }
+        public IRepository<Onion.Domain.Invoices.InvoiceSequence> InvoiceSequences { get; }
+        public IRepository<Onion.Domain.Finance.AccountReceivable> AccountReceivables { get; }
+        public IRepository<Onion.Domain.Billing.SubscriptionPlan> SubscriptionPlans { get; }
+        public IRepository<Onion.Domain.Billing.CompanySubscription> CompanySubscriptions { get; }
         public IWarehouseRepository Warehouses { get; }
         public IInventoryRepository Inventories { get; }
         public IMovementRepository Movements { get; }
@@ -75,6 +85,11 @@ namespace Onion.DataAccess.Repositories.Concrete
             CashMovements = new GenericRepository<Onion.Domain.CashMovement>(context);
             CompanySettingsRepo = new GenericRepository<Onion.Domain.CompanySettings>(context);
             ProductTypes = new GenericRepository<Onion.Domain.Products.ProductType>(context);
+            InventoryMovements = new GenericRepository<Onion.Domain.Inventory.InventoryMovement>(context);
+            InvoiceSequences = new GenericRepository<Onion.Domain.Invoices.InvoiceSequence>(context);
+            AccountReceivables = new GenericRepository<Onion.Domain.Finance.AccountReceivable>(context);
+            SubscriptionPlans = new GenericRepository<Onion.Domain.Billing.SubscriptionPlan>(context);
+            CompanySubscriptions = new GenericRepository<Onion.Domain.Billing.CompanySubscription>(context);
             Warehouses = new WarehouseRepository(context);
             Inventories = new InventoryRepository(context);
             Movements = new MovementRepository(context);

@@ -24,18 +24,11 @@ namespace Onion.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
-            var items = await _service.GetAllAsync();
-            if (!items.Any())
-            {
-                throw new HttpResponseException
-                {
-                    Errors = new Onion.Common.Models.Error[] { _globalizationService.GetErrorInCurrentLanguage(ErrorCodes.CashMovementsNotFound) },
-                    StatusCode = System.Net.HttpStatusCode.BadRequest
-                };
-            }
             try
             {
-                return Ok(await _service.GetAllAsync());
+                var items = await _service.GetAllAsync();
+                // Return 200 with an array (possibly empty). Empty list is not an error.
+                return Ok(items);
             }
             catch (System.Exception)
             {

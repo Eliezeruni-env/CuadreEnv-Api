@@ -41,16 +41,9 @@ namespace Onion.Controllers
         public async Task<IActionResult> GetAll()
         {
             var list = await _warehouseService.GetAllAsync();
-            if (!list.Any())
-            {
-                throw new HttpResponseException
-                {
-                    Errors = new Onion.Common.Models.Error[] { _globalizationService.GetErrorInCurrentLanguage(ErrorCodes.WarehousesNotFound) },
-                    StatusCode = System.Net.HttpStatusCode.BadRequest
-                };
-            }
             try
             {
+                // Return 200 with an array (possibly empty). An empty list is not an error for a list endpoint.
                 return Ok(Onion.Common.Models.ApiResponse<object>.Ok(list));
             }
             catch (System.Exception)

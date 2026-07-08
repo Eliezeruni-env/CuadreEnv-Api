@@ -8,6 +8,8 @@ namespace Onion.BussinesLogic.Services.Abstract
         Task<User?> GetByIdAsync(int id);
         Task<User> CreateAsync(User user);
         Task AssignCompanyAsync(int userId, int companyId);
+        Task SetRoleAsync(int userId, string role);
+        Task SetActiveAsync(int userId, bool active);
         Task UpdateAsync(User user);
         Task DeleteAsync(int id);
     }
