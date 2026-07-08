@@ -1,0 +1,6 @@
+@crud_onion_HostAddress = http://localhost:5160
+
+GET {{crud_onion_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,109 @@
+using Microsoft.AspNetCore.Mvc;
+using Onion.BussinesLogic.Services.Abstract;
+using Onion.BussinesLogic.Dtos;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
+
+namespace Onion.Controllers
+{
+    [Route("[controller]")]
+    [ApiController]
+    public class AuthController : ControllerBase
+    {
+        private readonly IAuthService _auth;
+
+        public AuthController(IAuthService auth)
+        {
+            _auth = auth;
+        }
+
+        [HttpPost("register")]
+        public async Task<IActionResult> Register([FromBody] RegisterRequestDto req)
+        {
+            var user = await _auth.RegisterAsync(req);
+            return Ok(Onion.Common.Models.ApiResponse<Onion.BussinesLogic.Dtos.UserResponseDto>.Ok(user, "User registered"));
+        }
+
+        [HttpPost("login")]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("LoginPolicy")]
+        public async Task<IActionResult> Login([FromBody] LoginRequestDto req)
+        {
+            var tokens = await _auth.LoginAsync(req);
+            return Ok(new TokenResponseDto(tokens.AccessToken, tokens.RefreshToken));
+        }
+
+        [HttpPost("refresh")]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("LoginPolicy")]
+        public async Task<IActionResult> Refresh([FromBody] RefreshRequestDto req)
+        {
+            var tokens = await _auth.RefreshTokenAsync(req);
+            return Ok(new TokenResponseDto(tokens.AccessToken, tokens.RefreshToken));
+        }
+
+        [HttpPost("revoke")]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("LoginPolicy")]
+        public async Task<IActionResult> Revoke([FromBody] RevokeRequestDto req)
+        {
+            await _auth.RevokeTokenAsync(req);
+            return NoContent();
+        }
+
+        [Authorize]
+        [HttpPost("revoke-all")]
+        public async Task<IActionResult> RevokeAll()
+        {
+            var idClaim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(idClaim, out var userId))
+                return BadRequest(Onion.Common.Models.ApiResponse<string>.Fail("UserId claim missing or invalid"));
+
+            await _auth.RevokeAllTokensAsync(userId);
+            return NoContent();
+        }
+
+        // Development-only helper: return a test JWT containing the provided companyId.
+        // Enabled only when the app runs in Development environment. Accepts JSON body { companyId, userId?, email? }.
+        [HttpPost("dev/token")]
+        [ApiExplorerSettings(IgnoreApi = true)]
+        public IActionResult DevToken([FromServices] Microsoft.Extensions.Configuration.IConfiguration config,
+                                      [FromServices] Microsoft.AspNetCore.Hosting.IWebHostEnvironment env,
+                                      [FromBody] DevTokenRequest req)
+        {
+            if (!env.IsDevelopment())
+                return NotFound();
+
+            if (req == null || req.CompanyId <= 0)
+                return BadRequest(new { error = "companyId required and must be > 0" });
+
+            var key = config["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key not configured");
+            var issuer = config["Jwt:Issuer"] ?? string.Empty;
+            var audience = config["Jwt:Audience"] ?? string.Empty;
+
+            var claims = new List<System.Security.Claims.Claim>
+            {
+                new(System.Security.Claims.ClaimTypes.NameIdentifier, (req.UserId ?? 9999).ToString()),
+                new(System.Security.Claims.ClaimTypes.Email, req.Email ?? "dev@local"),
+                new("CompanyId", req.CompanyId.ToString())
+            };
+
+            var keyBytes = System.Text.Encoding.UTF8.GetBytes(key);
+            var creds = new Microsoft.IdentityModel.Tokens.SigningCredentials(new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(keyBytes), Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha256);
+
+            var token = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken(
+                issuer: issuer,
+                audience: audience,
+                claims: claims,
+                expires: DateTime.UtcNow.AddMinutes(60),
+                signingCredentials: creds);
+
+            var access = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().WriteToken(token);
+            return Ok(new TokenResponseDto(access, string.Empty));
+        }
+    }
+
+    public record RegisterRequest(string Email, string Password);
+    public record LoginRequest(string Email, string Password);
+    public record RefreshRequest(string RefreshToken);
+    public record RevokeRequest(string RefreshToken);
+}
+
+public record DevTokenRequest(int CompanyId, int? UserId = null, string? Email = null);

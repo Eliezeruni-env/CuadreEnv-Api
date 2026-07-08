@@ -1,0 +1,78 @@
+using Microsoft.AspNetCore.Mvc;
+using Onion.BussinesLogic.Services.Abstract;
+using Onion.Domain.Products;
+using Onion.Common.Services;
+using Onion.Common.Exceptions;
+using Onion.Common.Enums;
+
+namespace Onion.Controllers
+{
+    [Route("[controller]")]
+    [ApiController]
+    public class ProductTypeController : ControllerBase
+    {
+        private readonly IProductTypeService _service;
+        private readonly IGlobalizationService _globalizationService;
+
+        public ProductTypeController(IProductTypeService service, IGlobalizationService globalizationService)
+        {
+            _service = service;
+            _globalizationService = globalizationService;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAll()
+        {
+            var items = await _service.GetAllAsync();
+            if (!items.Any())
+            {
+                throw new HttpResponseException
+                {
+                    Errors = new Onion.Common.Models.Error[] { _globalizationService.GetErrorInCurrentLanguage(ErrorCodes.ProductTypesNotFound) },
+                    StatusCode = System.Net.HttpStatusCode.BadRequest
+                };
+            }
+            try
+            {
+                return Ok(await _service.GetAllAsync());
+            }
+            catch (System.Exception)
+            {
+                throw new HttpResponseException
+                {
+                    Errors = new Onion.Common.Models.Error[] { _globalizationService.GetErrorInCurrentLanguage(ErrorCodes.UnknownException) },
+                    StatusCode = System.Net.HttpStatusCode.InternalServerError
+                };
+            }
+        }
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> Get(int id)
+        {
+            var item = await _service.GetByIdAsync(id);
+            if (item == null) return NotFound();
+            return Ok(item);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Post([FromBody] ProductType entity)
+        {
+            var created = await _service.CreateAsync(entity);
+            return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
+        }
+
+        [HttpPut]
+        public async Task<IActionResult> Put([FromBody] ProductType entity)
+        {
+            await _service.UpdateAsync(entity);
+            return NoContent();
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            await _service.DeleteAsync(id);
+            return NoContent();
+        }
+    }
+}
