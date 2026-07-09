@@ -20,6 +20,20 @@ namespace Onion.Controllers.Middleware
         public async Task InvokeAsync(HttpContext context)
         {
             var user = context.User;
+            // Allow some public endpoints to be called without tenant claim even if caller is authenticated
+            var path = context.Request.Path.HasValue ? context.Request.Path.Value ?? string.Empty : string.Empty;
+            var method = context.Request.Method ?? string.Empty;
+
+            // POST /company is used to register a new tenant; authenticated callers without a CompanyId
+            // should be allowed to create a company and then be associated to it. Skip tenant validation
+            // for that specific case.
+            if (string.Equals(path, "/company", System.StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(method, "POST", System.StringComparison.OrdinalIgnoreCase))
+            {
+                await _next(context);
+                return;
+            }
+
             if (user?.Identity != null && user.Identity.IsAuthenticated)
             {
                 var claim = user.FindFirst("CompanyId");

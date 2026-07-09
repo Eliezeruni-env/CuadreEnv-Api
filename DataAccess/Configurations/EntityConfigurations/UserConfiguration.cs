@@ -39,6 +39,10 @@ namespace Onion.DataAccess.Configurations.EntityConfigurations
                    .IsRequired()
                    .HasMaxLength(500);
 
+            builder.Property(x => x.Role)
+                   .IsRequired()
+                   .HasMaxLength(50);
+
             builder.Property(x => x.PhoneNumber)
                    .HasMaxLength(20);
 

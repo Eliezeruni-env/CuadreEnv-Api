@@ -15,12 +15,14 @@ namespace Onion.Controllers
         private readonly ICompanyService _service;
         private readonly IUserService _userService;
         private readonly IGlobalizationService _globalizationService;
+        private readonly Onion.BussinesLogic.Services.Abstract.IAuthService _authService;
 
-        public CompanyController(ICompanyService service, IUserService userService, IGlobalizationService globalizationService)
+        public CompanyController(ICompanyService service, IUserService userService, IGlobalizationService globalizationService, Onion.BussinesLogic.Services.Abstract.IAuthService authService)
         {
             _service = service;
             _userService = userService;
             _globalizationService = globalizationService;
+            _authService = authService;
         }
 
         // NOTE: This endpoint exposes all companies in the system. It must be restricted to platform administrators
@@ -66,6 +68,16 @@ namespace Onion.Controllers
             if (int.TryParse(userIdClaim, out var userId))
             {
                 await _userService.AssignCompanyAsync(userId, created.Id);
+                // Issue new access/refresh tokens that include CompanyId claim for the assigned user
+                try
+                {
+                    var tokens = await _authService.IssueTokensForUserAsync(userId);
+                    return CreatedAtAction(nameof(Get), new { id = created.Id }, Onion.Common.Models.ApiResponse<object>.Ok(new { company = created, tokens }, "Company created; tokens issued"));
+                }
+                catch
+                {
+                    // If token issuance fails, still return created company without tokens
+                }
             }
 
             return CreatedAtAction(nameof(Get), new { id = created.Id }, created);

@@ -53,7 +53,7 @@ namespace Onion.Controllers
 
             var result = await _productService.GetPagedListAsync(filterPayload, ct);
 
-            return Ok(result);
+            return Ok(Onion.Common.Models.ApiResponse<object>.Ok(result));
         }
 
         [HttpPost]

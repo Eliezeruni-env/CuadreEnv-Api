@@ -33,7 +33,8 @@ namespace Onion.IntegrationTests
                 {
                     cfg.AddInMemoryCollection(new Dictionary<string, string?>
                     {
-                        ["ConnectionStrings:DefaultConnection"] = $"Server=(localdb)\\MSSQLLocalDB;Database={dbName};Trusted_Connection=True;MultipleActiveResultSets=true"
+                        ["ConnectionStrings:DefaultConnection"] = $"Server=(localdb)\\MSSQLLocalDB;Database={dbName};Trusted_Connection=True;MultipleActiveResultSets=true",
+                        ["ApplyMigrationsOnStartup"] = "true"
                     });
                 });
 
@@ -48,6 +49,9 @@ namespace Onion.IntegrationTests
                         // Insert at the front so it takes precedence over SystemTextJsonOutputFormatter
                         opts.OutputFormatters.Insert(0, new TestStringJsonOutputFormatter());
                     });
+
+                    // Replace IEmailService with test stub
+                    services.AddSingleton<Onion.Common.Services.IEmailService, TestEmailService>();
                 });
             });
         }
@@ -76,6 +80,14 @@ namespace Onion.IntegrationTests
             using var doc = JsonDocument.Parse(loginBody);
             var access = doc.RootElement.TryGetProperty("accessToken", out var at) ? at.GetString() : doc.RootElement.GetProperty("AccessToken").GetString();
             access.Should().NotBeNullOrEmpty();
+
+            // Second login attempt with same credentials should also succeed and return a token
+            var loginResp2 = await client.PostAsync("/auth/login", new StringContent(JsonSerializer.Serialize(login), Encoding.UTF8, "application/json"));
+            loginResp2.EnsureSuccessStatusCode();
+            var loginBody2 = await loginResp2.Content.ReadAsStringAsync();
+            using var doc2 = JsonDocument.Parse(loginBody2);
+            var access2 = doc2.RootElement.TryGetProperty("accessToken", out var at2) ? at2.GetString() : doc2.RootElement.GetProperty("AccessToken").GetString();
+            access2.Should().NotBeNullOrEmpty();
 
             // Decode payload and assert CompanyId and role present
             var parts = access!.Split('.');

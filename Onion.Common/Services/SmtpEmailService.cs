@@ -20,7 +20,6 @@ namespace Onion.Common.Services
             _user = Environment.GetEnvironmentVariable("SMTP_USER");
             _pass = Environment.GetEnvironmentVariable("SMTP_PASS");
         }
-
         public Task SendInvitationAsync(string email, string token, int companyId)
         {
             if (string.IsNullOrWhiteSpace(_host))
@@ -52,6 +51,41 @@ namespace Onion.Common.Services
             catch
             {
                 // Swallow exceptions; emailing is optional. In production log properly.
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task SendEmailAsync(string to, string subject, string body)
+        {
+            if (string.IsNullOrWhiteSpace(_host))
+            {
+                return Task.CompletedTask;
+            }
+
+            try
+            {
+                using var client = new SmtpClient(_host, _port)
+                {
+                    EnableSsl = true
+                };
+
+                if (!string.IsNullOrWhiteSpace(_user))
+                {
+                    client.Credentials = new NetworkCredential(_user, _pass ?? string.Empty);
+                }
+
+                var msg = new MailMessage("no-reply@onion.local", to)
+                {
+                    Subject = subject,
+                    Body = body
+                };
+
+                client.Send(msg);
+            }
+            catch
+            {
+                // swallow in this minimal implementation
             }
 
             return Task.CompletedTask;

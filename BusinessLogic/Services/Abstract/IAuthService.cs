@@ -14,5 +14,7 @@ namespace Onion.BussinesLogic.Services.Abstract
         Task RevokeTokenAsync(RevokeRequestDto request);
         // Revoke all refresh tokens for a given user (logout from all devices)
         Task RevokeAllTokensAsync(int userId);
+        // Issue a fresh access + refresh token pair for an existing user (useful after assigning company)
+        Task<TokenResponseDto> IssueTokensForUserAsync(int userId, string? deviceId = null);
     }
 }

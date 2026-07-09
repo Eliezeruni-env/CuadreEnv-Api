@@ -20,7 +20,6 @@ namespace Onion.DataAccess.Configurations.DependencyInjection
 
             // Ensure a default tenant provider is registered so OnionDbContext can be constructed in design-time and runtime
             services.AddSingleton<ITenantProvider, DefaultTenantProvider>();
-
             services.AddScoped<IProductRepository, ProductRepository>();
             services.AddScoped<ICategoryRepository, CategoryRepository>();
             services.AddScoped<IUserRepository, UserRepository>();

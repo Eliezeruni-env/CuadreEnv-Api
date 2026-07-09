@@ -78,6 +78,7 @@ namespace Onion.Controllers
         }
 
         [HttpPost]
+        [Onion.Common.Authorization.RequireRole("Admin")]
         public async Task<IActionResult> Post([FromBody] User user)
         {
             var created = await _service.CreateAsync(user);
@@ -85,6 +86,7 @@ namespace Onion.Controllers
         }
 
         [HttpPut]
+        [Onion.Common.Authorization.RequireRole("Admin")]
         public async Task<IActionResult> Put([FromBody] User user)
         {
             await _service.UpdateAsync(user);
@@ -92,6 +94,7 @@ namespace Onion.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Onion.Common.Authorization.RequireRole("Admin")]
         public async Task<IActionResult> Delete(int id)
         {
             await _service.DeleteAsync(id);

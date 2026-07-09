@@ -8,6 +8,7 @@ using Onion.DataAccess.Repositories.Concrete;
 using Microsoft.Extensions.Configuration;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 using System.Collections.Generic;
 using Onion.BussinesLogic.Dtos;
 
@@ -24,14 +25,16 @@ namespace Onion.BussinesLogic.Services.Concrete
         private readonly TimeSpan _accessTokenLifetime;
         private readonly TimeSpan _refreshTokenLifetime;
         private readonly TimeSpan _revokedRetention;
+        private readonly IHostEnvironment _env;
 
-        public AuthService(IUnitOfWork uow, IConfiguration config, Microsoft.Extensions.Logging.ILogger<AuthService> logger, IUserService userService, ICompanyService companyService)
+        public AuthService(IUnitOfWork uow, IConfiguration config, Microsoft.Extensions.Logging.ILogger<AuthService> logger, IUserService userService, ICompanyService companyService, IHostEnvironment env)
         {
             _uow = uow ?? throw new ArgumentNullException(nameof(uow));
             _config = config ?? throw new ArgumentNullException(nameof(config));
             _logger = logger;
             _userService = userService ?? throw new ArgumentNullException(nameof(userService));
             _companyService = companyService ?? throw new ArgumentNullException(nameof(companyService));
+            _env = env ?? throw new ArgumentNullException(nameof(env));
 
             // Load token lifetimes from configuration (environment variables recommended)
             // Jwt:AccessTokenLifetimeMinutes (int) - default 30
@@ -178,8 +181,6 @@ namespace Onion.BussinesLogic.Services.Concrete
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_CREDENTIALS", Message = "Invalid email or password", Language = "EN" });
             }
 
-            // Do not expose password hash
-            user.PasswordHash = string.Empty;
             _logger?.LogInformation("User {Email} (Id: {Id}) logged in successfully", normalizedEmail, user.Id);
             var (access, refresh) = await LoginWithTokensAsync(user, request.DeviceId);
             return new TokenResponseDto(access, refresh);
@@ -284,7 +285,6 @@ namespace Onion.BussinesLogic.Services.Concrete
             await _uow.RefreshTokens.AddAsync(newRt);
             await _uow.SaveChangesAsync();
 
-            user.PasswordHash = string.Empty;
             return new TokenResponseDto(newAccess, newRefresh);
         }
 
@@ -317,6 +317,13 @@ namespace Onion.BussinesLogic.Services.Concrete
                 _uow.RefreshTokens.Update(t);
             }
             await _uow.SaveChangesAsync();
+        }
+
+        public async Task<TokenResponseDto> IssueTokensForUserAsync(int userId, string? deviceId = null)
+        {
+            var user = await _uow.Users.GetByIdAsync(userId) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
+            var (access, refresh) = await LoginWithTokensAsync(user, deviceId);
+            return new TokenResponseDto(access, refresh);
         }
 
         public async Task<IEnumerable<Onion.BussinesLogic.Dtos.SessionDto>> ListSessionsAsync(int userId)
@@ -395,7 +402,19 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         private string GenerateJwtToken(User user, string? deviceId = null)
         {
-            var key = _config["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key not configured");
+            var key = _config["Jwt:Key"];
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                if (!_env.IsProduction())
+                {
+                    key = "dev-local-key-please-change-in-production-32chars!";
+                    _logger?.LogWarning("Jwt:Key not configured. Using non-production fallback key.");
+                }
+                else
+                {
+                    throw new InvalidOperationException("Jwt:Key not configured. Set configuration or environment variable 'Jwt:Key' before generating tokens in production.");
+                }
+            }
             var issuer = _config["Jwt:Issuer"] ?? string.Empty;
             var audience = _config["Jwt:Audience"] ?? string.Empty;
 
