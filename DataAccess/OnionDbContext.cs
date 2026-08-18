@@ -16,15 +16,20 @@ namespace Onion.DataAccess
     public class OnionDbContext : DbContext
     {
         private readonly ITenantProvider? _tenantProvider;
+        private readonly Onion.Common.Services.ICurrentUserService? _currentUserService;
         // Expose tenant id as a property so EF Core query filters can reference the DbContext instance
         // This property will be evaluated at query time via the DbContext instance (avoids capturing a single value at model build time)
-        public int? TenantCompanyId => _tenantProvider?.GetCompanyId();
+        // Prefer ICurrentUserService (reads claims) and fall back to ITenantProvider for design-time scenarios.
+        public int? TenantCompanyId => _currentUserService?.CompanyId ?? (_tenantProvider is Onion.DataAccess.Tenant.AmbientTenantProvider ambient ? ambient.GetCompanyId() : _tenantProvider?.GetCompanyId());
 
-        public OnionDbContext(DbContextOptions<OnionDbContext> options, ITenantProvider? tenantProvider = null)
+        public OnionDbContext(DbContextOptions<OnionDbContext> options, ITenantProvider? tenantProvider = null, Onion.Common.Services.ICurrentUserService? currentUserService = null)
             : base(options)
         {
             _tenantProvider = tenantProvider;
+            _currentUserService = currentUserService;
         }
+
+
 
         public DbSet<Company> Companies { get; set; } = null!;
         public DbSet<Category> Categories { get; set; } = null!;
@@ -52,6 +57,14 @@ namespace Onion.DataAccess
         public DbSet<Onion.Domain.Finance.AccountReceivable> AccountReceivables { get; set; } = null!;
         public DbSet<Onion.Domain.Billing.SubscriptionPlan> SubscriptionPlans { get; set; } = null!;
         public DbSet<Onion.Domain.Billing.CompanySubscription> CompanySubscriptions { get; set; } = null!;
+        // Credits module
+        public DbSet<Onion.Domain.Credits.Credit> Credits { get; set; } = null!;
+        public DbSet<Onion.Domain.Credits.CreditPayment> CreditPayments { get; set; } = null!;
+        public DbSet<Onion.Domain.Credits.CreditStatusHistory> CreditStatusHistory { get; set; } = null!;
+        // Appointments module
+        public DbSet<Onion.Domain.Appointments.Appointment> Appointments { get; set; } = null!;
+        public DbSet<Onion.Domain.Appointments.Resource> Resources { get; set; } = null!;
+        public DbSet<Onion.Domain.Appointments.Availability> Availabilities { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -101,6 +114,83 @@ namespace Onion.DataAccess
             modelBuilder.Entity<Onion.Domain.Billing.CompanySubscription>()
                 .HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
 
+            // Credits tenant filters
+            modelBuilder.Entity<Onion.Domain.Credits.Credit>()
+                .HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
+
+            modelBuilder.Entity<Onion.Domain.Credits.CreditPayment>()
+                .HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
+
+            modelBuilder.Entity<Onion.Domain.Credits.CreditStatusHistory>()
+                .HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
+
+            // Configure relationships and indexes for Credits module
+            modelBuilder.Entity<Onion.Domain.Credits.Credit>(eb =>
+            {
+                eb.HasMany(e => e.Payments)
+                  .WithOne(p => p.Credit)
+                  .HasForeignKey(p => p.CreditId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+                eb.HasMany(e => e.StatusHistory)
+                  .WithOne(h => h.Credit)
+                  .HasForeignKey(h => h.CreditId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+                eb.HasIndex("CompanyId");
+            });
+
+            modelBuilder.Entity<Onion.Domain.Credits.CreditPayment>(eb =>
+            {
+                eb.HasIndex(p => p.CreditId);
+                eb.HasIndex("CompanyId");
+            });
+
+            modelBuilder.Entity<Onion.Domain.Credits.CreditStatusHistory>(eb =>
+            {
+                eb.HasIndex(h => h.CreditId);
+                eb.HasIndex("CompanyId");
+            });
+
+            // Appointment module tenant filters
+            modelBuilder.Entity<Onion.Domain.Appointments.Appointment>()
+                .HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
+
+            modelBuilder.Entity<Onion.Domain.Appointments.Resource>()
+                .HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
+
+            modelBuilder.Entity<Onion.Domain.Appointments.Availability>()
+                .HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
+
+            // Resource-Availability relationship
+            modelBuilder.Entity<Onion.Domain.Appointments.Resource>(eb =>
+            {
+                eb.HasMany(r => r.Availabilities)
+                  .WithOne(a => a.Resource)
+                  .HasForeignKey(a => a.ResourceId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+                eb.HasIndex("CompanyId");
+            });
+
+            modelBuilder.Entity<Onion.Domain.Appointments.Availability>(eb =>
+            {
+                eb.HasIndex(a => a.ResourceId);
+                eb.HasIndex("CompanyId");
+            });
+
+            modelBuilder.Entity<Onion.Domain.Appointments.Appointment>(eb =>
+            {
+                // Optional relationship to Resource
+                eb.HasOne<Onion.Domain.Appointments.Resource>()
+                  .WithMany()
+                  .HasForeignKey("ResourceId")
+                  .IsRequired(false)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+                eb.HasIndex("CompanyId");
+            });
+
             // Invitation entity exists under Domain.Invitations and must be tenant-scoped
             modelBuilder.Entity<Onion.Domain.Invitations.Invitation>()
                 .HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
@@ -121,17 +211,22 @@ namespace Onion.DataAccess
                 if (entry.State == EntityState.Added)
                 {
                     entity.CreationDate = now;
-                    // Set CompanyId from tenant provider when adding new entities
-                    if (_tenantProvider != null)
+                    // Set CompanyId from the effective tenant source (ICurrentUserService or AmbientTenantProvider or ITenantProvider fallback)
+                    var tenantId = this.TenantCompanyId;
+                    if (tenantId.HasValue)
                     {
-                        var companyId = _tenantProvider.GetCompanyId();
-                        if (companyId.HasValue)
+                        if (entry.Entity is Onion.Common.Models.ITenantEntity)
                         {
-                            // Only set property if entity has CompanyId
                             var prop = entry.Properties.FirstOrDefault(p => string.Equals(p.Metadata.Name, "CompanyId", StringComparison.OrdinalIgnoreCase));
                             if (prop != null && (prop.CurrentValue == null || (int)prop.CurrentValue == 0))
-                                prop.CurrentValue = companyId.Value;
+                                prop.CurrentValue = tenantId.Value;
                         }
+                    }
+                    else
+                    {
+                        // When adding tenant-scoped entities, tenant must be present
+                        if (entry.Entity is Onion.Common.Models.ITenantEntity)
+                            throw new InvalidOperationException("Tenant company id missing for multi-tenant operation.");
                     }
                 }
                 else

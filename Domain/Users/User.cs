@@ -14,8 +14,8 @@ namespace Onion.Domain.Users
         [Required]
         public string LastName { get; set; }
 
-        [Required]
-        public string Identification { get; set; }
+        // Identification is optional during onboarding; make nullable to allow users without it
+        public string? Identification { get; set; }
 
         [Required]
         [MaxLength(1)]
@@ -29,7 +29,7 @@ namespace Onion.Domain.Users
         public string PhoneNumber { get; set; }
         public DateTime BirthDate { get; set; }
         public string UserName { get; set; }
-        public int CompanyId { get; set; }
+        public int? CompanyId { get; set; }
         // Simple role string to support basic RBAC (e.g. "Admin", "Employee")
         public string Role { get; set; } = "Employee";
     }

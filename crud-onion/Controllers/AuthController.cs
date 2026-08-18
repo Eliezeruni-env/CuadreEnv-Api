@@ -88,9 +88,12 @@ namespace Onion.Controllers
             var claims = new List<System.Security.Claims.Claim>
             {
                 new(System.Security.Claims.ClaimTypes.NameIdentifier, (req.UserId ?? 9999).ToString()),
-                new(System.Security.Claims.ClaimTypes.Email, req.Email ?? "dev@local"),
-                new("CompanyId", req.CompanyId.ToString())
+                new(System.Security.Claims.ClaimTypes.Email, req.Email ?? "dev@local")
             };
+            if (req.CompanyId > 0)
+            {
+                claims.Add(new System.Security.Claims.Claim("CompanyId", req.CompanyId.ToString()));
+            }
 
             var keyBytes = System.Text.Encoding.UTF8.GetBytes(key);
             var creds = new Microsoft.IdentityModel.Tokens.SigningCredentials(new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(keyBytes), Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha256);

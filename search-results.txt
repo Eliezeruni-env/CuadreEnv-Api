@@ -1,0 +1,160 @@
+﻿
+Controllers\AccountReceivableController.cs:36:        public async 
+Task<IActionResult> RegisterPayment(int id, [FromBody] PaymentRequest req)
+Controllers\AccountReceivableController.cs:38:            await 
+_service.RegisterPaymentAsync(id, req.Amount);
+Controllers\AppointmentsController.cs:26:            var companyIdClaim = HttpC
+ontext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+Controllers\AppointmentsController.cs:27:            int companyId = 0;
+Controllers\AppointmentsController.cs:28:            if 
+(int.TryParse(companyIdClaim, out var cid)) companyId = cid;
+Controllers\AppointmentsController.cs:30:            if (companyId == 0) 
+return true;
+Controllers\AppointmentsController.cs:31:            return await 
+_feature.CompanyHasFeatureAsync(companyId, "appointments");
+Controllers\AppointmentsController.cs:56:                var created = await 
+_svc.CreateAsync(dto);
+Controllers\AuthController.cs:20:        [HttpPost("register")]
+Controllers\AuthController.cs:21:        public async Task<IActionResult> 
+Register([FromBody] RegisterRequestDto req)
+Controllers\AuthController.cs:23:            var user = await 
+_auth.RegisterAsync(req);
+Controllers\AuthController.cs:25:            var resp = Onion.Common.Models.Api
+Response<Onion.BussinesLogic.Dtos.UserResponseDto>.Ok(user, "User registered");
+Controllers\AuthController.cs:70:        // Development-only helper: return a 
+test JWT containing the provided companyId.
+Controllers\AuthController.cs:71:        // Enabled only when the app runs in 
+Development environment. Accepts JSON body { companyId, userId?, email? }.
+Controllers\AuthController.cs:81:            if (req == null || req.CompanyId 
+<= 0)
+Controllers\AuthController.cs:82:                return BadRequest(new { error 
+= "companyId required and must be > 0" });
+Controllers\AuthController.cs:93:            if (req.CompanyId > 0)
+Controllers\AuthController.cs:95:                claims.Add(new 
+System.Security.Claims.Claim("CompanyId", req.CompanyId.ToString()));
+Controllers\AuthController.cs:113:    public record RegisterRequest(string 
+Email, string Password);
+Controllers\AuthController.cs:119:public record DevTokenRequest(int CompanyId, 
+int? UserId = null, string? Email = null);
+Controllers\CashRegisterController.cs:12:    public class 
+CashRegisterController : ControllerBase
+Controllers\CashRegisterController.cs:14:        private readonly 
+ICashRegisterService _service;
+Controllers\CashRegisterController.cs:17:        public 
+CashRegisterController(ICashRegisterService service, IGlobalizationService 
+globalizationService)
+Controllers\CashRegisterController.cs:50:        public async 
+Task<IActionResult> Open([FromBody] CashRegister cash)
+Controllers\CompanyController.cs:41:            // Allow access if the caller 
+is the owner of the company (CompanyId claim matches)
+Controllers\CompanyController.cs:43:            var companyIdClaim = 
+User?.FindFirst("CompanyId")?.Value;
+Controllers\CompanyController.cs:48:                if 
+(!int.TryParse(companyIdClaim, out var callerCompanyId) || callerCompanyId != 
+id)
+Controllers\CompanyController.cs:64:            var created = await 
+_service.CreateAsync(request);
+Controllers\CompanyController.cs:70:                await 
+_userService.AssignCompanyAsync(userId, created.Id);
+Controllers\CompanyController.cs:71:                // Issue new 
+access/refresh tokens that include CompanyId claim for the assigned user
+Controllers\CompanySettingsController.cs:21:            var companyClaim = 
+User?.FindFirst("CompanyId")?.Value;
+Controllers\CompanySettingsController.cs:22:            if 
+(!int.TryParse(companyClaim, out var companyId)) return BadRequest("CompanyId 
+claim missing");
+Controllers\CompanySettingsController.cs:23:            var settingsList = 
+await _uow.CompanySettingsRepo.FindAsync(s => s.CompanyId == companyId);
+Controllers\CompanySettingsController.cs:32:            var companyClaim = 
+User?.FindFirst("CompanyId")?.Value;
+Controllers\CompanySettingsController.cs:33:            if 
+(!int.TryParse(companyClaim, out var companyId)) return BadRequest("CompanyId 
+claim missing");
+Controllers\CompanySettingsController.cs:34:            if (settings.CompanyId 
+!= companyId) return Forbid();
+Controllers\CreditsController.cs:37:            var created = await 
+_svc.CreateAsync(dto);
+Controllers\CustomerController.cs:49:            var created = await 
+_service.CreateAsync(customer);
+Controllers\InvitationsController.cs:34:            var companyClaim = 
+User?.FindFirst("CompanyId")?.Value;
+Controllers\InvitationsController.cs:35:            if 
+(!int.TryParse(companyClaim, out var companyId))
+Controllers\InvitationsController.cs:36:                return 
+BadRequest(Onion.Common.Models.ApiResponse<string>.Fail("CompanyId claim 
+missing or invalid"));
+Controllers\InvitationsController.cs:45:                CompanyId = companyId,
+Controllers\InvitationsController.cs:60:                    await 
+_emailService.SendInvitationAsync(req.Email, token, companyId);
+Controllers\InvitationsController.cs:91:                CompanyId = 
+inv.CompanyId,
+Controllers\ProductTypeController.cs:52:            var created = await 
+_service.CreateAsync(entity);
+Controllers\SaleController.cs:59:                CashRegisterId = 
+dto.CashRegisterId,
+Controllers\SaleController.cs:68:            var created = await 
+_service.CreateAsync(sale);
+Controllers\SubscriptionController.cs:20:            var companyClaim = 
+User?.FindFirst("CompanyId")?.Value;
+Controllers\SubscriptionController.cs:21:            if 
+(!int.TryParse(companyClaim, out var companyId)) return BadRequest("CompanyId 
+claim missing");
+Controllers\SubscriptionController.cs:22:            var sub = await 
+_subscriptionService.GetCompanySubscriptionAsync(companyId);
+Controllers\SupplierController.cs:52:            var created = await 
+_service.CreateAsync(supplier);
+Controllers\UserController.cs:84:            var created = await 
+_service.CreateAsync(user);
+Controllers\WarehouseController.cs:30:            var companyIdClaim = 
+User?.FindFirst("CompanyId")?.Value;
+Controllers\WarehouseController.cs:31:            if 
+(!int.TryParse(companyIdClaim, out var companyId))
+Controllers\WarehouseController.cs:33:                return 
+BadRequest(Onion.Common.Models.ApiResponse<string>.Fail("CompanyId claim 
+missing or invalid"));
+Controllers\WarehouseController.cs:36:            var created = await 
+_warehouseService.CreateWarehouseAsync(dto, companyId);
+Controllers\WarehouseController.cs:62:            var companyIdClaim = 
+User?.FindFirst("CompanyId")?.Value;
+Controllers\WarehouseController.cs:64:            if 
+(!int.TryParse(companyIdClaim, out var companyId))
+Controllers\WarehouseController.cs:65:                return 
+BadRequest(Onion.Common.Models.ApiResponse<string>.Fail("CompanyId claim 
+missing or invalid"));
+Controllers\WarehouseController.cs:74:            var companyIdClaim = 
+User?.FindFirst("CompanyId")?.Value;
+Controllers\WarehouseController.cs:76:            if 
+(!int.TryParse(companyIdClaim, out var companyId))
+Controllers\WarehouseController.cs:77:                return 
+BadRequest(Onion.Common.Models.ApiResponse<string>.Fail("CompanyId claim 
+missing or invalid"));
+Controllers\WarehouseController.cs:86:            var companyIdClaim = 
+User?.FindFirst("CompanyId")?.Value;
+Controllers\WarehouseController.cs:88:            if 
+(!int.TryParse(companyIdClaim, out var companyId))
+Controllers\WarehouseController.cs:89:                return 
+BadRequest(Onion.Common.Models.ApiResponse<string>.Fail("CompanyId claim 
+missing or invalid"));
+Middleware\TenantMiddleware.cs:9:    // Middleware to ensure authenticated 
+requests include a CompanyId claim
+Middleware\TenantMiddleware.cs:27:            // POST /company is used to 
+register a new tenant; authenticated callers without a CompanyId
+Middleware\TenantMiddleware.cs:39:                var claim = 
+user.FindFirst("CompanyId");
+Middleware\TenantMiddleware.cs:44:                    var resp = 
+ApiResponse<object>.Fail("CompanyId claim missing or invalid", new[] { 
+"MISSING_COMPANY_CLAIM" });
+Middleware\TenantMiddleware.cs:54:                    var resp = 
+ApiResponse<object>.Fail("CompanyId claim missing or invalid", new[] { 
+"MISSING_COMPANY_CLAIM" });
+Tenant\JwtTenantProvider.cs:16:        public int? GetCompanyId()
+Tenant\JwtTenantProvider.cs:22:                var claim = 
+ctx.User?.FindFirst("CompanyId");
+Program.cs:33:// Register HttpContextAccessor and JWT-based tenant provider 
+for CompanyId extraction
+Program.cs:77:// Register ambient tenant provider for background jobs and 
+CurrentUserService for web requests
+Program.cs:84:// Register email service (production default). Tests may 
+replace this registration in WebApplicationFactory.
+
+

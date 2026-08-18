@@ -17,6 +17,7 @@ public static class ServicesConfiguration
         {
             cfg.AddProfile<ProductProfile>();
             cfg.AddProfile<CategoryProfile>();
+            cfg.AddProfile<CompanyProfile>();
         });
 
         services.AddScoped<IProductService, ProductService>();
@@ -45,6 +46,15 @@ public static class ServicesConfiguration
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<ISaleService, SaleService>();
+        services.AddScoped<Onion.BussinesLogic.Services.Abstract.ICreditService, Onion.BussinesLogic.Services.Concrete.CreditService>();
+        services.AddScoped(typeof(Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Credits.Credit>), typeof(Onion.DataAccess.Repositories.Concrete.GenericRepository<Onion.Domain.Credits.Credit>));
+        services.AddScoped(typeof(Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Credits.CreditPayment>), typeof(Onion.DataAccess.Repositories.Concrete.GenericRepository<Onion.Domain.Credits.CreditPayment>));
+        services.AddScoped(typeof(Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Credits.CreditStatusHistory>), typeof(Onion.DataAccess.Repositories.Concrete.GenericRepository<Onion.Domain.Credits.CreditStatusHistory>));
+        // Appointments module
+        services.AddScoped<Onion.BussinesLogic.Services.Abstract.IAppointmentService, Onion.BussinesLogic.Services.Concrete.AppointmentService>();
+
+        // Current user / tenant service (reads claims from HttpContext)
+        services.AddScoped<Onion.Common.Services.ICurrentUserService, Onion.Common.Services.CurrentUserService>();
 
         return services;
     }

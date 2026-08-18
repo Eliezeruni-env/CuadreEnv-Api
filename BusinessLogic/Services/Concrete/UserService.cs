@@ -14,12 +14,14 @@ namespace Onion.BussinesLogic.Services.Concrete
         private readonly IUnitOfWork _uow;
         private readonly ITenantProvider _tenantProvider;
         private readonly Onion.BussinesLogic.Services.Abstract.ISubscriptionService _subscriptionService;
+        private readonly Onion.Common.Services.ICurrentUserService _currentUserService;
 
-        public UserService(IUnitOfWork uow, ITenantProvider tenantProvider, Onion.BussinesLogic.Services.Abstract.ISubscriptionService subscriptionService)
+        public UserService(IUnitOfWork uow, ITenantProvider tenantProvider, Onion.BussinesLogic.Services.Abstract.ISubscriptionService subscriptionService, Onion.Common.Services.ICurrentUserService currentUserService)
         {
             _uow = uow;
             _tenantProvider = tenantProvider;
             _subscriptionService = subscriptionService;
+            _currentUserService = currentUserService;
         }
 
         public async Task<User> CreateAsync(User user)
@@ -38,9 +40,9 @@ namespace Onion.BussinesLogic.Services.Concrete
             catch { }
 
             // Enforce plan limits if company is provided
-            if (user.CompanyId > 0)
+            if (user.CompanyId.HasValue && user.CompanyId.Value > 0)
             {
-                var canCreate = await _subscriptionService.CanCreateUserAsync(user.CompanyId);
+                var canCreate = await _subscriptionService.CanCreateUserAsync(user.CompanyId.Value);
                 if (!canCreate)
                     throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "PLAN_LIMIT", Message = "User limit reached for current subscription plan", Language = "EN" });
             }
@@ -53,16 +55,29 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task AssignCompanyAsync(int userId, int companyId)
         {
-            // Require tenant-scoped caller. Do not allow operations when caller has no CompanyId claim.
+            // Determine caller context
             var callerCompany = _tenantProvider.GetCompanyId();
-            if (!callerCompany.HasValue)
-                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Tenant context missing: CompanyId claim required", Language = "EN" });
+            var callerUserId = _currentUserService?.UserId;
 
-            // Prevent a tenant-scoped caller from assigning a user to a different company
-            if (callerCompany.Value != companyId)
-                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Cannot assign user to a different company", Language = "EN" });
+            if (!callerCompany.HasValue)
+            {
+                // No tenant claim: allow only self-assignment (onboarding flow)
+                if (!callerUserId.HasValue || callerUserId.Value != userId)
+                    throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Tenant context missing: CompanyId claim required or caller must be the same user for onboarding", Language = "EN" });
+            }
+            else
+            {
+                // Tenant-scoped caller may only assign within their own company
+                if (callerCompany.Value != companyId)
+                    throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Cannot assign user to a different company", Language = "EN" });
+            }
 
             var user = await _uow.Users.GetByIdAsync(userId) ?? throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
+
+            // If the user already has a different company assigned, refuse
+            if (user.CompanyId.HasValue && user.CompanyId.Value != companyId)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Cannot assign user to a different company", Language = "EN" });
+
             user.CompanyId = companyId;
             _uow.Users.Update(user);
             await _uow.SaveChangesAsync();

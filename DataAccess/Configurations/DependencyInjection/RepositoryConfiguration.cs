@@ -18,6 +18,10 @@ namespace Onion.DataAccess.Configurations.DependencyInjection
                     configuration.GetConnectionString("OnionCrud"));
             });
 
+            // Keep the default tenant provider registration here (DefaultTenantProvider).
+            // The concrete JwtTenantProvider is registered in the Web project (Program.cs)
+            // so DataAccess remains decoupled from web-specific implementations.
+
             // Ensure a default tenant provider is registered so OnionDbContext can be constructed in design-time and runtime
             services.AddSingleton<ITenantProvider, DefaultTenantProvider>();
             services.AddScoped<IProductRepository, ProductRepository>();

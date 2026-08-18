@@ -43,7 +43,27 @@ namespace Onion.DataAccess.Repositories.Concrete
             }
 
             // Return entity respecting global query filters (tenant scoping) to avoid accidental exposure
-            return await _dbSet.AsQueryable().FirstOrDefaultAsync(e => e.Id == id);
+            // Include common navigations by convention using EF Core metadata so services don't need to load them.
+            var query = _dbSet.AsQueryable();
+            try
+            {
+                var entityType = _context.Model.FindEntityType(typeof(T));
+                if (entityType != null)
+                {
+                    var navigations = entityType.GetNavigations();
+                    foreach (var nav in navigations)
+                    {
+                        // include navigation by name
+                        query = query.Include(nav.Name);
+                    }
+                }
+            }
+            catch
+            {
+                // If metadata inspection fails for any reason, fall back to returning the entity without includes.
+            }
+
+            return await query.FirstOrDefaultAsync(e => e.Id == id);
         }
 
         public async Task<IEnumerable<T>> ListAsync()

@@ -11,4 +11,5 @@ namespace Onion.DataAccess
             return null;
         }
     }
+    // Intentionally no-op; DefaultTenantProvider provides null company id as fallback.
 }

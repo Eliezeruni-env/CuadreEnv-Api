@@ -90,7 +90,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 PhoneNumber = request.PhoneNumber ?? string.Empty,
                 UserName = string.IsNullOrWhiteSpace(request.UserName) ? normalizedEmail : request.UserName,
                 BirthDate = DateTime.MinValue,
-                CompanyId = 0,
+                CompanyId = null,
                 Role = "Employee"
             };
 
@@ -422,11 +422,16 @@ namespace Onion.BussinesLogic.Services.Concrete
             {
                 new(System.Security.Claims.ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new(System.Security.Claims.ClaimTypes.Email, user.Email ?? string.Empty),
-                new("CompanyId", user.CompanyId.ToString()),
+                // Only add CompanyId claim when user.CompanyId has a value
+                // to allow onboarding flows where users initially have no company.
+                (user.CompanyId.HasValue ? new System.Security.Claims.Claim("CompanyId", user.CompanyId.Value.ToString()) : null),
                 new(System.Security.Claims.ClaimTypes.Role, user.Role ?? "Employee"),
                 // Include lowercase "role" claim as well for compatibility with consumers expecting that claim type
                 new("role", user.Role ?? "Employee")
             };
+
+            // Remove null claims if any
+            claims.RemoveAll(c => c == null);
             if (!string.IsNullOrWhiteSpace(deviceId))
             {
                 claims.Add(new System.Security.Claims.Claim("DeviceId", deviceId));

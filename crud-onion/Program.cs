@@ -1,18 +1,38 @@
-using Onion.DataAccess.Configurations.DependencyInjection;
-using Microsoft.EntityFrameworkCore;
-using Onion.BussinesLogic.Configurations.DependencyInjection;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
+// Using Microsoft.OpenApi.Models removed to avoid missing/unstable OpenAPI package types
+using Onion.BussinesLogic.Configurations.DependencyInjection;
+using Onion.DataAccess.Configurations.DependencyInjection;
 using System.Text;
 using System.Threading.RateLimiting;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Globalization service used by controllers to obtain localized Error objects
+// Ensure the app listens on an additional port (8080) so local frontends
+// expecting http://localhost:8080 can reach the API during development.
+builder.WebHost.UseUrls("http://+:8080");// Globalization service used by controllers to obtain localized Error objects
 builder.Services.AddSingleton<Onion.Common.Services.IGlobalizationService, Onion.Common.Services.GlobalizationService>();
+builder.Services.AddControllers()
+    .AddJsonOptions(opts =>
+    {
+        // Prevent self-referencing loop serialization when EF entities include navigation properties
+        opts.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+        // Don't emit nulls to reduce payloads
+        opts.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+    });
 
-builder.Services.AddControllers();
+// Basic Swagger configuration. More advanced options (security, metadata) were
+// removed to avoid a dependency/namespace mismatch in this workspace. If you
+// need JWT in Swagger UI, add Microsoft.OpenApi.Models via NuGet and restore
+// the detailed configuration.
+builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// ----------------------------------------------------------
+
 builder.Services.AddRepositories(builder.Configuration);
 builder.Services.AddHealthChecks();
 builder.Services.AddServices();
@@ -62,7 +82,15 @@ builder.Services.AddAuthentication(options =>
         };
     });
 
+// Register ambient tenant provider for background jobs and CurrentUserService for web requests
+builder.Services.AddSingleton<Onion.DataAccess.Tenant.AmbientTenantProvider>();
+
+// Hosted service to mark overdue credits daily
+builder.Services.AddHostedService<Onion.BussinesLogic.HostedServices.CreditOverdueHostedService>();
+
 builder.Services.AddAuthorization();
+// Central authorization service (role/permission checks)
+builder.Services.AddSingleton<Onion.Common.Authorization.IAuthorizationService, Onion.Common.Authorization.AuthorizationService>();
 // Register email service (production default). Tests may replace this registration in WebApplicationFactory.
 builder.Services.AddTransient<Onion.Common.Services.IEmailService, Onion.Common.Services.SmtpEmailService>();
 // Rate limiting for sensitive endpoints (login / refresh)
@@ -87,12 +115,20 @@ builder.Services.AddRateLimiter(options =>
         await context.HttpContext.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(resp), token);
     };
 });
+
 builder.Services.AddCors(options =>
 {
     // Restrictive CORS policy for demo: allow localhost:4200 and a placeholder production origin
     options.AddPolicy("DefaultCors", policy =>
     {
-        policy.WithOrigins("http://localhost:4200", "https://your-production-frontend.example.com")
+        // Allow common dev origins (Angular dev server, API running on http:8080, IIS Express https)
+        policy.WithOrigins(
+            "http://localhost:4200",
+            "http://localhost:5160",
+            "http://localhost:8080",
+            "https://localhost:7060",
+            "https://localhost:44324",
+            "https://your-production-frontend.example.com")
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
@@ -100,12 +136,18 @@ builder.Services.AddCors(options =>
 
 
 var app = builder.Build();
+app.UseStaticFiles();
 app.UseSwagger();
+
+// --- UPDATED SWAGGER UI CONFIGURATION ---
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "Onion API v1");
     c.RoutePrefix = "swagger";
+    c.EnablePersistAuthorization(); // Keeps you logged in across page refreshes
+    // No custom JS injection. Swagger UI will use the generated OpenAPI JSON.
 });
+// ----------------------------------------
 
 app.MapHealthChecks("/hc");
 app.MapGet("/", () => Results.Ok(new { service = "Onion API", status = "ok" }));

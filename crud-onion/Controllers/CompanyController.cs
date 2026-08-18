@@ -16,13 +16,15 @@ namespace Onion.Controllers
         private readonly IUserService _userService;
         private readonly IGlobalizationService _globalizationService;
         private readonly Onion.BussinesLogic.Services.Abstract.IAuthService _authService;
+        private readonly AutoMapper.IMapper _mapper;
 
-        public CompanyController(ICompanyService service, IUserService userService, IGlobalizationService globalizationService, Onion.BussinesLogic.Services.Abstract.IAuthService authService)
+        public CompanyController(ICompanyService service, IUserService userService, IGlobalizationService globalizationService, Onion.BussinesLogic.Services.Abstract.IAuthService authService, AutoMapper.IMapper mapper)
         {
             _service = service;
             _userService = userService;
             _globalizationService = globalizationService;
             _authService = authService;
+            _mapper = mapper;
         }
 
         // NOTE: This endpoint exposes all companies in the system. It must be restricted to platform administrators
@@ -36,25 +38,14 @@ namespace Onion.Controllers
         }
 
         [HttpGet("{id}")]
+        [Onion.Common.Authorization.RequirePermission(new[] { Onion.Common.Authorization.RolesConstants.SuperAdmin }, null, "id")]
         public async Task<IActionResult> Get(int id)
         {
-            // Allow access if the caller is the owner of the company (CompanyId claim matches)
-            // or if the caller has the SuperAdmin platform role. Otherwise forbid access.
-            var companyIdClaim = User?.FindFirst("CompanyId")?.Value;
-            var isSuperAdmin = User?.IsInRole("SuperAdmin") ?? false;
-
-            if (!isSuperAdmin)
-            {
-                if (!int.TryParse(companyIdClaim, out var callerCompanyId) || callerCompanyId != id)
-                {
-                    // Do not reveal existence of other companies — forbid access for non-admins.
-                    return Forbid();
-                }
-            }
-
             var item = await _service.GetByIdAsync(id);
             if (item == null) return NotFound(Onion.Common.Models.ApiResponse<object>.Fail("Company not found"));
-            return Ok(Onion.Common.Models.ApiResponse<object>.Ok(item));
+
+            var dto = _mapper.Map<Onion.BussinesLogic.Dtos.CompanyDto>(item);
+            return Ok(Onion.Common.Models.ApiResponse<object>.Ok(dto));
         }
 
         // Create company and assign the creating user as owner

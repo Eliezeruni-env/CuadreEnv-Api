@@ -24,7 +24,7 @@ namespace Onion.DataAccess.Configurations.EntityConfigurations
                    .HasMaxLength(100);
 
             builder.Property(x => x.Identification)
-                   .IsRequired()
+                   .IsRequired(false)
                    .HasMaxLength(20);
 
             builder.Property(x => x.Gender)
@@ -59,8 +59,10 @@ namespace Onion.DataAccess.Configurations.EntityConfigurations
             builder.HasIndex(x => x.UserName)
                    .IsUnique();
 
+            // Identification may be null for onboarding users; unique index should only apply to non-null values
             builder.HasIndex(x => x.Identification)
-                   .IsUnique();
+                   .IsUnique()
+                   .HasFilter("[Identification] IS NOT NULL");
 
             builder.Property(x => x.Active)
                    .HasDefaultValue(true);

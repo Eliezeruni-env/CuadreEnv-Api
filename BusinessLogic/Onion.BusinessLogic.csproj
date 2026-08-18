@@ -18,8 +18,4 @@
 		<ProjectReference Include="..\Onion.Common\Onion.Common.csproj" />
 	</ItemGroup>
 
-	<ItemGroup>
-	  <Folder Include="HostedServices\" />
-	</ItemGroup>
-
 </Project>

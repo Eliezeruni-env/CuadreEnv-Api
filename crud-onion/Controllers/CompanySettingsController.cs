@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Onion.Common.Services;
 using Onion.DataAccess.Repositories.Concrete;
+using Onion.BussinesLogic.Dtos;
+using Onion.Domain;
 
 namespace Onion.Controllers
 {
@@ -9,30 +11,41 @@ namespace Onion.Controllers
     public class CompanySettingsController : ControllerBase
     {
         private readonly IUnitOfWork _uow;
+        private readonly AutoMapper.IMapper _mapper;
+        private readonly Onion.Common.Authorization.IAuthorizationService _auth;
 
-        public CompanySettingsController(IUnitOfWork uow)
+        public CompanySettingsController(IUnitOfWork uow, AutoMapper.IMapper mapper, Onion.Common.Authorization.IAuthorizationService auth)
         {
             _uow = uow;
+            _mapper = mapper;
+            _auth = auth;
         }
 
         [HttpGet]
         public async Task<IActionResult> Get()
         {
-            var companyClaim = User?.FindFirst("CompanyId")?.Value;
-            if (!int.TryParse(companyClaim, out var companyId)) return BadRequest("CompanyId claim missing");
+            if (!_auth.TryGetCompanyId(User, out var companyId)) return BadRequest("CompanyId claim missing");
+
             var settingsList = await _uow.CompanySettingsRepo.FindAsync(s => s.CompanyId == companyId);
             var settings = settingsList.FirstOrDefault();
             if (settings == null) return NotFound();
-            return Ok(settings);
+
+            var dto = _mapper.Map<CompanySettingsDto>(settings);
+            return Ok(dto);
         }
 
         [HttpPut]
-        public async Task<IActionResult> Update([FromBody] Onion.Domain.CompanySettings settings)
+        public async Task<IActionResult> Update([FromBody] CompanySettingsDto settingsDto)
         {
-            var companyClaim = User?.FindFirst("CompanyId")?.Value;
-            if (!int.TryParse(companyClaim, out var companyId)) return BadRequest("CompanyId claim missing");
-            if (settings.CompanyId != companyId) return Forbid();
+            if (!_auth.TryGetCompanyId(User, out var companyId)) return BadRequest("CompanyId claim missing");
+            if (settingsDto.CompanyId != companyId) return Forbid();
 
+            var settingsList = await _uow.CompanySettingsRepo.FindAsync(s => s.CompanyId == companyId);
+            var settings = settingsList.FirstOrDefault();
+            if (settings == null) return NotFound();
+
+            // Map DTO into existing entity using AutoMapper
+            _mapper.Map(settingsDto, settings);
             _uow.CompanySettingsRepo.Update(settings);
             await _uow.SaveChangesAsync();
             return NoContent();

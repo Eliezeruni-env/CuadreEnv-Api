@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Onion.DataAccess;
 
@@ -11,9 +12,11 @@ using Onion.DataAccess;
 namespace Onion.DataAccess.Migrations
 {
     [DbContext(typeof(OnionDbContext))]
-    partial class OnionDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260810151341_AddCreditsAndAppointmentsModules")]
+    partial class AddCreditsAndAppointmentsModules
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -77,10 +80,6 @@ namespace Onion.DataAccess.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CompanyId");
-
-                    b.HasIndex("ResourceId");
-
                     b.ToTable("Appointments");
                 });
 
@@ -129,10 +128,6 @@ namespace Onion.DataAccess.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CompanyId");
-
-                    b.HasIndex("ResourceId");
-
                     b.ToTable("Availabilities");
                 });
 
@@ -180,8 +175,6 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("CompanyId");
 
                     b.ToTable("Resources");
                 });
@@ -561,8 +554,6 @@ namespace Onion.DataAccess.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CompanyId");
-
                     b.ToTable("Credits");
                 });
 
@@ -610,10 +601,6 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("CompanyId");
-
-                    b.HasIndex("CreditId");
 
                     b.ToTable("CreditPayments");
                 });
@@ -667,10 +654,6 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("CompanyId");
-
-                    b.HasIndex("CreditId");
 
                     b.ToTable("CreditStatusHistory");
                 });
@@ -1529,7 +1512,7 @@ namespace Onion.DataAccess.Migrations
                     b.Property<DateTime>("BirthDate")
                         .HasColumnType("datetime2");
 
-                    b.Property<int?>("CompanyId")
+                    b.Property<int>("CompanyId")
                         .HasColumnType("int");
 
                     b.Property<string>("CreateBy")
@@ -1553,6 +1536,7 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("nvarchar(1)");
 
                     b.Property<string>("Identification")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsDeleted")
@@ -1730,25 +1714,6 @@ namespace Onion.DataAccess.Migrations
                     b.ToTable("Warehouses");
                 });
 
-            modelBuilder.Entity("Onion.Domain.Appointments.Appointment", b =>
-                {
-                    b.HasOne("Onion.Domain.Appointments.Resource", null)
-                        .WithMany()
-                        .HasForeignKey("ResourceId")
-                        .OnDelete(DeleteBehavior.Restrict);
-                });
-
-            modelBuilder.Entity("Onion.Domain.Appointments.Availability", b =>
-                {
-                    b.HasOne("Onion.Domain.Appointments.Resource", "Resource")
-                        .WithMany("Availabilities")
-                        .HasForeignKey("ResourceId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Resource");
-                });
-
             modelBuilder.Entity("Onion.Domain.CompanySettings", b =>
                 {
                     b.HasOne("Onion.Domain.Company", "Company")
@@ -1758,28 +1723,6 @@ namespace Onion.DataAccess.Migrations
                         .IsRequired();
 
                     b.Navigation("Company");
-                });
-
-            modelBuilder.Entity("Onion.Domain.Credits.CreditPayment", b =>
-                {
-                    b.HasOne("Onion.Domain.Credits.Credit", "Credit")
-                        .WithMany("Payments")
-                        .HasForeignKey("CreditId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Credit");
-                });
-
-            modelBuilder.Entity("Onion.Domain.Credits.CreditStatusHistory", b =>
-                {
-                    b.HasOne("Onion.Domain.Credits.Credit", "Credit")
-                        .WithMany("StatusHistory")
-                        .HasForeignKey("CreditId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Credit");
                 });
 
             modelBuilder.Entity("Onion.Domain.PurchaseDetail", b =>
@@ -1820,21 +1763,9 @@ namespace Onion.DataAccess.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Onion.Domain.Appointments.Resource", b =>
-                {
-                    b.Navigation("Availabilities");
-                });
-
             modelBuilder.Entity("Onion.Domain.Company", b =>
                 {
                     b.Navigation("Settings");
-                });
-
-            modelBuilder.Entity("Onion.Domain.Credits.Credit", b =>
-                {
-                    b.Navigation("Payments");
-
-                    b.Navigation("StatusHistory");
                 });
 
             modelBuilder.Entity("Onion.Domain.Purchase", b =>

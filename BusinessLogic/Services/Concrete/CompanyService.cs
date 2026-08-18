@@ -88,7 +88,17 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<Company?> GetByIdAsync(int id)
         {
-            return await _uow.Companies.GetByIdAsync(id);
+            var company = await _uow.Companies.GetByIdAsync(id);
+            if (company == null) return null;
+
+            // Ensure settings are loaded so AutoMapper can map nested CompanySettingsDto
+            if (company.Settings == null)
+            {
+                var settingsList = await _uow.CompanySettingsRepo.FindAsync(s => s.CompanyId == company.Id);
+                company.Settings = settingsList.FirstOrDefault();
+            }
+
+            return company;
         }
 
         public async Task UpdateAsync(Company company)

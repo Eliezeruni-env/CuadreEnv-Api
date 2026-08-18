@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Onion.DataAccess;
 
@@ -11,9 +12,11 @@ using Onion.DataAccess;
 namespace Onion.DataAccess.Migrations
 {
     [DbContext(typeof(OnionDbContext))]
-    partial class OnionDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260810152550_AddCreditsAppointmentsForeignKeys")]
+    partial class AddCreditsAppointmentsForeignKeys
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1529,7 +1532,7 @@ namespace Onion.DataAccess.Migrations
                     b.Property<DateTime>("BirthDate")
                         .HasColumnType("datetime2");
 
-                    b.Property<int?>("CompanyId")
+                    b.Property<int>("CompanyId")
                         .HasColumnType("int");
 
                     b.Property<string>("CreateBy")
@@ -1553,6 +1556,7 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("nvarchar(1)");
 
                     b.Property<string>("Identification")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsDeleted")
