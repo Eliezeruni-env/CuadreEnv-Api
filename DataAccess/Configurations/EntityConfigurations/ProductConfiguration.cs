@@ -29,6 +29,7 @@ namespace Onion.DataAccess.Configurations.EntityConfigurations
             builder.Property(x => x.Reference)
                    .HasMaxLength(50);
 
+            // Store Cost as decimal in database with precision. Migrations will convert existing float columns to decimal(18,2).
             builder.Property(x => x.Cost)
                    .HasColumnType("decimal(18,2)");
 

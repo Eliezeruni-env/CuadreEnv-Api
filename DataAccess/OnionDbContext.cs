@@ -20,7 +20,28 @@ namespace Onion.DataAccess
         // Expose tenant id as a property so EF Core query filters can reference the DbContext instance
         // This property will be evaluated at query time via the DbContext instance (avoids capturing a single value at model build time)
         // Prefer ICurrentUserService (reads claims) and fall back to ITenantProvider for design-time scenarios.
-        public int? TenantCompanyId => _currentUserService?.CompanyId ?? (_tenantProvider is Onion.DataAccess.Tenant.AmbientTenantProvider ambient ? ambient.GetCompanyId() : _tenantProvider?.GetCompanyId());
+        // Also check the static AmbientTenantProvider.CurrentCompanyId as a final fallback for background jobs
+        // where the ITenantProvider (e.g., JwtTenantProvider) is not applicable.
+        public int? TenantCompanyId
+        {
+            get
+            {
+                var userCompany = _currentUserService?.CompanyId;
+                if (userCompany.HasValue) return userCompany;
+
+                if (_tenantProvider is Onion.DataAccess.Tenant.AmbientTenantProvider ambient)
+                {
+                    var amb = ambient.GetCompanyId();
+                    if (amb.HasValue) return amb;
+                }
+
+                var tp = _tenantProvider?.GetCompanyId();
+                if (tp.HasValue) return tp;
+
+                // Last resort: static ambient override set by background jobs
+                return Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId;
+            }
+        }
 
         public OnionDbContext(DbContextOptions<OnionDbContext> options, ITenantProvider? tenantProvider = null, Onion.Common.Services.ICurrentUserService? currentUserService = null)
             : base(options)
@@ -34,6 +55,7 @@ namespace Onion.DataAccess
         public DbSet<Company> Companies { get; set; } = null!;
         public DbSet<Category> Categories { get; set; } = null!;
         public DbSet<Product> Products { get; set; } = null!;
+        public DbSet<Onion.Domain.Products.ProductType> ProductTypes { get; set; } = null!;
         public DbSet<Customer> Customers { get; set; } = null!;
         public DbSet<Supplier> Suppliers { get; set; } = null!;
         public DbSet<Purchase> Purchases { get; set; } = null!;
@@ -55,6 +77,8 @@ namespace Onion.DataAccess
         public DbSet<Onion.Domain.Inventory.InventoryMovement> InventoryMovements { get; set; } = null!;
         public DbSet<Onion.Domain.Invoices.InvoiceSequence> InvoiceSequences { get; set; } = null!;
         public DbSet<Onion.Domain.Finance.AccountReceivable> AccountReceivables { get; set; } = null!;
+        public DbSet<Onion.Domain.Finance.PaymentPlan> PaymentPlans { get; set; } = null!;
+        public DbSet<Onion.Domain.Finance.Installment> Installments { get; set; } = null!;
         public DbSet<Onion.Domain.Billing.SubscriptionPlan> SubscriptionPlans { get; set; } = null!;
         public DbSet<Onion.Domain.Billing.CompanySubscription> CompanySubscriptions { get; set; } = null!;
         // Credits module
@@ -79,6 +103,26 @@ namespace Onion.DataAccess
             // Use null-check comparison to avoid accessing .Value in EF translation; compare nullable CompanyId to TenantCompanyId directly
             modelBuilder.Entity<Category>().HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
             modelBuilder.Entity<Product>().HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
+            modelBuilder.Entity<Onion.Domain.Products.ProductType>().HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
+
+            // Seed default product types to allow FE to create products referencing common types
+            // Use fixed seed CreationDate values to avoid non-deterministic migrations
+            var seedDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            modelBuilder.Entity<Onion.Domain.Products.ProductType>().HasData(
+                new { Id = 1, Description = "Producto Estándar", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" },
+                new { Id = 2, Description = "Servicio", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" },
+                new { Id = 3, Description = "Digital", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" },
+                new { Id = 4, Description = "Combo", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" },
+                new { Id = 5, Description = "Materia Prima", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" }
+            );
+            // Seed default categories so FE has values to choose from
+            modelBuilder.Entity<Onion.Domain.Products.Category>().HasData(
+                new { Id = 1, Description = "General", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" },
+                new { Id = 2, Description = "Alimentos", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" },
+                new { Id = 3, Description = "Bebidas", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" },
+                new { Id = 4, Description = "Papelería", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" },
+                new { Id = 5, Description = "Servicios", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" }
+            );
             modelBuilder.Entity<Customer>().HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
             modelBuilder.Entity<Supplier>().HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
             modelBuilder.Entity<Purchase>().HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
@@ -195,6 +239,17 @@ namespace Onion.DataAccess
             modelBuilder.Entity<Onion.Domain.Invitations.Invitation>()
                 .HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
 
+            // AccountReceivable relationships
+            modelBuilder.Entity<Onion.Domain.Finance.PaymentPlan>()
+                .HasMany(p => p.Installments)
+                .WithOne()
+                .HasForeignKey("PaymentPlanId")
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Onion.Domain.Finance.Installment>()
+                .Property(i => i.Status)
+                .HasConversion<int>();
+
             modelBuilder.Entity<Onion.Domain.Users.RefreshToken>()
                 .HasOne(rt => rt.User)
                 .WithMany()
@@ -215,18 +270,17 @@ namespace Onion.DataAccess
                     var tenantId = this.TenantCompanyId;
                     if (tenantId.HasValue)
                     {
-                        if (entry.Entity is Onion.Common.Models.ITenantEntity)
-                        {
-                            var prop = entry.Properties.FirstOrDefault(p => string.Equals(p.Metadata.Name, "CompanyId", StringComparison.OrdinalIgnoreCase));
-                            if (prop != null && (prop.CurrentValue == null || (int)prop.CurrentValue == 0))
-                                prop.CurrentValue = tenantId.Value;
-                        }
+                        // If the entity exposes a CompanyId property (tenant-scoped by convention), set it from the effective tenant
+                        var prop = entry.Properties.FirstOrDefault(p => string.Equals(p.Metadata.Name, "CompanyId", StringComparison.OrdinalIgnoreCase));
+                        if (prop != null && (prop.CurrentValue == null || (int)prop.CurrentValue == 0))
+                            prop.CurrentValue = tenantId.Value;
                     }
                     else
                     {
-                        // When adding tenant-scoped entities, tenant must be present
-                        if (entry.Entity is Onion.Common.Models.ITenantEntity)
-                            throw new InvalidOperationException("Tenant company id missing for multi-tenant operation.");
+                        // When adding tenant-scoped entities (entities that have a CompanyId property), tenant must be present
+                        var hasCompanyProp = entry.Properties.Any(p => string.Equals(p.Metadata.Name, "CompanyId", StringComparison.OrdinalIgnoreCase));
+                        if (hasCompanyProp)
+                                throw new InvalidOperationException("Tenant company id missing for multi-tenant operation.");
                     }
                 }
                 else

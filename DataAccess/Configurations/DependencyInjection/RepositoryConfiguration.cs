@@ -16,6 +16,8 @@ namespace Onion.DataAccess.Configurations.DependencyInjection
             {
                 options.UseSqlServer(
                     configuration.GetConnectionString("OnionCrud"));
+                // Backup: ignore pending model changes warning to avoid noisy exceptions during CI/dev while root cause is addressed
+                options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
             });
 
             // Keep the default tenant provider registration here (DefaultTenantProvider).

@@ -21,10 +21,16 @@ namespace Onion.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll([FromQuery] int? pageNumber = null, [FromQuery] int? pageSize = null)
         {
             try
             {
+                if (pageNumber.HasValue)
+                {
+                    var paged = await _service.GetPagedAsync(pageNumber.Value, pageSize ?? 10);
+                    return Ok(paged);
+                }
+
                 var items = await _service.GetAllAsync();
                 return Ok(items);
             }

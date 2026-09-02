@@ -1,7 +1,3 @@
-using Microsoft.AspNetCore.Http;
-using System.Security.Claims;
-using Onion.DataAccess;
-
 namespace Onion.DataAccess.Tenant
 {
     public class JwtTenantProvider : ITenantProvider

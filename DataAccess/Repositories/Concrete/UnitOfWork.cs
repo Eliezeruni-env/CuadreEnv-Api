@@ -1,5 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore.Storage;
 using Onion.DataAccess;
+using Microsoft.Extensions.Logging;
+using System.Collections.Generic;
+using System.Linq;
 using System;
 using System.Threading.Tasks;
 using Onion.DataAccess.Repositories.Abstract;
@@ -27,6 +30,8 @@ namespace Onion.DataAccess.Repositories.Concrete
         IRepository<Onion.Domain.Inventory.InventoryMovement> InventoryMovements { get; }
         IRepository<Onion.Domain.Invoices.InvoiceSequence> InvoiceSequences { get; }
         IRepository<Onion.Domain.Finance.AccountReceivable> AccountReceivables { get; }
+        IRepository<Onion.Domain.Finance.PaymentPlan> PaymentPlans { get; }
+        IRepository<Onion.Domain.Finance.Installment> Installments { get; }
         IRepository<Onion.Domain.Billing.SubscriptionPlan> SubscriptionPlans { get; }
         IRepository<Onion.Domain.Billing.CompanySubscription> CompanySubscriptions { get; }
         IWarehouseRepository Warehouses { get; }
@@ -40,6 +45,7 @@ namespace Onion.DataAccess.Repositories.Concrete
     public class UnitOfWork : IUnitOfWork
     {
         private readonly OnionDbContext _context;
+        private readonly ILogger<UnitOfWork>? _logger;
 
         public IProductRepository Products { get; }
         public ICategoryRepository Categories { get; }
@@ -65,10 +71,13 @@ namespace Onion.DataAccess.Repositories.Concrete
         public IWarehouseRepository Warehouses { get; }
         public IInventoryRepository Inventories { get; }
         public IMovementRepository Movements { get; }
+        public IRepository<Onion.Domain.Finance.PaymentPlan> PaymentPlans { get; }
+        public IRepository<Onion.Domain.Finance.Installment> Installments { get; }
 
-        public UnitOfWork(OnionDbContext context)
+        public UnitOfWork(OnionDbContext context, ILogger<UnitOfWork>? logger = null)
         {
             _context = context;
+            _logger = logger;
             Products = new ProductRepository(context);
             Categories = new CategoryRepository(context);
             Users = new UserRepository(context);
@@ -90,6 +99,8 @@ namespace Onion.DataAccess.Repositories.Concrete
             AccountReceivables = new GenericRepository<Onion.Domain.Finance.AccountReceivable>(context);
             SubscriptionPlans = new GenericRepository<Onion.Domain.Billing.SubscriptionPlan>(context);
             CompanySubscriptions = new GenericRepository<Onion.Domain.Billing.CompanySubscription>(context);
+            PaymentPlans = new GenericRepository<Onion.Domain.Finance.PaymentPlan>(context);
+            Installments = new GenericRepository<Onion.Domain.Finance.Installment>(context);
             Warehouses = new WarehouseRepository(context);
             Inventories = new InventoryRepository(context);
             Movements = new MovementRepository(context);
@@ -102,7 +113,82 @@ namespace Onion.DataAccess.Repositories.Concrete
 
         public async Task<int> SaveChangesAsync()
         {
-            return await _context.SaveChangesAsync();
+            // Validate entities with DataAnnotations before saving to provide clear errors
+            var validationErrors = new List<string>();
+            var entries = _context.ChangeTracker.Entries().Where(e => e.State == Microsoft.EntityFrameworkCore.EntityState.Added || e.State == Microsoft.EntityFrameworkCore.EntityState.Modified).ToList();
+            foreach (var entry in entries)
+            {
+                var entity = entry.Entity;
+                var validationContext = new System.ComponentModel.DataAnnotations.ValidationContext(entity);
+                var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+                // Validate all properties and collect results
+                if (!System.ComponentModel.DataAnnotations.Validator.TryValidateObject(entity, validationContext, results, validateAllProperties: true))
+                {
+                    foreach (var r in results)
+                    {
+                        var memberNames = r.MemberNames != null && r.MemberNames.Any() ? string.Join(",", r.MemberNames) : entry.Entity.GetType().Name;
+                        validationErrors.Add($"{memberNames}: {r.ErrorMessage}");
+                    }
+                }
+            }
+
+            if (validationErrors.Any())
+            {
+                var combined = string.Join("; ", validationErrors);
+                _logger?.LogWarning("Model validation failed before SaveChanges: {Errors}", combined);
+                // Create structured details per field to return to clients for better UX
+                var details = new System.Collections.Generic.List<Onion.Common.Models.ValidationError>();
+                foreach (var entry in entries)
+                {
+                    var entity = entry.Entity;
+                    var validationContext = new System.ComponentModel.DataAnnotations.ValidationContext(entity);
+                    var results = new System.Collections.Generic.List<System.ComponentModel.DataAnnotations.ValidationResult>();
+                    System.ComponentModel.DataAnnotations.Validator.TryValidateObject(entity, validationContext, results, validateAllProperties: true);
+                    foreach (var r in results)
+                    {
+                        var field = r.MemberNames != null && r.MemberNames.Any() ? string.Join(",", r.MemberNames) : entity.GetType().Name;
+                        details.Add(new Onion.Common.Models.ValidationError { Field = field, Message = r.ErrorMessage ?? string.Empty });
+                    }
+                }
+
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "INVALID_MODEL", Message = "Validation failed", Language = "EN", Details = details });
+            }
+
+            try
+            {
+                return await _context.SaveChangesAsync();
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger?.LogError(dbEx, "DbUpdateException during SaveChangesAsync");
+                // Map common SQL Server errors to friendly business error codes when possible
+                var inner = dbEx.InnerException;
+                if (inner is Microsoft.Data.SqlClient.SqlException sqlEx)
+                {
+                    switch (sqlEx.Number)
+                    {
+                        case 2627: // Unique constraint error
+                        case 2601:
+                            _logger?.LogWarning("Unique constraint violation: {Message}", sqlEx.Message);
+                            throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "DUPLICATE_KEY", Message = "Duplicate value violates unique constraint.", Language = "EN" });
+                        case 547: // Constraint check violation (FK)
+                            _logger?.LogWarning("Foreign key constraint violation: {Message}", sqlEx.Message);
+                            throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FK_VIOLATION", Message = "Related entity not found or foreign key constraint violated.", Language = "EN" });
+                        case 515: // Cannot insert the value NULL into column
+                            _logger?.LogWarning("Null value insertion attempted: {Message}", sqlEx.Message);
+                            throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "NULL_VALUE", Message = "A required value was null. Check required fields.", Language = "EN" });
+                        case 208: // Invalid object name (table missing)
+                            _logger?.LogError(sqlEx, "Database table missing or migration required");
+                            throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "TABLE_MISSING", Message = "Database table missing or migration required.", Language = "EN" });
+                        default:
+                            _logger?.LogError(sqlEx, "SQL error during SaveChanges");
+                            throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "DB_ERROR", Message = sqlEx.Message, Language = "EN" });
+                    }
+                }
+
+                // Fallback for other providers or unknown inner exceptions
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "DB_ERROR", Message = dbEx.InnerException?.Message ?? dbEx.Message, Language = "EN" });
+            }
         }
 
         public void Dispose()

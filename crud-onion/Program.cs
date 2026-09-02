@@ -1,21 +1,32 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi;
 // Using Microsoft.OpenApi.Models removed to avoid missing/unstable OpenAPI package types
 using Onion.BussinesLogic.Configurations.DependencyInjection;
+using Onion.Common.Services;
+using Onion.Controllers.Middleware;
 using Onion.DataAccess.Configurations.DependencyInjection;
 using System.Text;
-using System.Threading.RateLimiting;
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Ensure the app listens on an additional port (8080) so local frontends
-// expecting http://localhost:8080 can reach the API during development.
-builder.WebHost.UseUrls("http://+:8080");// Globalization service used by controllers to obtain localized Error objects
+// Ensure the app listens on the development ports commonly used by frontends.
+// Allow override via ASPNETCORE_URLS or PORT environment variables. Default to 8080 and 5000.
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+var urls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS") ?? $"http://*:{port};http://*:5000";
+builder.WebHost.UseUrls(urls);
+
 builder.Services.AddSingleton<Onion.Common.Services.IGlobalizationService, Onion.Common.Services.GlobalizationService>();
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+    {
+        // Prepend global API version prefix to all controller routes
+        options.Conventions.Insert(0, new Onion.Common.Mvc.RoutePrefixConvention("v1"));
+        // Return consistent ApiResponse on model validation failures to simplify frontend handling
+        options.Filters.Add(new Onion.Controllers.Filters.ValidateModelAttribute());
+    })
     .AddJsonOptions(opts =>
     {
         // Prevent self-referencing loop serialization when EF entities include navigation properties
@@ -24,20 +35,41 @@ builder.Services.AddControllers()
         opts.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
     });
 
-// Basic Swagger configuration. More advanced options (security, metadata) were
-// removed to avoid a dependency/namespace mismatch in this workspace. If you
-// need JWT in Swagger UI, add Microsoft.OpenApi.Models via NuGet and restore
-// the detailed configuration.
+// Swagger configuration including Internal API key definition for /internal endpoints
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    // Define API key security scheme for internal endpoints
+    c.AddSecurityDefinition("InternalApiKey", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Description = "Internal API Key required for calls to /internal endpoints. Provide in X-Internal-ApiKey header.",
+        Name = "X-Internal-ApiKey",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        Scheme = "apiKey"
+    });
+
+    // Apply the custom operation filters for internal endpoints
+    c.OperationFilter<Onion.Controllers.Swagger.InternalOperationFilter>();
+    c.OperationFilter<Onion.Controllers.Swagger.InternalExamplesOperationFilter>();
+});
 
 // ----------------------------------------------------------
 
 builder.Services.AddRepositories(builder.Configuration);
+// Register Caja module
+builder.Services.AddCajaModule();
 builder.Services.AddHealthChecks();
 builder.Services.AddServices();
 builder.Services.AddDomainServices();
 builder.Services.AddValidators();
+// HttpClient factory used by UM proxy example
+builder.Services.AddHttpClient();
+// Background queue and Caja (POS) registrations
+builder.Services.AddSingleton<Onion.BussinesLogic.Background.InMemoryBackgroundQueue>();
+builder.Services.AddSingleton<Onion.BussinesLogic.Background.IBackgroundQueue>(sp => sp.GetRequiredService<Onion.BussinesLogic.Background.InMemoryBackgroundQueue>());
+builder.Services.AddHostedService<Onion.BussinesLogic.Background.BackgroundWorker>();
+builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.ICajaService, Onion.BussinesLogic.Services.Concrete.CajaService>();
 // Register HttpContextAccessor and JWT-based tenant provider for CompanyId extraction
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<Onion.DataAccess.ITenantProvider, Onion.DataAccess.Tenant.JwtTenantProvider>();
@@ -56,6 +88,16 @@ if (string.IsNullOrWhiteSpace(jwtKey))
     {
         throw new InvalidOperationException("Jwt:Key missing. Set configuration or environment variable 'Jwt:Key' before starting the app in production.");
     }
+}
+// Ensure configuration exposes the effective key so other components reading IConfiguration get the same value
+try
+{
+    builder.Configuration["Jwt:Key"] = jwtKey;
+}
+catch
+{
+    // If configuration is not writable (unlikely), log a warning but continue since jwtKey variable is used below
+    Console.WriteLine("Warning: unable to write effective Jwt:Key into configuration; relying on local variable.");
 }
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? string.Empty;
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? string.Empty;
@@ -92,7 +134,7 @@ builder.Services.AddAuthorization();
 // Central authorization service (role/permission checks)
 builder.Services.AddSingleton<Onion.Common.Authorization.IAuthorizationService, Onion.Common.Authorization.AuthorizationService>();
 // Register email service (production default). Tests may replace this registration in WebApplicationFactory.
-builder.Services.AddTransient<Onion.Common.Services.IEmailService, Onion.Common.Services.SmtpEmailService>();
+builder.Services.AddTransient<IEmailService, SmtpEmailService>();
 // Rate limiting for sensitive endpoints (login / refresh)
 builder.Services.AddRateLimiter(options =>
 {
@@ -112,7 +154,7 @@ builder.Services.AddRateLimiter(options =>
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
         context.HttpContext.Response.ContentType = "application/json";
         var resp = Onion.Common.Models.ApiResponse<object>.Fail("Too many requests", new[] { "RATE_LIMIT" });
-        await context.HttpContext.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(resp), token);
+        await context.HttpContext.Response.WriteAsync(JsonSerializer.Serialize(resp), token);
     };
 });
 
@@ -163,11 +205,13 @@ app.UseCors("DefaultCors");
 app.UseAuthentication();
 // Apply rate limiting middleware (policies defined in DI)
 app.UseRateLimiter();
+// Internal API authentication (API key or SuperAdmin role)
+app.UseMiddleware<InternalApiAuthMiddleware>();
 // Validate tenant claim presence for authenticated requests
 app.UseMiddleware<Onion.Controllers.Middleware.TenantMiddleware>();
 app.UseAuthorization();
 // Global exception handler -> standardized API responses
-app.UseMiddleware<Onion.Controllers.Middleware.ApiExceptionMiddleware>();
+app.UseMiddleware<ApiExceptionMiddleware>();
 app.MapControllers();
 
 // Optionally apply EF migrations on startup when configured. This is disabled by default

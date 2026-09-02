@@ -20,12 +20,16 @@ namespace Onion.BussinesLogic.Services.Concrete
         private readonly IUnitOfWork _uow;
         private readonly IMapper _mapper;
         private readonly ILogger<ProductService> _logger;
+        private readonly Onion.BussinesLogic.Services.Abstract.ISubscriptionService _subscriptionService;
+        private readonly Onion.Common.Services.ICurrentUserService _currentUserService;
 
-        public ProductService(IUnitOfWork uow, IMapper mapper, ILogger<ProductService> logger)
+        public ProductService(IUnitOfWork uow, IMapper mapper, ILogger<ProductService> logger, Onion.BussinesLogic.Services.Abstract.ISubscriptionService subscriptionService, Onion.Common.Services.ICurrentUserService currentUserService)
         {
             _uow = uow ?? throw new ArgumentNullException(nameof(uow));
             _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
             _logger = logger;
+            _subscriptionService = subscriptionService;
+            _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
         }
 
         // Domain-level operations
@@ -45,9 +49,26 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             if (string.IsNullOrWhiteSpace(product.Description))
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_NAME", Message = "Product name is required", Language = "EN" });
-
             if (await _uow.Products.ExistsByNameAsync(product.Description))
                 throw new CustomException(new Onion.Common.Models.Error { Code = "DUPLICATE_NAME", Message = "Product name already exists", Language = "EN" });
+
+            // Validate barcode uniqueness if provided
+            if (!string.IsNullOrWhiteSpace(product.Barcode))
+            {
+                var existsBarcode = await _uow.Products.ExistsByBarcodeAsync(product.Barcode.Trim(), 0);
+                if (existsBarcode)
+                    throw new CustomException(new Onion.Common.Models.Error { Code = "DUPLICATE_BARCODE", Message = "Product barcode already exists", Language = "EN" });
+            }
+
+            // Validate related entities exist to prevent FK errors
+            var pt = await _uow.ProductTypes.GetByIdAsync(product.ProductTypeId);
+            if (pt == null) throw new CustomException(new Onion.Common.Models.Error { Code = "FK_NOT_FOUND", Message = "ProductType not found", Language = "EN" });
+
+            var cat = await _uow.Categories.GetByIdAsync(product.CategoryId);
+            if (cat == null) throw new CustomException(new Onion.Common.Models.Error { Code = "FK_NOT_FOUND", Message = "Category not found", Language = "EN" });
+
+            var comp = await _uow.Companies.GetByIdAsync(product.CompanyId);
+            if (comp == null) throw new CustomException(new Onion.Common.Models.Error { Code = "FK_NOT_FOUND", Message = "Company not found", Language = "EN" });
 
             if (product.MinimumQuantity < 0)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_STOCK", Message = "MinimumQuantity must be >= 0", Language = "EN" });
@@ -55,16 +76,21 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (product.Cost <= 0)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_COST", Message = "Cost must be greater than zero", Language = "EN" });
 
-            // Enforce plan limits
-            try
-            {
-                var subscriptionService = (Onion.BussinesLogic.Services.Abstract.ISubscriptionService?)_uow.GetType().Assembly
-                    .CreateInstance("Onion.BussinesLogic.Services.Concrete.SubscriptionService");
-            }
-            catch { }
+            // Enforce plan limits using injected subscription service
+            if (!await _subscriptionService.CanCreateProductAsync(product.CompanyId))
+                throw new CustomException(new Onion.Common.Models.Error { Code = "PLAN_LIMIT", Message = "Product limit reached for current subscription plan", Language = "EN" });
 
             await _uow.Products.AddAsync(product);
-            await _uow.SaveChangesAsync();
+            try
+            {
+                await _uow.SaveChangesAsync();
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger?.LogError(dbEx, "Failed to create product {Description}", product.Description);
+                var inner = dbEx.InnerException?.Message ?? dbEx.Message;
+                throw new CustomException(new Onion.Common.Models.Error { Code = "DB_ERROR", Message = inner, Language = "EN" });
+            }
         }
 
         public async Task UpdateAsync(Product product)
@@ -79,6 +105,24 @@ namespace Onion.BussinesLogic.Services.Concrete
                 if (await _uow.Products.ExistsByNameAsync(product.Description))
                     throw new CustomException(new Onion.Common.Models.Error { Code = "DUPLICATE_NAME", Message = "Product name already exists", Language = "EN" });
             }
+
+            // Validate barcode uniqueness when updating (exclude current product id)
+            if (!string.IsNullOrWhiteSpace(product.Barcode))
+            {
+                var existsBarcode = await _uow.Products.ExistsByBarcodeAsync(product.Barcode.Trim(), product.Id);
+                if (existsBarcode)
+                    throw new CustomException(new Onion.Common.Models.Error { Code = "DUPLICATE_BARCODE", Message = "Product barcode already exists", Language = "EN" });
+            }
+
+            // Validate related entities exist to prevent FK errors on update
+            var pt2 = await _uow.ProductTypes.GetByIdAsync(product.ProductTypeId);
+            if (pt2 == null) throw new CustomException(new Onion.Common.Models.Error { Code = "FK_NOT_FOUND", Message = "ProductType not found", Language = "EN" });
+
+            var cat2 = await _uow.Categories.GetByIdAsync(product.CategoryId);
+            if (cat2 == null) throw new CustomException(new Onion.Common.Models.Error { Code = "FK_NOT_FOUND", Message = "Category not found", Language = "EN" });
+
+            var comp2 = await _uow.Companies.GetByIdAsync(product.CompanyId);
+            if (comp2 == null) throw new CustomException(new Onion.Common.Models.Error { Code = "FK_NOT_FOUND", Message = "Company not found", Language = "EN" });
 
             if (product.MinimumQuantity < 0)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_STOCK", Message = "MinimumQuantity must be >= 0", Language = "EN" });
@@ -101,7 +145,16 @@ namespace Onion.BussinesLogic.Services.Concrete
             existing.Cost = product.Cost;
 
             _uow.Products.Update(existing);
-            await _uow.SaveChangesAsync();
+            try
+            {
+                await _uow.SaveChangesAsync();
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger?.LogError(dbEx, "Failed to update product {Id}", product.Id);
+                var inner = dbEx.InnerException?.Message ?? dbEx.Message;
+                throw new CustomException(new Onion.Common.Models.Error { Code = "DB_ERROR", Message = inner, Language = "EN" });
+            }
         }
 
         public async Task DeleteAsyncDomain(int id)
@@ -162,14 +215,46 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             var entity = _mapper.Map<Product>(entityDto);
 
+            // Ensure CompanyId is set from the current authenticated user's tenant context
+            var companyId = _currentUserService.CompanyId;
+            if (!companyId.HasValue || companyId.Value <= 0)
+                throw new CustomException(new Onion.Common.Models.Error { Code = "COMPANY_REQUIRED", Message = "Company context is required to create products.", Language = "ES" });
+
+            entity.CompanyId = companyId.Value;
+
             if (entity.MinimumQuantity < 0)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_STOCK", Message = "MinimumQuantity must be >= 0", Language = "ES" });
 
             if (entity.Cost <= 0)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_COST", Message = "Cost must be greater than zero", Language = "ES" });
 
+            // Validate related entities to prevent FK violations (only if provided)
+            if (entity.ProductTypeId > 0)
+            {
+                var pt = await _uow.ProductTypes.GetByIdAsync(entity.ProductTypeId);
+                if (pt == null) throw new CustomException(new Onion.Common.Models.Error { Code = "FK_NOT_FOUND", Message = "ProductType not found", Language = "ES" });
+            }
+
+            if (entity.CategoryId > 0)
+            {
+                var cat = await _uow.Categories.GetByIdAsync(entity.CategoryId);
+                if (cat == null) throw new CustomException(new Onion.Common.Models.Error { Code = "FK_NOT_FOUND", Message = "Category not found", Language = "ES" });
+            }
+
+            var comp = await _uow.Companies.GetByIdAsync(entity.CompanyId);
+            if (comp == null) throw new CustomException(new Onion.Common.Models.Error { Code = "FK_NOT_FOUND", Message = "Company not found", Language = "ES" });
+
             await _uow.Products.AddAsync(entity);
-            await _uow.SaveChangesAsync();
+            try
+            {
+                await _uow.SaveChangesAsync();
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger?.LogError(dbEx, "Failed to add product DTO {Description}", entity.Description);
+                var inner = dbEx.InnerException?.Message ?? dbEx.Message;
+                throw new CustomException(new Onion.Common.Models.Error { Code = "DB_ERROR", Message = inner, Language = "ES" });
+            }
         }
 
         public async Task UpdateAsync(ProductDto entityDto)
@@ -197,7 +282,32 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (existing.Cost <= 0)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_COST", Message = "Cost must be greater than zero", Language = "ES" });
 
-            await _uow.Products.UpdateAsync(existing);
+            // Validate related entities to avoid FK errors (only if product type provided)
+            if (existing.ProductTypeId > 0)
+            {
+                var pt2 = await _uow.ProductTypes.GetByIdAsync(existing.ProductTypeId);
+                if (pt2 == null) throw new CustomException(new Onion.Common.Models.Error { Code = "FK_NOT_FOUND", Message = "ProductType not found", Language = "ES" });
+            }
+
+            if (existing.CategoryId > 0)
+            {
+                var cat2 = await _uow.Categories.GetByIdAsync(existing.CategoryId);
+                if (cat2 == null) throw new CustomException(new Onion.Common.Models.Error { Code = "FK_NOT_FOUND", Message = "Category not found", Language = "ES" });
+            }
+
+            var comp2 = await _uow.Companies.GetByIdAsync(existing.CompanyId);
+            if (comp2 == null) throw new CustomException(new Onion.Common.Models.Error { Code = "FK_NOT_FOUND", Message = "Company not found", Language = "ES" });
+
+            try
+            {
+                await _uow.Products.UpdateAsync(existing);
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                _logger?.LogError(dbEx, "Failed to update product DTO {Id}", existing.Id);
+                var inner = dbEx.InnerException?.Message ?? dbEx.Message;
+                throw new CustomException(new Onion.Common.Models.Error { Code = "DB_ERROR", Message = inner, Language = "ES" });
+            }
         }
 
         public async Task DeleteAsync(int id)

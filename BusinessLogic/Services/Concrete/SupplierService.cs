@@ -3,6 +3,8 @@ using Onion.DataAccess.Repositories.Abstract;
 using Onion.Domain;
 using Onion.Common.Exceptions;
 using System.Collections.Generic;
+using System;
+using System.Linq;
 using Onion.DataAccess.Repositories.Concrete;
 
 namespace Onion.BussinesLogic.Services.Concrete
@@ -10,10 +12,12 @@ namespace Onion.BussinesLogic.Services.Concrete
     public class SupplierService : ISupplierService
     {
         private readonly IUnitOfWork _uow;
+        private readonly Onion.BussinesLogic.Services.Abstract.IPaginationService _paginationService;
 
-        public SupplierService(IUnitOfWork uow)
+        public SupplierService(IUnitOfWork uow, Onion.BussinesLogic.Services.Abstract.IPaginationService paginationService)
         {
             _uow = uow;
+            _paginationService = paginationService;
         }
 
         public async Task<Supplier> CreateAsync(Supplier supplier)
@@ -36,6 +40,14 @@ namespace Onion.BussinesLogic.Services.Concrete
         public async Task<IEnumerable<Supplier>> GetAllAsync()
         {
             return await _uow.Suppliers.ListAsync();
+        }
+
+        public async Task<Onion.Common.Models.Pagination.PagedList<Supplier>> GetPagedAsync(int pageNumber, int pageSize)
+        {
+            var pn = Math.Max(1, pageNumber);
+            var ps = Math.Clamp(pageSize, 1, 100);
+            var list = (await _uow.Suppliers.ListAsync()).AsQueryable();
+            return await _paginationService.ToPagedListAsync(list, pn, ps);
         }
 
         public async Task<Supplier?> GetByIdAsync(int id)

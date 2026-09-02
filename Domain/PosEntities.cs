@@ -65,6 +65,15 @@ namespace Onion.Domain
         public int CompanyId { get; set; }
         public string InvoiceFolio { get; set; } = string.Empty;
         public List<SaleDetail> Details { get; set; } = new List<SaleDetail>();
+        // POS / Caja fields
+        public string? IdempotencyKey { get; set; }
+        public string? ExternalReference { get; set; }
+        public int? CashSessionId { get; set; }
+        public decimal SubTotal { get; set; }
+        public decimal Tax { get; set; }
+        public string? Notes { get; set; }
+        // Concurrency token
+        public byte[]? RowVersion { get; set; }
     }
 
     public class SaleDetail : BaseEntity

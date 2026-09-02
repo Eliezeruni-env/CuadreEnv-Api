@@ -47,8 +47,14 @@ namespace Onion.Controllers
         }
 
         [HttpGet("movements")]
-        public async Task<IActionResult> GetMovements([FromQuery] int? productId = null, [FromQuery] int? warehouseId = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] string? type = null)
+        public async Task<IActionResult> GetMovements([FromQuery] int? productId = null, [FromQuery] int? warehouseId = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] string? type = null, [FromQuery] int? pageNumber = null, [FromQuery] int? pageSize = null)
         {
+            if (pageNumber.HasValue)
+            {
+                var paged = await _warehouseService.GetMovementHistoryPagedAsync(productId, warehouseId, from, to, type, pageNumber.Value, pageSize ?? 10);
+                return Ok(paged);
+            }
+
             var items = await _warehouseService.GetMovementHistoryAsync(productId, warehouseId, from, to, type);
             return Ok(items);
         }

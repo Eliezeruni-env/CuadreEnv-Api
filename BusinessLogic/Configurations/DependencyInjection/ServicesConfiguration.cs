@@ -26,6 +26,7 @@ public static class ServicesConfiguration
         services.AddScoped<Onion.BussinesLogic.Services.Abstract.IAccountReceivableService, Onion.BussinesLogic.Services.Concrete.AccountReceivableService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<ICategoryService, CategoryService>();
+        services.AddScoped<IProductTypeService, ProductTypeService>();
         services.AddScoped<IAuthService, AuthService>();
 
         // Warehouse services
@@ -45,6 +46,8 @@ public static class ServicesConfiguration
         services.AddScoped<ICompanyService, CompanyService>();
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<ISupplierService, SupplierService>();
+        // Pagination service for server-side helpers
+        services.AddScoped<Onion.BussinesLogic.Services.Abstract.IPaginationService, Onion.BussinesLogic.Services.Infrastructure.PaginationService>();
         services.AddScoped<ISaleService, SaleService>();
         services.AddScoped<Onion.BussinesLogic.Services.Abstract.ICreditService, Onion.BussinesLogic.Services.Concrete.CreditService>();
         services.AddScoped(typeof(Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Credits.Credit>), typeof(Onion.DataAccess.Repositories.Concrete.GenericRepository<Onion.Domain.Credits.Credit>));

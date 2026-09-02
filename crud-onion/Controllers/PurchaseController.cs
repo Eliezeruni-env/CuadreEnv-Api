@@ -22,10 +22,16 @@ namespace Onion.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll([FromQuery] int? pageNumber = null, [FromQuery] int? pageSize = null)
         {
             try
             {
+                if (pageNumber.HasValue)
+                {
+                    var paged = await _uow.Purchases.GetPagedAsync(pageNumber.Value, pageSize ?? 10);
+                    return Ok(paged);
+                }
+
                 var items = await _uow.Purchases.ListAsync();
                 // Return 200 with array (possibly empty) rather than treating empty as an error
                 return Ok(items);

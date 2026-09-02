@@ -16,6 +16,7 @@
 	<ProjectReference Include="..\..\Domain\Onion.Domain.csproj" />
 	<ProjectReference Include="..\..\DataAccess\Onion.DataAccess.csproj" />
 	<ProjectReference Include="..\..\BusinessLogic\Onion.BusinessLogic.csproj" />
+	<ProjectReference Include="..\..\crud-onion\crud-onion.csproj" />
   </ItemGroup>
 
 </Project>

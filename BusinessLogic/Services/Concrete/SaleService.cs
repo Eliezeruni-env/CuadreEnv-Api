@@ -13,16 +13,26 @@ namespace Onion.BussinesLogic.Services.Concrete
     {
         private readonly IUnitOfWork _uow;
         private readonly ILogger<SaleService> _logger;
+        private readonly Onion.BussinesLogic.Services.Abstract.IPaginationService _paginationService;
 
-        public SaleService(IUnitOfWork uow, ILogger<SaleService> logger)
+        public SaleService(IUnitOfWork uow, ILogger<SaleService> logger, Onion.BussinesLogic.Services.Abstract.IPaginationService paginationService)
         {
             _uow = uow;
             _logger = logger;
+            _paginationService = paginationService;
         }
 
         public async Task<IEnumerable<Sale>> GetAllAsync()
         {
             return await _uow.Sales.ListAsync();
+        }
+
+        public async Task<Onion.Common.Models.Pagination.PagedList<Sale>> GetPagedAsync(int pageNumber, int pageSize)
+        {
+            var pn = Math.Max(1, pageNumber);
+            var ps = Math.Clamp(pageSize, 1, 100);
+            var list = (await _uow.Sales.ListAsync()).AsQueryable();
+            return await _paginationService.ToPagedListAsync(list, pn, ps);
         }
 
         public async Task<Sale?> GetByIdAsync(int id)
@@ -231,13 +241,27 @@ namespace Onion.BussinesLogic.Services.Concrete
             }
         }
 
-        public async Task AddPaymentAsync(int saleId, Payment payment)
+        public async Task AddPaymentAsync(int saleId, Payment payment, string? method = null, int? cashRegisterId = null)
         {
-            var sale = await _uow.Sales.GetByIdAsync(saleId) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "Sale not found", Language = "ES" });
+            var sale = await _uow.Sales.GetByIdAsync(saleId);
+            if (sale == null)
+            {
+                // Try to detect if sale exists but is filtered by tenant scope
+                var existsElsewhere = await (_uow.Sales as DataAccess.Repositories.Abstract.ISaleRepository)?.GetByIdIgnoreQueryFiltersAsync(saleId);
+                if (existsElsewhere != null)
+                    throw new CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Sale exists but access is forbidden for current tenant", Language = "ES" });
+
+                throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "Sale not found", Language = "ES" });
+            }
             if (payment.Amount <= 0) throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_AMOUNT", Message = "Payment amount must be greater than zero", Language = "ES" });
 
             // attach payment to sale
             payment.SaleId = saleId;
+            // Map method string to enum PaymentMethod
+            if (!string.IsNullOrWhiteSpace(method) && System.Enum.TryParse<PaymentMethod>(method, true, out var pm))
+                payment.PaymentMethod = pm;
+            else
+                payment.PaymentMethod = PaymentMethod.OTHER;
             await _uow.Payments.AddAsync(payment);
             sale.PaidAmount += payment.Amount;
 
@@ -246,6 +270,28 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             _uow.Sales.Update(sale);
             await _uow.SaveChangesAsync();
+
+            // Create cash movement when cashRegisterId provided
+            if (cashRegisterId.HasValue && payment.Amount > 0)
+            {
+                try
+                {
+                    var cm = new CashMovement
+                    {
+                        CashRegisterId = cashRegisterId.Value,
+                        Amount = payment.Amount,
+                        Description = $"Payment for sale {saleId}",
+                        CompanyId = sale.CompanyId,
+                        CreateBy = payment.CreateBy
+                    };
+                    await _uow.CashMovements.AddAsync(cm);
+                    await _uow.SaveChangesAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Failed to record cash movement for sale payment {SaleId}", saleId);
+                }
+            }
         }
     }
 }

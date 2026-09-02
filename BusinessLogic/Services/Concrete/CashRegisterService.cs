@@ -10,15 +10,25 @@ namespace Onion.BussinesLogic.Services.Concrete
     public class CashRegisterService : ICashRegisterService
     {
         private readonly IUnitOfWork _uow;
+        private readonly Onion.BussinesLogic.Services.Abstract.IPaginationService _paginationService;
 
-        public CashRegisterService(IUnitOfWork uow)
+        public CashRegisterService(IUnitOfWork uow, Onion.BussinesLogic.Services.Abstract.IPaginationService paginationService)
         {
             _uow = uow;
+            _paginationService = paginationService;
         }
 
         public async Task<CashRegister?> GetByIdAsync(int id) => await _uow.CashRegisters.GetByIdAsync(id);
 
         public async Task<IEnumerable<CashRegister>> GetAllAsync() => await _uow.CashRegisters.ListAsync();
+
+        public async Task<Onion.Common.Models.Pagination.PagedList<CashRegister>> GetPagedAsync(int pageNumber, int pageSize)
+        {
+            var pn = Math.Max(1, pageNumber);
+            var ps = Math.Clamp(pageSize, 1, 100);
+            var list = (await _uow.CashRegisters.ListAsync()).AsQueryable();
+            return await _paginationService.ToPagedListAsync(list, pn, ps);
+        }
 
         public async Task<CashRegister> OpenAsync(CashRegister register)
         {
