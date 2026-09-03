@@ -76,6 +76,11 @@ namespace Onion.DataAccess
         public DbSet<Onion.Domain.Warehouses.Movement> Movements { get; set; } = null!;
         public DbSet<Onion.Domain.Inventory.InventoryMovement> InventoryMovements { get; set; } = null!;
         public DbSet<Onion.Domain.Invoices.InvoiceSequence> InvoiceSequences { get; set; } = null!;
+        // Purchase receipts and manage requests
+        public DbSet<Onion.Domain.Purchases.PurchaseOrderReceipt> PurchaseOrderReceipts { get; set; } = null!;
+        public DbSet<Onion.Domain.Purchases.PurchaseOrderReceiptDetail> PurchaseOrderReceiptDetails { get; set; } = null!;
+        public DbSet<Onion.Domain.ManageRequests.ManageRequest> ManageRequests { get; set; } = null!;
+        public DbSet<Onion.Domain.ManageRequests.ManageRequestTimeline> ManageRequestTimelines { get; set; } = null!;
         public DbSet<Onion.Domain.Finance.AccountReceivable> AccountReceivables { get; set; } = null!;
         public DbSet<Onion.Domain.Finance.PaymentPlan> PaymentPlans { get; set; } = null!;
         public DbSet<Onion.Domain.Finance.Installment> Installments { get; set; } = null!;
@@ -89,6 +94,9 @@ namespace Onion.DataAccess
         public DbSet<Onion.Domain.Appointments.Appointment> Appointments { get; set; } = null!;
         public DbSet<Onion.Domain.Appointments.Resource> Resources { get; set; } = null!;
         public DbSet<Onion.Domain.Appointments.Availability> Availabilities { get; set; } = null!;
+        // Credit notes
+        public DbSet<Onion.Domain.CreditNote> CreditNotes { get; set; } = null!;
+        public DbSet<Onion.Domain.CreditNoteDetail> CreditNoteDetails { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -104,6 +112,8 @@ namespace Onion.DataAccess
             modelBuilder.Entity<Category>().HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
             modelBuilder.Entity<Product>().HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
             modelBuilder.Entity<Onion.Domain.Products.ProductType>().HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
+            modelBuilder.Entity<Onion.Domain.CreditNote>().HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
+            modelBuilder.Entity<Onion.Domain.CreditNoteDetail>().HasQueryFilter(e => this.TenantCompanyId == null || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyId);
 
             // Seed default product types to allow FE to create products referencing common types
             // Use fixed seed CreationDate values to avoid non-deterministic migrations

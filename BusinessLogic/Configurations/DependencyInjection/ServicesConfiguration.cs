@@ -23,6 +23,8 @@ public static class ServicesConfiguration
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<ISubscriptionService, SubscriptionService>();
         services.AddScoped<Onion.Common.Features.IFeatureService, FeatureService>();
+        services.AddScoped<Onion.BussinesLogic.Services.Abstract.ICompanySettingsService, Onion.BussinesLogic.Services.Concrete.CompanySettingsService >();
+        services.AddScoped<Onion.BussinesLogic.Services.Abstract.ICreditNoteService, Onion.BussinesLogic.Services.Concrete.CreditNoteService>();
         services.AddScoped<Onion.BussinesLogic.Services.Abstract.IAccountReceivableService, Onion.BussinesLogic.Services.Concrete.AccountReceivableService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<ICategoryService, CategoryService>();
@@ -50,6 +52,8 @@ public static class ServicesConfiguration
         services.AddScoped<Onion.BussinesLogic.Services.Abstract.IPaginationService, Onion.BussinesLogic.Services.Infrastructure.PaginationService>();
         services.AddScoped<ISaleService, SaleService>();
         services.AddScoped<Onion.BussinesLogic.Services.Abstract.ICreditService, Onion.BussinesLogic.Services.Concrete.CreditService>();
+        services.AddScoped(typeof(Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.CreditNote>), typeof(Onion.DataAccess.Repositories.Concrete.GenericRepository<Onion.Domain.CreditNote>));
+        services.AddScoped(typeof(Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.CreditNoteDetail>), typeof(Onion.DataAccess.Repositories.Concrete.GenericRepository<Onion.Domain.CreditNoteDetail>));
         services.AddScoped(typeof(Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Credits.Credit>), typeof(Onion.DataAccess.Repositories.Concrete.GenericRepository<Onion.Domain.Credits.Credit>));
         services.AddScoped(typeof(Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Credits.CreditPayment>), typeof(Onion.DataAccess.Repositories.Concrete.GenericRepository<Onion.Domain.Credits.CreditPayment>));
         services.AddScoped(typeof(Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Credits.CreditStatusHistory>), typeof(Onion.DataAccess.Repositories.Concrete.GenericRepository<Onion.Domain.Credits.CreditStatusHistory>));

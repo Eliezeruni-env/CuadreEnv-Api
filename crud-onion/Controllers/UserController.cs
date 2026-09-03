@@ -13,11 +13,13 @@ namespace Onion.Controllers
     {
         private readonly IUserService _service;
         private readonly IGlobalizationService _globalizationService;
+        private readonly Onion.Common.Services.ICurrentUserService _currentUserService;
 
-        public UserController(IUserService service, IGlobalizationService globalizationService)
+        public UserController(IUserService service, IGlobalizationService globalizationService, Onion.Common.Services.ICurrentUserService currentUserService)
         {
             _service = service;
             _globalizationService = globalizationService;
+            _currentUserService = currentUserService;
         }
 
         public record ChangeRoleRequest(string Role);
@@ -83,6 +85,18 @@ namespace Onion.Controllers
         {
             var created = await _service.CreateAsync(user);
             return CreatedAtAction(nameof(Get), new { id = created.Id }, new { created.Id, created.Email });
+        }
+
+        // Register employee for current company (Admins)
+        [HttpPost("register-employee")]
+        [Onion.Common.Authorization.RequireRole("Admin")]
+        public async Task<IActionResult> RegisterEmployee([FromBody] User user)
+        {
+            // Ensure employee assigned to current tenant
+            var companyId = _currentUserService.CompanyId ?? throw new System.Exception("Company context missing");
+            user.CompanyId = companyId;
+            var created = await _service.CreateAsync(user);
+            return CreatedAtAction(nameof(Get), new { id = created.Id }, Onion.Common.Models.ApiResponse<object>.Ok(new { created.Id, created.Email }, "Employee created"));
         }
 
         [HttpPut]

@@ -28,6 +28,8 @@ namespace Onion.DataAccess.Repositories.Concrete
         IRepository<Onion.Domain.CompanySettings> CompanySettingsRepo { get; }
         IRepository<Onion.Domain.Products.ProductType> ProductTypes { get; }
         IRepository<Onion.Domain.Inventory.InventoryMovement> InventoryMovements { get; }
+        IRepository<Onion.Domain.Purchases.PurchaseOrderReceipt> PurchaseOrderReceipts { get; }
+        IRepository<Onion.Domain.ManageRequests.ManageRequest> ManageRequests { get; }
         IRepository<Onion.Domain.Invoices.InvoiceSequence> InvoiceSequences { get; }
         IRepository<Onion.Domain.Finance.AccountReceivable> AccountReceivables { get; }
         IRepository<Onion.Domain.Finance.PaymentPlan> PaymentPlans { get; }
@@ -64,6 +66,8 @@ namespace Onion.DataAccess.Repositories.Concrete
         public IRepository<Onion.Domain.CompanySettings> CompanySettingsRepo { get; }
         public IRepository<Onion.Domain.Products.ProductType> ProductTypes { get; }
         public IRepository<Onion.Domain.Inventory.InventoryMovement> InventoryMovements { get; }
+        public IRepository<Onion.Domain.Purchases.PurchaseOrderReceipt> PurchaseOrderReceipts { get; }
+        public IRepository<Onion.Domain.ManageRequests.ManageRequest> ManageRequests { get; }
         public IRepository<Onion.Domain.Invoices.InvoiceSequence> InvoiceSequences { get; }
         public IRepository<Onion.Domain.Finance.AccountReceivable> AccountReceivables { get; }
         public IRepository<Onion.Domain.Billing.SubscriptionPlan> SubscriptionPlans { get; }
@@ -95,6 +99,8 @@ namespace Onion.DataAccess.Repositories.Concrete
             CompanySettingsRepo = new GenericRepository<Onion.Domain.CompanySettings>(context);
             ProductTypes = new GenericRepository<Onion.Domain.Products.ProductType>(context);
             InventoryMovements = new GenericRepository<Onion.Domain.Inventory.InventoryMovement>(context);
+            PurchaseOrderReceipts = new GenericRepository<Onion.Domain.Purchases.PurchaseOrderReceipt>(context);
+            ManageRequests = new GenericRepository<Onion.Domain.ManageRequests.ManageRequest>(context);
             InvoiceSequences = new GenericRepository<Onion.Domain.Invoices.InvoiceSequence>(context);
             AccountReceivables = new GenericRepository<Onion.Domain.Finance.AccountReceivable>(context);
             SubscriptionPlans = new GenericRepository<Onion.Domain.Billing.SubscriptionPlan>(context);

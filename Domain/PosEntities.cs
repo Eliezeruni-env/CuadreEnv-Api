@@ -45,6 +45,8 @@ namespace Onion.Domain
         public int PurchaseId { get; set; }
         public int ProductId { get; set; }
         public decimal Quantity { get; set; }
+        // Quantity physically received so far for this purchase detail
+        public decimal QuantityReceived { get; set; }
         public decimal Cost { get; set; }
     }
 
