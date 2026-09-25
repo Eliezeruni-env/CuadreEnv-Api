@@ -14,14 +14,31 @@ namespace Onion.DataAccess.Repositories.Concrete
             if (string.IsNullOrWhiteSpace(email)) return null;
             var normalized = email.Trim().ToLowerInvariant();
             // Use raw SQL to avoid translation issues with certain database collations/providers
-            return await _context.Set<User>().FromSqlInterpolated($"SELECT * FROM [Users] WHERE [Email] = {normalized}").AsNoTracking().FirstOrDefaultAsync();
+            return await _context.Set<User>().FromSqlInterpolated<User>($"SELECT * FROM [Users] WHERE [Email] = {normalized}").IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync();
+        }
+
+        public async Task<User?> GetByIdUnscopedAsync(int id)
+        {
+            return await _context.Set<User>()
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == id);
+        }
+
+        public void UpdateLoginMetadata(User user)
+        {
+            // Attach the entity and mark only login-related properties as modified so
+            // tenant-scoped fields are not affected during unauthenticated login flows.
+            _context.Set<User>().Attach(user);
+            _context.Entry(user).Property(x => x.LastLoginAt).IsModified = true;
+            _context.Entry(user).Property(x => x.LastLoginIp).IsModified = true;
         }
 
         public async Task<bool> ExistsByEmailAsync(string email)
         {
             if (string.IsNullOrWhiteSpace(email)) return false;
             var normalized = email.Trim().ToLowerInvariant();
-            var found = await _context.Set<User>().FromSqlInterpolated($"SELECT * FROM [Users] WHERE [Email] = {normalized}").AsNoTracking().FirstOrDefaultAsync();
+            var found = await _context.Set<User>().FromSqlInterpolated<User>($"SELECT * FROM [Users] WHERE [Email] = {normalized}").IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync();
             return found != null;
         }
 

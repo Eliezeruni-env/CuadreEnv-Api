@@ -32,6 +32,12 @@ namespace Onion.BussinesLogic.Services.Concrete
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
         }
 
+        public async Task<IEnumerable<Product>> GetByTypeAsync(int productTypeId)
+        {
+            if (productTypeId <= 0) return Array.Empty<Product>();
+            return (await _uow.Products.FindAsync(p => p.ProductTypeId == productTypeId && p.Active && !p.IsDeleted)).ToList();
+        }
+
         // Domain-level operations
         public async Task<IEnumerable<Product>> GetAllAsync()
         {
@@ -222,6 +228,9 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             entity.CompanyId = companyId.Value;
 
+            if (entity.ProductTypeId == 2)
+                entity.InvoiceWithoutStock = true;
+
             if (entity.MinimumQuantity < 0)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_STOCK", Message = "MinimumQuantity must be >= 0", Language = "ES" });
 
@@ -275,6 +284,9 @@ namespace Onion.BussinesLogic.Services.Concrete
             }
 
             _mapper.Map(entityDto, existing);
+
+            if (existing.ProductTypeId == 2)
+                existing.InvoiceWithoutStock = true;
 
             if (existing.MinimumQuantity < 0)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_STOCK", Message = "MinimumQuantity must be >= 0", Language = "ES" });

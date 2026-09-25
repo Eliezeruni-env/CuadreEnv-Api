@@ -41,6 +41,9 @@ namespace Onion.Tests
             public Task<System.Collections.Generic.IEnumerable<ProductDto>> GetLowStockAsync() => Task.FromResult<System.Collections.Generic.IEnumerable<ProductDto>>(new ProductDto[0]);
             public Task<System.Collections.Generic.IEnumerable<MovementDto>> GetMovementHistoryAsync(int? productId = null, int? warehouseId = null, System.DateTime? from = null, System.DateTime? to = null, string? type = null) => Task.FromResult<System.Collections.Generic.IEnumerable<MovementDto>>(new MovementDto[0]);
             public Task<System.Collections.Generic.IEnumerable<Onion.Domain.Inventory.InventoryMovement>> GetInventoryMovementsAsync(int? productId = null, int? warehouseId = null, System.DateTime? from = null, System.DateTime? to = null, string? type = null) => Task.FromResult<System.Collections.Generic.IEnumerable<Onion.Domain.Inventory.InventoryMovement>>(new Onion.Domain.Inventory.InventoryMovement[0]);
+            public Task<Onion.Common.Models.Pagination.PagedList<WarehouseDto>> GetPagedAsync(int pageNumber, int pageSize) => throw new System.NotImplementedException();
+            public Task<Onion.Common.Models.Pagination.PagedList<MovementDto>> GetMovementHistoryPagedAsync(int? productId = null, int? warehouseId = null, System.DateTime? from = null, System.DateTime? to = null, string? type = null, int pageNumber = 1, int pageSize = 10) => throw new System.NotImplementedException();
+            public Task<Onion.Common.Models.Pagination.PagedList<Onion.Domain.Inventory.InventoryMovement>> GetInventoryMovementsPagedAsync(int? productId = null, int? warehouseId = null, System.DateTime? from = null, System.DateTime? to = null, string? type = null, int pageNumber = 1, int pageSize = 10) => throw new System.NotImplementedException();
         }
 
         [Fact]

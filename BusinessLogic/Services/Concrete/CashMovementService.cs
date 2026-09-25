@@ -34,6 +34,13 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<CashMovement> AddAsync(CashMovement movement)
         {
+            if (movement == null) throw new ArgumentNullException(nameof(movement));
+            if (string.IsNullOrWhiteSpace(movement.Reason))
+                throw new ArgumentException("Cash movement reason is required.", nameof(movement));
+            if (movement.Amount == 0m)
+                throw new ArgumentException("Cash movement amount cannot be zero.", nameof(movement));
+            movement.Reason = movement.Reason.Trim();
+            movement.RecordedAt = DateTime.UtcNow;
             await _uow.CashMovements.AddAsync(movement);
             await _uow.SaveChangesAsync();
             return movement;

@@ -46,6 +46,22 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (sale.Details == null || sale.Details.Count == 0)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "NO_ITEMS", Message = "Sale must have at least one item", Language = "ES" });
 
+            if (!string.IsNullOrWhiteSpace(sale.IdempotencyKey))
+            {
+                var normalizedKey = sale.IdempotencyKey.Trim();
+                sale.IdempotencyKey = normalizedKey;
+                var existing = (await _uow.Sales.FindAsync(s => s.IdempotencyKey == normalizedKey && !s.IsDeleted)).FirstOrDefault();
+                if (existing != null)
+                    return existing;
+            }
+
+            if (sale.CashRegisterId.HasValue)
+            {
+                var register = await _uow.CashRegisters.GetByIdAsync(sale.CashRegisterId.Value);
+                if (register == null || register.Status != CashRegisterStatus.OPEN)
+                    throw new CustomException(new Onion.Common.Models.Error { Code = "CASH_REGISTER_NOT_OPEN", Message = "The cash register must be open to record sales", Language = "ES" });
+            }
+
             // Basic business rules for a retail store (papelería):
             // - Total must be >= sum of details unit price * qty
             decimal calcTotal = 0m;
@@ -72,8 +88,10 @@ namespace Onion.BussinesLogic.Services.Concrete
             try
             {
                 await _uow.Sales.AddAsync(sale);
+                await _uow.SaveChangesAsync();
                 // Reserve stock for each product first to avoid race conditions
                 var reserved = new List<(int productId, decimal qty)>();
+                var hasServiceItem = false;
                 try
                 {
                     foreach (var d in sale.Details)
@@ -87,12 +105,16 @@ namespace Onion.BussinesLogic.Services.Concrete
 
                             reserved.Add((d.ProductId, d.Quantity));
                         }
+                        else if (product?.ProductTypeId == 2)
+                        {
+                            hasServiceItem = true;
+                        }
                     }
 
                     // At this point reservations succeeded; finalize by reducing actual stock
                     foreach (var r in reserved)
                     {
-                        var ok = await _uow.Products.TryReduceStockAsync(r.productId, r.qty);
+                        var ok = await _uow.Products.TryCommitReservedStockAsync(r.productId, r.qty);
                         if (!ok)
                             throw new CustomException(new Onion.Common.Models.Error { Code = "INSUFFICIENT_STOCK", Message = $"Insufficient stock when finalizing product {r.productId}", Language = "ES" });
                     try
@@ -116,9 +138,10 @@ namespace Onion.BussinesLogic.Services.Concrete
                         };
                         await _uow.InventoryMovements.AddAsync(mv);
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        _logger?.LogWarning("Failed to record inventory movement for product {ProductId} on sale {SaleId}", r.productId, sale.Id);
+                        _logger?.LogError(ex, "Failed to record inventory movement for product {ProductId} on sale {SaleId}", r.productId, sale.Id);
+                        throw;
                     }
                     }
                 }
@@ -146,6 +169,9 @@ namespace Onion.BussinesLogic.Services.Concrete
                     await _uow.CashMovements.AddAsync(cashMovement);
                 }
 
+                var fiscalDocument = Onion.Domain.Invoices.FiscalDocument.ForSale(sale.CompanyId, sale.Id);
+                await _uow.FiscalDocuments.AddAsync(fiscalDocument);
+
                 // Assign invoice folio (simple sequence per company)
                 try
                 {
@@ -155,13 +181,13 @@ namespace Onion.BussinesLogic.Services.Concrete
                     {
                         seq = new Onion.Domain.Invoices.InvoiceSequence { CompanyId = sale.CompanyId, LastFolio = 1 };
                         await _uow.InvoiceSequences.AddAsync(seq);
-                        sale.InvoiceFolio = seq.LastFolio.ToString();
+                        sale.InvoiceFolio = hasServiceItem ? $"VTA-SERV-{seq.LastFolio:0000}" : seq.LastFolio.ToString();
                     }
                     else
                     {
                         seq.LastFolio += 1;
                         _uow.InvoiceSequences.Update(seq);
-                        sale.InvoiceFolio = seq.LastFolio.ToString();
+                        sale.InvoiceFolio = hasServiceItem ? $"VTA-SERV-{seq.LastFolio:0000}" : seq.LastFolio.ToString();
                     }
                 }
                 catch (Exception ex)

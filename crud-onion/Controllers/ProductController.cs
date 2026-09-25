@@ -21,6 +21,13 @@ namespace Onion.Controllers
             _logger = logger;
         }
 
+        [HttpGet("services")]
+        public async Task<IActionResult> GetServices()
+        {
+            var services = await _productService.GetByTypeAsync(2);
+            return Ok(Onion.Common.Models.ApiResponse<object>.Ok(services));
+        }
+
         [HttpGet("{id}")]
         public async Task<IActionResult> Get(int id)
         {

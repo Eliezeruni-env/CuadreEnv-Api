@@ -9,7 +9,7 @@ namespace Onion.IntegrationTests
     {
         public List<(string To, string Subject, string Body)> Sent { get; } = new List<(string, string, string)>();
 
-        public Task SendEmailAsync(string to, string subject, string body)
+        public Task SendEmailAsync(string to, string subject, string body, bool isHtml = true, byte[]? attachmentBytes = null, string? attachmentName = null)
         {
             Sent.Add((to, subject, body));
             return Task.CompletedTask;

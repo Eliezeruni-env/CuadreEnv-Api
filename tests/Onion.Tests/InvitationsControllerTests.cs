@@ -40,6 +40,10 @@ namespace Onion.Tests
 
             // Only the Invitations repository is used by controller in this test
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Invitations.Invitation> Invitations { get; } = new FakeInvRepo();
+            public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Purchases.PurchaseOrderReceipt> PurchaseOrderReceipts => throw new System.NotImplementedException();
+            public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.ManageRequests.ManageRequest> ManageRequests => throw new System.NotImplementedException();
+            public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Finance.PaymentPlan> PaymentPlans => throw new System.NotImplementedException();
+            public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Finance.Installment> Installments => throw new System.NotImplementedException();
 
             // Unused members - implement with throw to satisfy interface
             public Onion.DataAccess.Repositories.Abstract.IProductRepository Products => throw new System.NotImplementedException();
@@ -55,11 +59,13 @@ namespace Onion.Tests
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Return> Returns => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.CashRegister> CashRegisters => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.CashMovement> CashMovements => throw new System.NotImplementedException();
+            public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.CashRegisterPause> CashRegisterPauses => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.CompanySettings> CompanySettingsRepo => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Products.ProductType> ProductTypes => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Inventory.InventoryMovement> InventoryMovements => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Invoices.InvoiceSequence> InvoiceSequences => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Finance.AccountReceivable> AccountReceivables => throw new System.NotImplementedException();
+            public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Finance.AccountPayable> AccountPayables => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Billing.SubscriptionPlan> SubscriptionPlans => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Billing.CompanySubscription> CompanySubscriptions => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IWarehouseRepository Warehouses => throw new System.NotImplementedException();
@@ -84,6 +90,8 @@ namespace Onion.Tests
             public System.Threading.Tasks.Task<System.Collections.Generic.IEnumerable<Invitation>> ListAsync() => System.Threading.Tasks.Task.FromResult<System.Collections.Generic.IEnumerable<Invitation>>(_items);
             public void Remove(Invitation entity) => _items.Remove(entity);
             public void Update(Invitation entity) { }
+            public System.Threading.Tasks.Task<Onion.Common.Models.Pagination.PagedList<Invitation>> GetPagedAsync(int pageNumber, int pageSize) => throw new System.NotImplementedException();
+            public System.Threading.Tasks.Task<Onion.Common.Models.Pagination.PagedList<Invitation>> GetPagedAsync(System.Linq.IQueryable<Invitation> query, int pageNumber, int pageSize) => throw new System.NotImplementedException();
         }
 
         [Fact]

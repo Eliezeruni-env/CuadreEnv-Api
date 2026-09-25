@@ -24,6 +24,21 @@ namespace Onion.Controllers
             _db = db;
         }
 
+        [HttpGet]
+        public async Task<IActionResult> GetAll()
+        {
+            var list = await _uow.PurchaseOrderReceipts.ListAsync();
+            return Ok(list);
+        }
+
+        [HttpGet("{id:int}")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            var item = await _uow.PurchaseOrderReceipts.GetByIdAsync(id);
+            if (item == null) return NotFound();
+            return Ok(item);
+        }
+
         [HttpGet("exists/{purchaseId}")]
         public async Task<IActionResult> Exists(int purchaseId)
         {

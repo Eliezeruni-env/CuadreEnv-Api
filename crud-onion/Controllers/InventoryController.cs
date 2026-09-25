@@ -3,12 +3,14 @@ using System.Threading.Tasks;
 using Onion.BussinesLogic.Services.Abstract;
 using Onion.BussinesLogic.Dtos;
 using Microsoft.AspNetCore.Authorization;
+using Onion.Common.Authorization;
 
 namespace Onion.Controllers
 {
     [Route("[controller]")]
     [ApiController]
     [Authorize]
+    [AuthorizeModule("INVENTORY")]
     public class InventoryController : ControllerBase
     {
         private readonly IWarehouseService _warehouseService;

@@ -61,8 +61,12 @@ namespace Onion.BussinesLogic.Services.Concrete
             var existing = await _uow.Suppliers.GetByIdAsync(supplier.Id) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "Supplier not found", Language = "EN" });
 
             existing.Name = supplier.Name;
+            existing.RncOrId = supplier.RncOrId;
+            existing.ContactName = supplier.ContactName;
             existing.Phone = supplier.Phone;
             existing.Email = supplier.Email;
+            existing.Address = supplier.Address;
+            existing.IsActive = supplier.IsActive;
 
             _uow.Suppliers.Update(existing);
             await _uow.SaveChangesAsync();

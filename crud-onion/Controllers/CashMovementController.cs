@@ -5,11 +5,13 @@ using Onion.Domain;
 using Onion.Common.Services;
 using Onion.Common.Exceptions;
 using Onion.Common.Enums;
+using Onion.Common.Authorization;
 
 namespace Onion.Controllers
 {
     [Route("[controller]")]
     [ApiController]
+    [AuthorizeModule("POS")]
     public class CashMovementController : ControllerBase
     {
         private readonly ICashMovementService _service;

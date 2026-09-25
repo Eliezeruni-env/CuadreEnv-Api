@@ -5,11 +5,13 @@ using Onion.DataAccess.Repositories.Concrete;
 using Onion.Common.Services;
 using Onion.Common.Exceptions;
 using Onion.Common.Enums;
+using Onion.Common.Authorization;
 
 namespace Onion.Controllers
 {
     [Route("[controller]")]
     [ApiController]
+    [AuthorizeModule("PURCHASES")]
     public class PurchaseController : ControllerBase
     {
         private readonly IUnitOfWork _uow;

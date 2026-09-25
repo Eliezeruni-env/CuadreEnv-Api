@@ -29,6 +29,19 @@ namespace Onion.DataAccess.Repositories.Concrete
             return affected > 0;
         }
 
+        public async Task<bool> TryCommitReservedStockAsync(int productId, decimal quantity)
+        {
+            if (!_context.TenantCompanyId.HasValue) throw new InvalidOperationException("Tenant company id missing for multi-tenant operation.");
+            var companyId = _context.TenantCompanyId.Value;
+            var affected = await _context.Products
+                .Where(p => p.Id == productId && EF.Property<int>(p, "CompanyId") == companyId
+                    && p.Stock >= quantity && p.ReservedStock >= quantity)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(p => p.Stock, p => p.Stock - quantity)
+                    .SetProperty(p => p.ReservedStock, p => p.ReservedStock - quantity));
+            return affected > 0;
+        }
+
         public async Task<IEnumerable<Product>> SearchByNameAsync(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return Enumerable.Empty<Product>();

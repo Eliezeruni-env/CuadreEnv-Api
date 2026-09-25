@@ -24,6 +24,13 @@ namespace Onion.Controllers
 
         public record ChangeRoleRequest(string Role);
 
+        [HttpGet("cashiers")]
+        public async Task<IActionResult> GetCashiers()
+        {
+            var users = await _service.GetCashiersAsync();
+            return Ok(users.Select(u => new { u.Id, u.FirstName, u.LastName, u.Email, u.UserName, u.Role }));
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {

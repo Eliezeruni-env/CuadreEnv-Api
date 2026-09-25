@@ -39,8 +39,14 @@ namespace Onion.DataAccess.Configurations.EntityConfigurations
             builder.Property(x => x.ReservedStock)
                    .HasColumnType("decimal(18,2)")
                    .HasDefaultValue(0);
+            builder.Property(x => x.RowVersion)
+                   .IsRowVersion()
+                   .IsConcurrencyToken();
 
             builder.Property(x => x.InvoiceWithoutStock)
+                   .HasDefaultValue(false);
+
+            builder.Property(x => x.IsOrganic)
                    .HasDefaultValue(false);
 
             builder.HasIndex(x => x.Barcode)

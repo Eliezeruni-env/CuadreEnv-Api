@@ -32,23 +32,6 @@ namespace Onion.DataAccess.Repositories.Concrete
         {
             try
             {
-                // First, check existence ignoring query filters to determine if resource belongs to another company
-                var withoutFilter = await _dbSet.IgnoreQueryFilters().FirstOrDefaultAsync(e => e.Id == id);
-
-                if (withoutFilter == null) return null;
-            if (withoutFilter == null) return null;
-
-            // If entity exposes CompanyId and tenant is set, enforce explicit 403 when mismatched
-            var companyProp = withoutFilter.GetType().GetProperty("CompanyId");
-                if (companyProp != null && _context.TenantCompanyId.HasValue)
-                {
-                    var entityCompany = (int)companyProp.GetValue(withoutFilter)!;
-                    if (entityCompany != _context.TenantCompanyId.Value)
-                        throw new CustomException(new Error { Code = "FORBIDDEN", Message = "Access to resource from another company is forbidden", Language = "EN" });
-                }
-
-                // Return entity respecting global query filters (tenant scoping) to avoid accidental exposure
-                // Include common navigations by convention using EF Core metadata so services don't need to load them.
                 var query = _dbSet.AsQueryable();
                 try
                 {
@@ -131,12 +114,11 @@ namespace Onion.DataAccess.Repositories.Concrete
 
         public void Remove(T entity)
         {
-            // Ensure tenant ownership when entity exposes CompanyId
+            // Ensure tenant ownership when entity exposes CompanyIde
             var companyProp = entity.GetType().GetProperty("CompanyId");
-            if (companyProp != null && _context.TenantCompanyId.HasValue)
+            if (companyProp != null && !HasGlobalTenantBypass())
             {
-                var entityCompany = (int)companyProp.GetValue(entity)!;
-                if (entityCompany != _context.TenantCompanyId.Value)
+                if (!_context.TenantCompanyId.HasValue || !TenantOwnsEntity(companyProp, entity))
                     throw new CustomException(new Error { Code = "FORBIDDEN", Message = "Access to resource from another company is forbidden", Language = "EN" });
             }
 
@@ -146,14 +128,22 @@ namespace Onion.DataAccess.Repositories.Concrete
         public void Update(T entity)
         {
             var companyProp = entity.GetType().GetProperty("CompanyId");
-            if (companyProp != null && _context.TenantCompanyId.HasValue)
+            if (companyProp != null && !HasGlobalTenantBypass())
             {
-                var entityCompany = (int)companyProp.GetValue(entity)!;
-                if (entityCompany != _context.TenantCompanyId.Value)
+                if (!_context.TenantCompanyId.HasValue || !TenantOwnsEntity(companyProp, entity))
                     throw new CustomException(new Error { Code = "FORBIDDEN", Message = "Access to resource from another company is forbidden", Language = "EN" });
             }
 
             _dbSet.Update(entity);
+        }
+
+        private bool HasGlobalTenantBypass() =>
+            _context.IsGlobalTenantAccess || Onion.DataAccess.Tenant.AmbientTenantProvider.BypassTenant;
+
+        private bool TenantOwnsEntity(System.Reflection.PropertyInfo companyProp, T entity)
+        {
+            var value = companyProp.GetValue(entity);
+            return value is int entityCompany && entityCompany == _context.TenantCompanyId!.Value;
         }
     }
 }

@@ -164,6 +164,13 @@ namespace Onion.Controllers
                     return Conflict(new { error = "Conflict", saasUserId = existingByEmail.Id });
                 }
 
+                if (req.CompanyId.HasValue)
+                {
+                    var company = (await _uow.Companies.FindAsync(c => c.Id == req.CompanyId.Value)).FirstOrDefault();
+                    if (company == null)
+                        return BadRequest(new { error = "Company does not exist." });
+                }
+
                 var newUser = new User
                 {
                     Identification = req.ExternalId,

@@ -11,6 +11,8 @@ namespace Onion.BussinesLogic.Services.Abstract
         Task<IEnumerable<CashRegister>> GetAllAsync();
         Task<PagedList<CashRegister>> GetPagedAsync(int pageNumber, int pageSize);
         Task<CashRegister> OpenAsync(CashRegister register);
-        Task CloseAsync(int id, decimal closingAmount);
+        Task PauseAsync(int id, string reason, int? userId);
+        Task ResumeAsync(int id, int? userId);
+        Task CloseAsync(int id, decimal closingAmount, string? breakdownJson, int? userId);
     }
 }

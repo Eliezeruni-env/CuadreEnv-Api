@@ -31,6 +31,9 @@ public static class ServicesConfiguration
         services.AddScoped<IProductTypeService, ProductTypeService>();
         services.AddScoped<IAuthService, AuthService>();
 
+        // User management service
+        services.AddScoped<Onion.BussinesLogic.Services.Abstract.IUserManagementService, Onion.BussinesLogic.Services.Concrete.UserManagementService>();
+
         // Warehouse services
         services.AddScoped<IWarehouseService, WarehouseService>();
 
@@ -43,8 +46,6 @@ public static class ServicesConfiguration
 
         // Domain services
         services.AddScoped<IUserService, UserService>();
-        // Email service (optional SMTP)
-        services.AddSingleton<Onion.Common.Services.IEmailService, Onion.Common.Services.SmtpEmailService>();
         services.AddScoped<ICompanyService, CompanyService>();
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<ISupplierService, SupplierService>();

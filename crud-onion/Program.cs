@@ -1,17 +1,22 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-// Using Microsoft.OpenApi.Models removed to avoid missing/unstable OpenAPI package types
+using Microsoft.OpenApi.Models;
 using Onion.BussinesLogic.Configurations.DependencyInjection;
 using Onion.Common.Services;
 using Onion.Controllers.Middleware;
 using Onion.DataAccess.Configurations.DependencyInjection;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using Microsoft.Extensions.Caching.Memory;
+using crud_onion.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var connectionString = builder.Configuration.GetConnectionString("OnionCrud");
+if (string.IsNullOrWhiteSpace(connectionString) && builder.Environment.IsProduction())
+    throw new InvalidOperationException("ConnectionStrings:OnionCrud must be configured before starting in Production.");
 
 // Ensure the app listens on the development ports commonly used by frontends.
 // Allow override via ASPNETCORE_URLS or PORT environment variables. Default to 8080 and 5000.
@@ -26,6 +31,8 @@ builder.Services.AddControllers(options =>
         options.Conventions.Insert(0, new Onion.Common.Mvc.RoutePrefixConvention("v1"));
         // Return consistent ApiResponse on model validation failures to simplify frontend handling
         options.Filters.Add(new Onion.Controllers.Filters.ValidateModelAttribute());
+        options.Filters.Add<Onion.Filters.AuditDeletionApprovalFilter>();
+        options.Conventions.Add(new crud_onion.Authorization.ModuleAuthorizationConvention());
     })
     .AddJsonOptions(opts =>
     {
@@ -34,18 +41,58 @@ builder.Services.AddControllers(options =>
         // Don't emit nulls to reduce payloads
         opts.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
     });
+builder.Services.AddHttpClient("Dgii", client =>
+{
+    var baseUrl = builder.Configuration["Dgii:BaseUrl"];
+    if (!string.IsNullOrWhiteSpace(baseUrl)) client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("Dgii:TimeoutSeconds", 15));
+});
+builder.Services.AddSingleton<Onion.BussinesLogic.Services.Concrete.ILicenseStartupValidator, Onion.BussinesLogic.Services.Concrete.LicenseStartupValidator>();
 
 // Swagger configuration including Internal API key definition for /internal endpoints
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "CuadreEnv API",
+        Version = "v1",
+        Description = "API de CuadreEnv SaaS"
+    });
+
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+     Description = "Pegue un JWT local. Swagger agregará automáticamente el prefijo Bearer."
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                },
+
+            },
+            Array.Empty<string>()
+        }
+    });
+
     // Define API key security scheme for internal endpoints
-    c.AddSecurityDefinition("InternalApiKey", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    c.AddSecurityDefinition("InternalApiKey", new OpenApiSecurityScheme
     {
         Description = "Internal API Key required for calls to /internal endpoints. Provide in X-Internal-ApiKey header.",
         Name = "X-Internal-ApiKey",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
         Scheme = "apiKey"
     });
 
@@ -63,45 +110,46 @@ builder.Services.AddHealthChecks();
 builder.Services.AddServices();
 builder.Services.AddDomainServices();
 builder.Services.AddValidators();
+// CORS: allow frontend origin (development). Configure FRONTEND__URL in environment or fallback to http://localhost:3000
+var frontendUrl = builder.Configuration["Frontend:Url"] ?? Environment.GetEnvironmentVariable("FRONTEND__URL") ?? "http://localhost:3000";
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("DefaultCors", policy =>
+    {
+        policy.WithOrigins(frontendUrl)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
 // HttpClient factory used by UM proxy example
 builder.Services.AddHttpClient();
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient("Usm", client =>
+{
+    var baseUrl = builder.Configuration["Usm:BaseUrl"];
+    if (!string.IsNullOrWhiteSpace(baseUrl)) client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("Usm:TimeoutSeconds", 5));
+});
+// CompanyEntitlementService uses the scoped OnionDbContext for local USM reads.
+// IMemoryCache remains singleton, so entitlement data is still shared across requests.
+builder.Services.AddScoped<Onion.Common.Services.ICompanyEntitlementService, Onion.BussinesLogic.Services.Concrete.CompanyEntitlementService>();
+builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IAccountStatusService, Onion.BussinesLogic.Services.Concrete.AccountStatusService>();
 // Background queue and Caja (POS) registrations
 builder.Services.AddSingleton<Onion.BussinesLogic.Background.InMemoryBackgroundQueue>();
 builder.Services.AddSingleton<Onion.BussinesLogic.Background.IBackgroundQueue>(sp => sp.GetRequiredService<Onion.BussinesLogic.Background.InMemoryBackgroundQueue>());
 builder.Services.AddHostedService<Onion.BussinesLogic.Background.BackgroundWorker>();
+builder.Services.AddHostedService<Onion.BussinesLogic.Background.FiscalOutboxWorker>();
 builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.ICajaService, Onion.BussinesLogic.Services.Concrete.CajaService>();
-// Register HttpContextAccessor and JWT-based tenant provider for CompanyId extraction
+// Register HttpContextAccessor and local JWT tenant provider for CompanyId extraction
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<Onion.DataAccess.ITenantProvider, Onion.DataAccess.Tenant.JwtTenantProvider>();
-// JWT Authentication
+if (builder.Environment.IsProduction() && string.IsNullOrWhiteSpace(builder.Configuration["Internal:ApiKey"]))
+    throw new InvalidOperationException("Internal:ApiKey must be configured in Production.");
+
 var jwtKey = builder.Configuration["Jwt:Key"];
-if (string.IsNullOrWhiteSpace(jwtKey))
-{
-    // Allow a fallback key when NOT running in Production (covers Development and other local envs).
-    // In Production the key must be provided via configuration or environment variable.
-    if (!builder.Environment.IsProduction())
-    {
-        jwtKey = "dev-local-key-please-change-in-production-32chars!"; // must be non-empty and sufficiently long
-        Console.WriteLine("Warning: Jwt:Key not configured. Using non-production fallback key.");
-    }
-    else
-    {
-        throw new InvalidOperationException("Jwt:Key missing. Set configuration or environment variable 'Jwt:Key' before starting the app in production.");
-    }
-}
-// Ensure configuration exposes the effective key so other components reading IConfiguration get the same value
-try
-{
-    builder.Configuration["Jwt:Key"] = jwtKey;
-}
-catch
-{
-    // If configuration is not writable (unlikely), log a warning but continue since jwtKey variable is used below
-    Console.WriteLine("Warning: unable to write effective Jwt:Key into configuration; relying on local variable.");
-}
-var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? string.Empty;
-var jwtAudience = builder.Configuration["Jwt:Audience"] ?? string.Empty;
-var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
+if (string.IsNullOrWhiteSpace(jwtKey) && builder.Environment.IsProduction())
+    throw new InvalidOperationException("Jwt:Key must be configured in Production.");
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -109,19 +157,19 @@ builder.Services.AddAuthentication(options =>
 })
     .AddJwtBearer(options =>
     {
-        options.RequireHttpsMetadata = true;
         options.SaveToken = true;
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidIssuer = jwtIssuer,
-            ValidateAudience = true,
-            ValidAudience = jwtAudience,
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(keyBytes),
-            ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromMinutes(1)
-        };
+        options.MapInboundClaims = false;
+         var jwtIssuer = builder.Configuration["Jwt:Issuer"];
+         var jwtAudience = builder.Configuration["Jwt:Audience"];
+         options.TokenValidationParameters = new TokenValidationParameters
+         {
+             ValidateIssuerSigningKey = true,
+              IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(string.IsNullOrWhiteSpace(jwtKey) ? "dev-local-key-please-change-in-production-32chars!" : jwtKey)),
+             ValidateIssuer = true, ValidIssuer = jwtIssuer,
+             ValidateAudience = !string.IsNullOrWhiteSpace(jwtAudience), ValidAudience = jwtAudience,
+             ValidateLifetime = true, ClockSkew = TimeSpan.FromMinutes(1),
+             NameClaimType = System.Security.Claims.ClaimTypes.NameIdentifier, RoleClaimType = "role"
+         };
     });
 
 // Register ambient tenant provider for background jobs and CurrentUserService for web requests
@@ -130,9 +178,23 @@ builder.Services.AddSingleton<Onion.DataAccess.Tenant.AmbientTenantProvider>();
 // Hosted service to mark overdue credits daily
 builder.Services.AddHostedService<Onion.BussinesLogic.HostedServices.CreditOverdueHostedService>();
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+
+    options.AddPolicy("LocalCompanyAdmin", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireRole("Admin", "SuperAdmin", "SysAdmin");
+    });
+});
 // Central authorization service (role/permission checks)
 builder.Services.AddSingleton<Onion.Common.Authorization.IAuthorizationService, Onion.Common.Authorization.AuthorizationService>();
+builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IRoleService, Onion.BussinesLogic.Services.Concrete.RoleService>();
+builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IPermissionService, Onion.BussinesLogic.Services.Concrete.PermissionService>();
+builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IDeletionApprovalService, Onion.BussinesLogic.Services.Concrete.DeletionApprovalService>();
 // Register email service (production default). Tests may replace this registration in WebApplicationFactory.
 builder.Services.AddTransient<IEmailService, SmtpEmailService>();
 // Rate limiting for sensitive endpoints (login / refresh)
@@ -178,6 +240,12 @@ builder.Services.AddCors(options =>
 
 
 var app = builder.Build();
+
+// Production fails closed if USM cannot verify the license. A grace mode requires
+// a signed-cache contract and is intentionally not enabled by this application.
+await app.Services.GetRequiredService<Onion.BussinesLogic.Services.Concrete.ILicenseStartupValidator>()
+    .ValidateAsync(app.Lifetime.ApplicationStopping);
+
 app.UseStaticFiles();
 app.UseSwagger();
 
@@ -191,8 +259,8 @@ app.UseSwaggerUI(c =>
 });
 // ----------------------------------------
 
-app.MapHealthChecks("/hc");
-app.MapGet("/", () => Results.Ok(new { service = "Onion API", status = "ok" }));
+app.MapHealthChecks("/hc").AllowAnonymous();
+app.MapGet("/", () => Results.Ok(new { service = "Onion API", status = "ok" })).AllowAnonymous();
 
 // Force HTTPS only in non-development environments
 if (!app.Environment.IsDevelopment())
@@ -203,6 +271,7 @@ if (!app.Environment.IsDevelopment())
 app.UseCors("DefaultCors");
 // Global exception handler -> standardized API responses
 app.UseAuthentication();
+app.UseMiddleware<Onion.Middleware.ActiveAccountMiddleware>();
 // Apply rate limiting middleware (policies defined in DI)
 app.UseRateLimiter();
 // Internal API authentication (API key or SuperAdmin role)

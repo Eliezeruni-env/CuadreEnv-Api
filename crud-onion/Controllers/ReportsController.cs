@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
 using Onion.BussinesLogic.Services.Abstract;
 using Onion.Common.Services;
+using Onion.Common.Authorization;
 
 namespace Onion.Controllers
 {
     [Route("[controller]")]
     [ApiController]
+    [AuthorizeModule("REPORTS")]
     public class ReportsController : ControllerBase
     {
         private readonly IReportService _reportService;

@@ -24,6 +24,16 @@ namespace Onion.BussinesLogic.Services.Concrete
             _currentUserService = currentUserService;
         }
 
+        public async Task<IEnumerable<User>> GetCashiersAsync()
+        {
+            var companyId = _currentUserService.CompanyId ?? _tenantProvider.GetCompanyId();
+            if (!companyId.HasValue || companyId.Value <= 0)
+                throw new CustomException(new Onion.Common.Models.Error { Code = "TENANT_REQUIRED", Message = "Company context is required", Language = "ES" });
+
+            return await _uow.Users.FindAsync(u => u.CompanyId == companyId.Value && u.Active && !u.IsDeleted &&
+                (u.Role == "Cashier" || u.Role == "Admin" || u.Role == "Employee"));
+        }
+
         public async Task<User> CreateAsync(User user)
         {
             if (user is null) throw new ArgumentNullException(nameof(user));
@@ -72,20 +82,35 @@ namespace Onion.BussinesLogic.Services.Concrete
                     throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Cannot assign user to a different company", Language = "EN" });
             }
 
-            var user = await _uow.Users.GetByIdAsync(userId) ?? throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
+            var user = !callerCompany.HasValue
+                ? await _uow.Users.GetByIdUnscopedAsync(userId)
+                : await _uow.Users.GetByIdAsync(userId);
+            if (user == null)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
 
             // If the user already has a different company assigned, refuse
             if (user.CompanyId.HasValue && user.CompanyId.Value != companyId)
                 throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Cannot assign user to a different company", Language = "EN" });
 
             user.CompanyId = companyId;
-            _uow.Users.Update(user);
-            await _uow.SaveChangesAsync();
+            var previousAmbientCompanyId = Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId;
+            try
+            {
+                Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = companyId;
+                _uow.Users.Update(user);
+                await _uow.SaveChangesAsync();
+            }
+            finally
+            {
+                Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = previousAmbientCompanyId;
+            }
         }
 
         public async Task DeleteAsync(int id)
         {
-            var existing = await _uow.Users.GetByIdAsync(id) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
+            var existing = await _uow.Users.GetByIdAsync(id);
+            if (existing == null)
+                throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
             _uow.Users.Remove(existing);
             await _uow.SaveChangesAsync();
         }
@@ -97,7 +122,9 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (!callerCompany.HasValue)
                 throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Tenant context missing: CompanyId claim required", Language = "EN" });
 
-            var user = await _uow.Users.GetByIdAsync(userId) ?? throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
+            var user = await _uow.Users.GetByIdAsync(userId);
+            if (user == null)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
             if (user.CompanyId != callerCompany.Value)
                 throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Cannot modify user from another company", Language = "EN" });
 
@@ -112,7 +139,9 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (!callerCompany.HasValue)
                 throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Tenant context missing: CompanyId claim required", Language = "EN" });
 
-            var user = await _uow.Users.GetByIdAsync(userId) ?? throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
+            var user = await _uow.Users.GetByIdAsync(userId);
+            if (user == null)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
             if (user.CompanyId != callerCompany.Value)
                 throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Cannot modify user from another company", Language = "EN" });
 
@@ -148,7 +177,9 @@ namespace Onion.BussinesLogic.Services.Concrete
         public async Task UpdateAsync(User user)
         {
             if (user is null) throw new ArgumentNullException(nameof(user));
-            var existing = await _uow.Users.GetByIdAsync(user.Id) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
+            var existing = await _uow.Users.GetByIdAsync(user.Id);
+            if (existing == null)
+                throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
 
             existing.FirstName = user.FirstName;
             existing.LastName = user.LastName;

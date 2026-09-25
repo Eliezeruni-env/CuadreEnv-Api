@@ -45,6 +45,8 @@ namespace Onion.Controllers.Middleware
                     status = StatusCodes.Status404NotFound;
                 else if (cex.Error.Code == "FORBIDDEN")
                     status = StatusCodes.Status403Forbidden;
+                else if (cex.Error.Code is "CASH_REGISTER_CHANGED" or "CONCURRENCY_CONFLICT")
+                    status = StatusCodes.Status409Conflict;
                 else
                     status = StatusCodes.Status400BadRequest;
 

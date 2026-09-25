@@ -25,13 +25,16 @@ namespace Onion.DataAccess.Repositories.Concrete
         IRepository<Onion.Domain.Return> Returns { get; }
         IRepository<Onion.Domain.CashRegister> CashRegisters { get; }
         IRepository<Onion.Domain.CashMovement> CashMovements { get; }
+        IRepository<Onion.Domain.CashRegisterPause> CashRegisterPauses { get; }
         IRepository<Onion.Domain.CompanySettings> CompanySettingsRepo { get; }
         IRepository<Onion.Domain.Products.ProductType> ProductTypes { get; }
         IRepository<Onion.Domain.Inventory.InventoryMovement> InventoryMovements { get; }
         IRepository<Onion.Domain.Purchases.PurchaseOrderReceipt> PurchaseOrderReceipts { get; }
         IRepository<Onion.Domain.ManageRequests.ManageRequest> ManageRequests { get; }
         IRepository<Onion.Domain.Invoices.InvoiceSequence> InvoiceSequences { get; }
+        IRepository<Onion.Domain.Invoices.FiscalDocument> FiscalDocuments { get; }
         IRepository<Onion.Domain.Finance.AccountReceivable> AccountReceivables { get; }
+        IRepository<Onion.Domain.Finance.AccountPayable> AccountPayables { get; }
         IRepository<Onion.Domain.Finance.PaymentPlan> PaymentPlans { get; }
         IRepository<Onion.Domain.Finance.Installment> Installments { get; }
         IRepository<Onion.Domain.Billing.SubscriptionPlan> SubscriptionPlans { get; }
@@ -63,13 +66,16 @@ namespace Onion.DataAccess.Repositories.Concrete
         public IRepository<Onion.Domain.Return> Returns { get; }
         public IRepository<Onion.Domain.CashRegister> CashRegisters { get; }
         public IRepository<Onion.Domain.CashMovement> CashMovements { get; }
+        public IRepository<Onion.Domain.CashRegisterPause> CashRegisterPauses { get; }
         public IRepository<Onion.Domain.CompanySettings> CompanySettingsRepo { get; }
         public IRepository<Onion.Domain.Products.ProductType> ProductTypes { get; }
         public IRepository<Onion.Domain.Inventory.InventoryMovement> InventoryMovements { get; }
         public IRepository<Onion.Domain.Purchases.PurchaseOrderReceipt> PurchaseOrderReceipts { get; }
         public IRepository<Onion.Domain.ManageRequests.ManageRequest> ManageRequests { get; }
         public IRepository<Onion.Domain.Invoices.InvoiceSequence> InvoiceSequences { get; }
+        public IRepository<Onion.Domain.Invoices.FiscalDocument> FiscalDocuments { get; }
         public IRepository<Onion.Domain.Finance.AccountReceivable> AccountReceivables { get; }
+        public IRepository<Onion.Domain.Finance.AccountPayable> AccountPayables { get; }
         public IRepository<Onion.Domain.Billing.SubscriptionPlan> SubscriptionPlans { get; }
         public IRepository<Onion.Domain.Billing.CompanySubscription> CompanySubscriptions { get; }
         public IWarehouseRepository Warehouses { get; }
@@ -96,13 +102,16 @@ namespace Onion.DataAccess.Repositories.Concrete
             Returns = new GenericRepository<Onion.Domain.Return>(context);
             CashRegisters = new GenericRepository<Onion.Domain.CashRegister>(context);
             CashMovements = new GenericRepository<Onion.Domain.CashMovement>(context);
+            CashRegisterPauses = new GenericRepository<Onion.Domain.CashRegisterPause>(context);
             CompanySettingsRepo = new GenericRepository<Onion.Domain.CompanySettings>(context);
             ProductTypes = new GenericRepository<Onion.Domain.Products.ProductType>(context);
             InventoryMovements = new GenericRepository<Onion.Domain.Inventory.InventoryMovement>(context);
             PurchaseOrderReceipts = new GenericRepository<Onion.Domain.Purchases.PurchaseOrderReceipt>(context);
             ManageRequests = new GenericRepository<Onion.Domain.ManageRequests.ManageRequest>(context);
             InvoiceSequences = new GenericRepository<Onion.Domain.Invoices.InvoiceSequence>(context);
+            FiscalDocuments = new GenericRepository<Onion.Domain.Invoices.FiscalDocument>(context);
             AccountReceivables = new GenericRepository<Onion.Domain.Finance.AccountReceivable>(context);
+            AccountPayables = new GenericRepository<Onion.Domain.Finance.AccountPayable>(context);
             SubscriptionPlans = new GenericRepository<Onion.Domain.Billing.SubscriptionPlan>(context);
             CompanySubscriptions = new GenericRepository<Onion.Domain.Billing.CompanySubscription>(context);
             PaymentPlans = new GenericRepository<Onion.Domain.Finance.PaymentPlan>(context);
@@ -116,6 +125,7 @@ namespace Onion.DataAccess.Repositories.Concrete
         {
             return await _context.Database.BeginTransactionAsync();
         }
+
 
         public async Task<int> SaveChangesAsync()
         {

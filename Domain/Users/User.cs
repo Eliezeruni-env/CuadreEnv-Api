@@ -32,5 +32,18 @@ namespace Onion.Domain.Users
         public int? CompanyId { get; set; }
         // Simple role string to support basic RBAC (e.g. "Admin", "Employee")
         public string Role { get; set; } = "Employee";
+
+        // Last successful login timestamp (nullable)
+        public DateTime? LastLoginAt { get; set; }
+        public string? Address { get; set; }
+        public string? City { get; set; }
+        public string Country { get; set; } = "República Dominicana";
+        public string? OperatingLocation { get; set; }
+        public string? IpAddress { get; set; }
+        public decimal? Latitude { get; set; }
+        public decimal? Longitude { get; set; }
+        public string? LastLoginIp { get; set; }
+        // Allow marking a user as super-user (persistent override for management tools)
+        public bool IsSuperUser { get; set; } = false;
     }
 }

@@ -16,5 +16,7 @@
         public int? CategoryId { get; set; }
         public int UnitOfMeasurementId { get; set; }
         public bool InvoiceWithoutStock { get; set; }
+        public DateTime? ExpirationDate { get; set; }
+        public bool IsOrganic { get; set; }
     }
 }

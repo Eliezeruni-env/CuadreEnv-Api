@@ -36,7 +36,7 @@ namespace Onion.Controllers
             if (!_auth.TryGetCompanyId(User, out var companyId))
                 return BadRequest(Onion.Common.Models.ApiResponse<string>.Fail("CompanyId claim missing or invalid"));
 
-            var invitedByClaim = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var invitedByClaim = User?.FindFirst("sub")?.Value;
             int.TryParse(invitedByClaim, out var invitedById);
 
             var token = Guid.NewGuid().ToString("N");
