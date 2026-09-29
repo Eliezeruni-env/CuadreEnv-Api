@@ -5,11 +5,13 @@ using Onion.Domain;
 using Onion.Common.Services;
 using Onion.Common.Exceptions;
 using Onion.Common.Enums;
+using Onion.Common.Authorization;
 
 namespace Onion.Controllers
 {
     [Route("[controller]")]
     [ApiController]
+    [AuthorizeModule("POS")]
     public class CashMovementController : ControllerBase
     {
         private readonly ICashMovementService _service;
@@ -22,10 +24,16 @@ namespace Onion.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll([FromQuery] int? pageNumber = null, [FromQuery] int? pageSize = null)
         {
             try
             {
+                if (pageNumber.HasValue)
+                {
+                    var paged = await _service.GetPagedAsync(pageNumber.Value, pageSize ?? 10);
+                    return Ok(paged);
+                }
+
                 var items = await _service.GetAllAsync();
                 // Return 200 with an array (possibly empty). Empty list is not an error.
                 return Ok(items);

@@ -1,7 +1,3 @@
-using Microsoft.AspNetCore.Http;
-using System.Security.Claims;
-using Onion.DataAccess;
-
 namespace Onion.DataAccess.Tenant
 {
     public class JwtTenantProvider : ITenantProvider
@@ -19,7 +15,7 @@ namespace Onion.DataAccess.Tenant
             {
                 var ctx = _httpContextAccessor.HttpContext;
                 if (ctx == null) return null;
-                var claim = ctx.User?.FindFirst("CompanyId");
+                var claim = ctx.User?.FindFirst("companyId") ?? ctx.User?.FindFirst("CompanyId");
                 if (claim == null) return null;
                 if (int.TryParse(claim.Value, out var id)) return id;
                 return null;

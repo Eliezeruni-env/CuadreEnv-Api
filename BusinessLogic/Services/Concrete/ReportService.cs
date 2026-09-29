@@ -47,7 +47,7 @@ namespace Onion.BussinesLogic.Services.Concrete
         public async Task<object> GetInventoryStatusAsync()
         {
             var products = await _uow.Products.ListAsync();
-            var totalValue = products.Sum(p => p.Stock * (decimal)p.Cost);
+            var totalValue = products.Sum(p => p.Stock * p.Cost);
             var low = products.Where(p => p.Stock < p.MinimumQuantity).Select(p => new { p.Id, p.Description, p.Stock, p.MinimumQuantity });
             return new { TotalValue = totalValue, Count = products.Count(), LowStock = low.ToList() };
         }

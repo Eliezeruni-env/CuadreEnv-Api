@@ -17,9 +17,15 @@ namespace CrudOnion.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> List()
+        public async Task<IActionResult> List([FromQuery] int? pageNumber = null, [FromQuery] int? pageSize = null)
         {
-            var list = await _svc.ListAsync();
+            if (pageNumber.HasValue)
+            {
+                var paged = await _svc.ListPagedAsync(pageNumber.Value, pageSize ?? 10);
+                return Ok(paged);
+            }
+
+            var list = (await _svc.ListAsync()).ToList();
             return Ok(list);
         }
 

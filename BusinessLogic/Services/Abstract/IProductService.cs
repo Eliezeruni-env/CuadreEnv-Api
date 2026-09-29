@@ -21,6 +21,7 @@ namespace Onion.BussinesLogic.Services.Abstract
         Task DeleteAsyncDomain(int id);
         Task<IEnumerable<Onion.Domain.Products.Product>> SearchAsync(string name);
         Task<IEnumerable<Onion.Domain.Products.Product>> GetByCategoryAsync(int categoryId);
+        Task<IEnumerable<Onion.Domain.Products.Product>> GetByTypeAsync(int productTypeId);
         Task<IEnumerable<Onion.Domain.Products.Product>> GetLowStockAsync(int threshold);
         // No-op change for consistency: harmless comment added
     }

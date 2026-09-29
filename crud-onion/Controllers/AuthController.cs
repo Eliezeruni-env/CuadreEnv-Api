@@ -18,6 +18,7 @@ namespace Onion.Controllers
         }
 
         [HttpPost("register")]
+        [AllowAnonymous]
         public async Task<IActionResult> Register([FromBody] RegisterRequestDto req)
         {
             var user = await _auth.RegisterAsync(req);
@@ -28,6 +29,7 @@ namespace Onion.Controllers
         }
 
         [HttpPost("login")]
+        [AllowAnonymous]
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("LoginPolicy")]
         public async Task<IActionResult> Login([FromBody] LoginRequestDto req)
         {
@@ -38,6 +40,7 @@ namespace Onion.Controllers
         }
 
         [HttpPost("refresh")]
+        [AllowAnonymous]
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("LoginPolicy")]
         public async Task<IActionResult> Refresh([FromBody] RefreshRequestDto req)
         {
@@ -48,11 +51,23 @@ namespace Onion.Controllers
         }
 
         [HttpPost("revoke")]
+        [AllowAnonymous]
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("LoginPolicy")]
         public async Task<IActionResult> Revoke([FromBody] RevokeRequestDto req)
         {
             await _auth.RevokeTokenAsync(req);
             return NoContent();
+        }
+
+        [Authorize]
+        [HttpGet("me")]
+        public IActionResult Me()
+        {
+            return Ok(new
+            {
+                userId = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value,
+                companyId = User.FindFirst("companyId")?.Value ?? User.FindFirst("CompanyId")?.Value
+            });
         }
 
         [Authorize]
@@ -70,6 +85,7 @@ namespace Onion.Controllers
         // Development-only helper: return a test JWT containing the provided companyId.
         // Enabled only when the app runs in Development environment. Accepts JSON body { companyId, userId?, email? }.
         [HttpPost("dev/token")]
+        [AllowAnonymous]
         [ApiExplorerSettings(IgnoreApi = true)]
         public IActionResult DevToken([FromServices] Microsoft.Extensions.Configuration.IConfiguration config,
                                       [FromServices] Microsoft.AspNetCore.Hosting.IWebHostEnvironment env,
@@ -78,7 +94,7 @@ namespace Onion.Controllers
             if (!env.IsDevelopment())
                 return NotFound();
 
-            if (req == null || req.CompanyId <= 0)
+            if (req == null || (req.CompanyId <= 0 && !req.IsSuperUser))
                 return BadRequest(new { error = "companyId required and must be > 0" });
 
             var key = config["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key not configured");
@@ -88,12 +104,17 @@ namespace Onion.Controllers
             var claims = new List<System.Security.Claims.Claim>
             {
                 new(System.Security.Claims.ClaimTypes.NameIdentifier, (req.UserId ?? 9999).ToString()),
-                new(System.Security.Claims.ClaimTypes.Email, req.Email ?? "dev@local")
+                new(System.Security.Claims.ClaimTypes.Email, req.Email ?? "dev@local"),
+                new(System.Security.Claims.ClaimTypes.Role, "Admin"),
+                new("role", "Admin")
             };
             if (req.CompanyId > 0)
             {
+                claims.Add(new System.Security.Claims.Claim("companyId", req.CompanyId.ToString()));
                 claims.Add(new System.Security.Claims.Claim("CompanyId", req.CompanyId.ToString()));
             }
+            if (req.IsSuperUser)
+                claims.Add(new System.Security.Claims.Claim("isSuperUser", "true"));
 
             var keyBytes = System.Text.Encoding.UTF8.GetBytes(key);
             var creds = new Microsoft.IdentityModel.Tokens.SigningCredentials(new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(keyBytes), Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha256);
@@ -116,4 +137,4 @@ namespace Onion.Controllers
     public record RevokeRequest(string RefreshToken);
 }
 
-public record DevTokenRequest(int CompanyId, int? UserId = null, string? Email = null);
+public record DevTokenRequest(int CompanyId, int? UserId = null, string? Email = null, bool IsSuperUser = false);

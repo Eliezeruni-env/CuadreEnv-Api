@@ -12,6 +12,7 @@ namespace Onion.BussinesLogic.Configurations.DependencyInjection
             services.AddScoped<ICompanyService, CompanyService>();
             services.AddScoped<ICustomerService, CustomerService>();
             services.AddScoped<ISupplierService, SupplierService>();
+            services.AddScoped<IMetricsService, MetricsService>();
             services.AddScoped<IAuthService, AuthService>();
             // Background cleanup not registered here to avoid extra hosting dependencies.
             // other services already registered elsewhere

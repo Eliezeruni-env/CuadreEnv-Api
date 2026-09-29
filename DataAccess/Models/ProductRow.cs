@@ -8,5 +8,8 @@ namespace Onion.DataAccess.Models
         public string? Description { get; set; }
         public string? Barcode { get; set; }
         public decimal Cost { get; set; }
+        public decimal Stock { get; set; }
+        public string? Reference { get; set; }
+        public string? ShortDescription { get; set; }
     }
 }

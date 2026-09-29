@@ -5,5 +5,7 @@ namespace Onion.BussinesLogic.Dtos
         public decimal Amount { get; set; }
         public int SaleId { get; set; }
         public string? Reference { get; set; }
+        public string? Method { get; set; }
+        public int? CashRegisterId { get; set; }
     }
 }

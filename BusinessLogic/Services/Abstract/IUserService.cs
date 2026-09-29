@@ -12,5 +12,6 @@ namespace Onion.BussinesLogic.Services.Abstract
         Task SetActiveAsync(int userId, bool active);
         Task UpdateAsync(User user);
         Task DeleteAsync(int id);
+        Task<IEnumerable<User>> GetCashiersAsync();
     }
 }

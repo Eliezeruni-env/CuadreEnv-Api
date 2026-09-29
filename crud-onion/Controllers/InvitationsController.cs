@@ -18,12 +18,14 @@ namespace Onion.Controllers
         private readonly IUnitOfWork _uow;
         private readonly IGlobalizationService _globalization;
         private readonly Onion.Common.Services.IEmailService? _emailService;
+        private readonly Onion.Common.Authorization.IAuthorizationService _auth;
 
-        public InvitationsController(IUnitOfWork uow, IGlobalizationService globalization, Onion.Common.Services.IEmailService? emailService = null)
+        public InvitationsController(IUnitOfWork uow, IGlobalizationService globalization, Onion.Common.Services.IEmailService? emailService = null, Onion.Common.Authorization.IAuthorizationService? auth = null)
         {
             _uow = uow;
             _globalization = globalization;
             _emailService = emailService;
+            _auth = auth ?? new Onion.Common.Authorization.AuthorizationService();
         }
 
         // Admins invite users to their company
@@ -31,11 +33,10 @@ namespace Onion.Controllers
         [RequireRole("Admin")]
         public async Task<IActionResult> Create([FromBody] InvitationRequest req)
         {
-            var companyClaim = User?.FindFirst("CompanyId")?.Value;
-            if (!int.TryParse(companyClaim, out var companyId))
+            if (!_auth.TryGetCompanyId(User, out var companyId))
                 return BadRequest(Onion.Common.Models.ApiResponse<string>.Fail("CompanyId claim missing or invalid"));
 
-            var invitedByClaim = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var invitedByClaim = User?.FindFirst("sub")?.Value;
             int.TryParse(invitedByClaim, out var invitedById);
 
             var token = Guid.NewGuid().ToString("N");

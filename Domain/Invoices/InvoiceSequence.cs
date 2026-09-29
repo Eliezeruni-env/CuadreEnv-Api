@@ -6,5 +6,6 @@ namespace Onion.Domain.Invoices
     {
         public int CompanyId { get; set; }
         public long LastFolio { get; set; }
+        public byte[] RowVersion { get; set; } = Array.Empty<byte>();
     }
 }
