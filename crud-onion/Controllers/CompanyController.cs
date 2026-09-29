@@ -50,31 +50,23 @@ namespace Onion.Controllers
 
         // Create company and assign the creating user as owner
         [HttpPost]
+        [Authorize]
         public async Task<IActionResult> Post([FromBody] Onion.BussinesLogic.Dtos.CreateCompanyRequest request)
         {
+            var userIdClaim = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(userIdClaim, out var userId))
+                return Unauthorized(Onion.Common.Models.ApiResponse<string>.Fail("Authenticated user is required."));
+
             var created = await _service.CreateAsync(request);
 
-            // If user is authenticated, associate user to the created company
-            var userIdClaim = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (int.TryParse(userIdClaim, out var userId))
-            {
-                await _userService.AssignCompanyAsync(userId, created.Id);
-                // Issue new access/refresh tokens that include CompanyId claim for the assigned user
-                try
-                {
-                    var tokens = await _authService.IssueTokensForUserAsync(userId);
-                    return CreatedAtAction(nameof(Get), new { id = created.Id }, Onion.Common.Models.ApiResponse<object>.Ok(new { company = created, tokens }, "Company created; tokens issued"));
-                }
-                catch
-                {
-                    // If token issuance fails, still return created company without tokens
-                }
-            }
-
-            return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
+            await _userService.AssignCompanyAsync(userId, created.Id);
+            var tokens = await _authService.IssueTokensForUserAsync(userId);
+            return CreatedAtAction(nameof(Get), new { id = created.Id },
+                Onion.Common.Models.ApiResponse<object>.Ok(new { company = created, tokens }, "Company created; tokens issued"));
         }
 
         [HttpPut]
+        [Authorize]
         public async Task<IActionResult> Put([FromBody] Company company)
         {
             await _service.UpdateAsync(company);
@@ -82,6 +74,7 @@ namespace Onion.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Authorize]
         public async Task<IActionResult> Delete(int id)
         {
             await _service.DeleteAsync(id);

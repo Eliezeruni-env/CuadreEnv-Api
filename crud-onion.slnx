@@ -1,7 +1,2 @@
 <Solution>
-  <Project Path="BusinessLogic/Onion.BusinessLogic.csproj" Id="29390608-83d3-4f35-a2d9-d20bebc8c22c" />
-  <Project Path="crud-onion/crud-onion.csproj" />
-  <Project Path="DataAccess/Onion.DataAccess.csproj" Id="610c9ad1-9cbe-4323-aea1-b3173f0e883f" />
-  <Project Path="Domain/Onion.Domain.csproj" Id="c5da87a4-5213-4aba-8b72-539807f695c2" />
-  <Project Path="Onion.Common/Onion.Common.csproj" Id="b1466343-71de-4ae8-bbb7-e541d4631bc8" />
 </Solution>

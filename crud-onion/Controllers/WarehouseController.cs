@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Onion.BussinesLogic.Services.Abstract;
 using Onion.BussinesLogic.Dtos;
@@ -16,19 +18,20 @@ namespace Onion.Controllers
     {
         private readonly IWarehouseService _warehouseService;
         private readonly IGlobalizationService _globalizationService;
+        private readonly Onion.Common.Authorization.IAuthorizationService _auth;
 
-        public WarehouseController(IWarehouseService warehouseService, IGlobalizationService globalizationService)
+        public WarehouseController(IWarehouseService warehouseService, IGlobalizationService globalizationService, Onion.Common.Authorization.IAuthorizationService auth)
         {
             _warehouseService = warehouseService;
             _globalizationService = globalizationService;
+            _auth = auth;
         }
 
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateWarehouseDto dto)
         {
             // Extract company id from authenticated user claims
-            var companyIdClaim = User?.FindFirst("CompanyId")?.Value;
-            if (!int.TryParse(companyIdClaim, out var companyId))
+            if (!_auth.TryGetCompanyId(User, out var companyId))
             {
                 return BadRequest(Onion.Common.Models.ApiResponse<string>.Fail("CompanyId claim missing or invalid"));
             }
@@ -38,12 +41,17 @@ namespace Onion.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll([FromQuery] int? pageNumber = null, [FromQuery] int? pageSize = null)
         {
             var list = await _warehouseService.GetAllAsync();
             try
             {
-                // Return 200 with an array (possibly empty). An empty list is not an error for a list endpoint.
+                if (pageNumber.HasValue)
+                {
+                    var paged = await _warehouseService.GetPagedAsync(pageNumber.Value, pageSize ?? 10);
+                    return Ok(Onion.Common.Models.ApiResponse<object>.Ok(paged));
+                }
+
                 return Ok(Onion.Common.Models.ApiResponse<object>.Ok(list));
             }
             catch (System.Exception)

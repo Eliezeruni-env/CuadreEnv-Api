@@ -15,11 +15,13 @@ namespace Onion.BussinesLogic.Services.Concrete
     {
         private readonly IUnitOfWork _uow;
         private readonly Onion.BussinesLogic.Services.Abstract.ISubscriptionService _subscriptionService;
+        private readonly Onion.BussinesLogic.Services.Abstract.IPaginationService _paginationService;
 
-        public WarehouseService(IUnitOfWork uow, Onion.BussinesLogic.Services.Abstract.ISubscriptionService subscriptionService)
+        public WarehouseService(IUnitOfWork uow, Onion.BussinesLogic.Services.Abstract.ISubscriptionService subscriptionService, Onion.BussinesLogic.Services.Abstract.IPaginationService paginationService)
         {
             _uow = uow ?? throw new ArgumentNullException(nameof(uow));
             _subscriptionService = subscriptionService;
+            _paginationService = paginationService;
         }
 
         public async Task<IEnumerable<Onion.Domain.Inventory.InventoryMovement>> GetInventoryMovementsAsync(int? productId = null, int? warehouseId = null, DateTime? from = null, DateTime? to = null, string? type = null)
@@ -58,8 +60,23 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (from.HasValue) q = q.Where(m => m.CreationDate >= from.Value);
             if (to.HasValue) q = q.Where(m => m.CreationDate <= to.Value);
             if (!string.IsNullOrWhiteSpace(type)) q = q.Where(m => m.Type.ToString().Equals(type, StringComparison.OrdinalIgnoreCase));
-
             return q.Select(m => new MovementDto(m.Id, m.ProductId, m.FromWarehouseId, m.ToWarehouseId, m.Quantity, m.Type.ToString()));
+        }
+
+        public async Task<Onion.Common.Models.Pagination.PagedList<MovementDto>> GetMovementHistoryPagedAsync(int? productId = null, int? warehouseId = null, DateTime? from = null, DateTime? to = null, string? type = null, int pageNumber = 1, int pageSize = 10)
+        {
+            var list = await _uow.Movements.ListAsync();
+            var q = list.AsQueryable();
+            if (productId.HasValue) q = q.Where(m => m.ProductId == productId.Value);
+            if (warehouseId.HasValue) q = q.Where(m => (m.FromWarehouseId == warehouseId.Value) || (m.ToWarehouseId == warehouseId.Value));
+            if (from.HasValue) q = q.Where(m => m.CreationDate >= from.Value);
+            if (to.HasValue) q = q.Where(m => m.CreationDate <= to.Value);
+            if (!string.IsNullOrWhiteSpace(type)) q = q.Where(m => m.Type.ToString().Equals(type, StringComparison.OrdinalIgnoreCase));
+
+            var dtoQuery = q.Select(m => new MovementDto(m.Id, m.ProductId, m.FromWarehouseId, m.ToWarehouseId, m.Quantity, m.Type.ToString()));
+            var pn = Math.Max(1, pageNumber);
+            var ps = Math.Clamp(pageSize, 1, 100);
+            return await _paginationService.ToPagedListAsync(dtoQuery, pn, ps);
         }
 
         public async Task<WarehouseDto> CreateWarehouseAsync(CreateWarehouseDto dto, int companyId)
@@ -78,6 +95,29 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var list = await _uow.Warehouses.ListAsync();
             return list.Select(w => new WarehouseDto(w.Id, w.Name, w.CompanyId));
+        }
+
+        public async Task<Onion.Common.Models.Pagination.PagedList<WarehouseDto>> GetPagedAsync(int pageNumber, int pageSize)
+        {
+            var pn = Math.Max(1, pageNumber);
+            var ps = Math.Clamp(pageSize, 1, 100);
+            var list = (await _uow.Warehouses.ListAsync()).Select(w => new WarehouseDto(w.Id, w.Name, w.CompanyId)).AsQueryable();
+            return await _paginationService.ToPagedListAsync(list, pn, ps);
+        }
+
+        public async Task<Onion.Common.Models.Pagination.PagedList<Onion.Domain.Inventory.InventoryMovement>> GetInventoryMovementsPagedAsync(int? productId = null, int? warehouseId = null, DateTime? from = null, DateTime? to = null, string? type = null, int pageNumber = 1, int pageSize = 10)
+        {
+            var list = await _uow.InventoryMovements.ListAsync();
+            var q = list.AsQueryable();
+            if (productId.HasValue) q = q.Where(m => m.ProductId == productId.Value);
+            if (warehouseId.HasValue) q = q.Where(m => m.WarehouseId == warehouseId.Value);
+            if (from.HasValue) q = q.Where(m => m.OccurredAt >= from.Value);
+            if (to.HasValue) q = q.Where(m => m.OccurredAt <= to.Value);
+            if (!string.IsNullOrWhiteSpace(type)) q = q.Where(m => m.Type.ToString().Equals(type, StringComparison.OrdinalIgnoreCase));
+
+            var pn = Math.Max(1, pageNumber);
+            var ps = Math.Clamp(pageSize, 1, 100);
+            return await _paginationService.ToPagedListAsync(q, pn, ps);
         }
 
         public async Task AddStockAsync(MovementRequestDto req, string performedBy)

@@ -35,6 +35,28 @@ namespace Onion.DataAccess.Seed
                 companyId = existingCompany.Id;
             }
 
+            // Subscription plans (idempotent by name)
+            var planList = (await uow.SubscriptionPlans.ListAsync()).ToList();
+            if (!planList.Any())
+            {
+                var plans = new[]
+                {
+                    new Onion.Domain.Billing.SubscriptionPlan { Name = "basic-monthly", MaxUsers = 5, MaxWarehouses = 1, MaxProducts = 100, MaxSalesPerMonth = 1000, Price = 9.99m, Features = "basic" , CreateBy = "seed"},
+                    new Onion.Domain.Billing.SubscriptionPlan { Name = "pro-monthly", MaxUsers = 50, MaxWarehouses = 5, MaxProducts = 5000, MaxSalesPerMonth = 100000, Price = 49.99m, Features = "pro,export", CreateBy = "seed"},
+                    new Onion.Domain.Billing.SubscriptionPlan { Name = "enterprise-annual", MaxUsers = 1000, MaxWarehouses = 50, MaxProducts = 100000, MaxSalesPerMonth = 1000000, Price = 499.99m, Features = "enterprise,priority-support", CreateBy = "seed"}
+                };
+
+                foreach (var p in plans)
+                {
+                    var exists = (await uow.SubscriptionPlans.FindAsync(x => x.Name == p.Name)).FirstOrDefault();
+                    if (exists == null)
+                    {
+                        await uow.SubscriptionPlans.AddAsync(p);
+                    }
+                }
+                await uow.SaveChangesAsync();
+            }
+
             // Admin user
             var adminEmail = "demo.admin@demo.local";
             var existingAdmin = (await uow.Users.FindAsync(u => u.Email == adminEmail)).FirstOrDefault();
@@ -56,11 +78,11 @@ namespace Onion.DataAccess.Seed
 
             // Products (idempotent by barcode)
             var products = new[] {
-                new Product { Description = "Tornillo 1/4", Barcode = "P-0001", Cost = 0.50, Stock = 100, MinimumQuantity = 10, CompanyId = companyId },
-                new Product { Description = "Martillo Acero 16oz", Barcode = "P-0002", Cost = 12.00, Stock = 5, MinimumQuantity = 10, CompanyId = companyId },
-                new Product { Description = "Taladro 500W", Barcode = "P-0003", Cost = 45.00, Stock = 2, MinimumQuantity = 3, CompanyId = companyId },
-                new Product { Description = "Llave inglesa 10mm", Barcode = "P-0004", Cost = 8.00, Stock = 20, MinimumQuantity = 5, CompanyId = companyId },
-                new Product { Description = "Cinta métrica 5m", Barcode = "P-0005", Cost = 4.50, Stock = 0, MinimumQuantity = 2, CompanyId = companyId }
+                new Product { Description = "Tornillo 1/4", Barcode = "P-0001", Cost = 0.50m, Stock = 100, MinimumQuantity = 10, CompanyId = companyId },
+                new Product { Description = "Martillo Acero 16oz", Barcode = "P-0002", Cost = 12.00m, Stock = 5, MinimumQuantity = 10, CompanyId = companyId },
+                new Product { Description = "Taladro 500W", Barcode = "P-0003", Cost = 45.00m, Stock = 2, MinimumQuantity = 3, CompanyId = companyId },
+                new Product { Description = "Llave inglesa 10mm", Barcode = "P-0004", Cost = 8.00m, Stock = 20, MinimumQuantity = 5, CompanyId = companyId },
+                new Product { Description = "Cinta métrica 5m", Barcode = "P-0005", Cost = 4.50m, Stock = 0, MinimumQuantity = 2, CompanyId = companyId }
             };
 
             foreach (var p in products)

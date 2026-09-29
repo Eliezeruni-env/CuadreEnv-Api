@@ -23,10 +23,16 @@ public static class ServicesConfiguration
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<ISubscriptionService, SubscriptionService>();
         services.AddScoped<Onion.Common.Features.IFeatureService, FeatureService>();
+        services.AddScoped<Onion.BussinesLogic.Services.Abstract.ICompanySettingsService, Onion.BussinesLogic.Services.Concrete.CompanySettingsService >();
+        services.AddScoped<Onion.BussinesLogic.Services.Abstract.ICreditNoteService, Onion.BussinesLogic.Services.Concrete.CreditNoteService>();
         services.AddScoped<Onion.BussinesLogic.Services.Abstract.IAccountReceivableService, Onion.BussinesLogic.Services.Concrete.AccountReceivableService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<ICategoryService, CategoryService>();
+        services.AddScoped<IProductTypeService, ProductTypeService>();
         services.AddScoped<IAuthService, AuthService>();
+
+        // User management service
+        services.AddScoped<Onion.BussinesLogic.Services.Abstract.IUserManagementService, Onion.BussinesLogic.Services.Concrete.UserManagementService>();
 
         // Warehouse services
         services.AddScoped<IWarehouseService, WarehouseService>();
@@ -40,13 +46,15 @@ public static class ServicesConfiguration
 
         // Domain services
         services.AddScoped<IUserService, UserService>();
-        // Email service (optional SMTP)
-        services.AddSingleton<Onion.Common.Services.IEmailService, Onion.Common.Services.SmtpEmailService>();
         services.AddScoped<ICompanyService, CompanyService>();
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<ISupplierService, SupplierService>();
+        // Pagination service for server-side helpers
+        services.AddScoped<Onion.BussinesLogic.Services.Abstract.IPaginationService, Onion.BussinesLogic.Services.Infrastructure.PaginationService>();
         services.AddScoped<ISaleService, SaleService>();
         services.AddScoped<Onion.BussinesLogic.Services.Abstract.ICreditService, Onion.BussinesLogic.Services.Concrete.CreditService>();
+        services.AddScoped(typeof(Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.CreditNote>), typeof(Onion.DataAccess.Repositories.Concrete.GenericRepository<Onion.Domain.CreditNote>));
+        services.AddScoped(typeof(Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.CreditNoteDetail>), typeof(Onion.DataAccess.Repositories.Concrete.GenericRepository<Onion.Domain.CreditNoteDetail>));
         services.AddScoped(typeof(Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Credits.Credit>), typeof(Onion.DataAccess.Repositories.Concrete.GenericRepository<Onion.Domain.Credits.Credit>));
         services.AddScoped(typeof(Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Credits.CreditPayment>), typeof(Onion.DataAccess.Repositories.Concrete.GenericRepository<Onion.Domain.Credits.CreditPayment>));
         services.AddScoped(typeof(Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Credits.CreditStatusHistory>), typeof(Onion.DataAccess.Repositories.Concrete.GenericRepository<Onion.Domain.Credits.CreditStatusHistory>));

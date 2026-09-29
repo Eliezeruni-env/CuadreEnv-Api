@@ -17,13 +17,15 @@ namespace Onion.BussinesLogic.Services.Concrete
         private readonly IRepository<CreditPayment> _payments;
         private readonly IRepository<CreditStatusHistory> _history;
         private readonly OnionDbContext _db;
+        private readonly Onion.BussinesLogic.Services.Abstract.IPaginationService _paginationService;
 
-        public CreditService(IRepository<Credit> credits, IRepository<CreditPayment> payments, IRepository<CreditStatusHistory> history, OnionDbContext db)
+        public CreditService(IRepository<Credit> credits, IRepository<CreditPayment> payments, IRepository<CreditStatusHistory> history, OnionDbContext db, Onion.BussinesLogic.Services.Abstract.IPaginationService paginationService)
         {
             _credits = credits;
             _payments = payments;
             _history = history;
             _db = db;
+            _paginationService = paginationService;
         }
 
         public async Task<CreditDto> CreateAsync(CreateCreditDto dto)
@@ -64,6 +66,14 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var list = await _credits.ListAsync();
             return list.Select(MapToDto);
+        }
+
+        public async Task<Onion.Common.Models.Pagination.PagedList<CreditDto>> ListPagedAsync(int pageNumber, int pageSize)
+        {
+            var pn = Math.Max(1, pageNumber);
+            var ps = Math.Max(1, Math.Min(pageSize, 100));
+            var list = (await _credits.ListAsync()).Select(MapToDto).AsQueryable();
+            return await _paginationService.ToPagedListAsync(list, pn, ps);
         }
 
         public async Task<CreditDto> UpdateAsync(UpdateCreditDto dto)

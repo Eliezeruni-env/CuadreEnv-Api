@@ -11,6 +11,9 @@ namespace Onion.BusinessLogic.Services.Abstract
     {
         //Category GetEntity();
         Task AddAsync(CategoryDto entityDto);
+        Task<IEnumerable<CategoryDto>> GetAllAsync();
+        Task<CategoryDto?> GetByIdAsync(int id);
+        Task DeleteAsync(int id);
 
     }
 }

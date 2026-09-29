@@ -7,6 +7,7 @@ namespace Onion.BussinesLogic.Services.Abstract
     public interface ICreditService
     {
         Task<IEnumerable<CreditDto>> ListAsync();
+        Task<Onion.Common.Models.Pagination.PagedList<CreditDto>> ListPagedAsync(int pageNumber, int pageSize);
         Task<CreditDto?> GetByIdAsync(int id);
         Task<CreditDto> CreateAsync(CreateCreditDto dto);
         Task<CreditDto> UpdateAsync(UpdateCreditDto dto);

@@ -12,9 +12,11 @@
         public string? Reference { get; set; }
         public int MaximumQuantity { get; set; }
         public int MinimumQuantity { get; set; }
-        public int ProductTypeId { get; set; }
-        public int CategoryId { get; set; }
+        public int? ProductTypeId { get; set; }
+        public int? CategoryId { get; set; }
         public int UnitOfMeasurementId { get; set; }
         public bool InvoiceWithoutStock { get; set; }
+        public DateTime? ExpirationDate { get; set; }
+        public bool IsOrganic { get; set; }
     }
 }
