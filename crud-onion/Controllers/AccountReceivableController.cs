@@ -1,5 +1,8 @@
+
 using Microsoft.AspNetCore.Mvc;
 using Onion.BussinesLogic.Services.Abstract;
+using Onion.BussinesLogic.Dtos;
+using Onion.Domain;
 using Onion.Common.Exceptions;
 using Onion.Common.Models;
 using Onion.Common.Services;
@@ -15,12 +18,14 @@ namespace Onion.Controllers
         private readonly IAccountReceivableService _service;
         private readonly IGlobalizationService _globalization;
         private readonly IUnitOfWork _uow;
+        private readonly ISaleService _saleService;
 
-        public AccountReceivableController(IAccountReceivableService service, IGlobalizationService globalization, IUnitOfWork uow)
+        public AccountReceivableController(IAccountReceivableService service, IGlobalizationService globalization, IUnitOfWork uow, ISaleService saleService)
         {
             _service = service;
             _globalization = globalization;
             _uow = uow;
+            _saleService = saleService;
         }
 
         // GET /v1/AccountReceivable
@@ -133,11 +138,37 @@ namespace Onion.Controllers
         {
             if (req == null) return BadRequest(Onion.Common.Models.ApiResponse<object>.Fail("Body required"));
 
+            // If client provided sale details in the receivable creation, create the sale first
+            int? createdSaleId = req.SaleId;
+            if ((createdSaleId == null || createdSaleId == 0) && req.Details != null && req.Details.Any())
+            {
+                var sale = new Sale
+                {
+                    CompanyId = req.CompanyId,
+                    CustomerId = req.CustomerId,
+                    Total = req.TotalAmount,
+                    PaidAmount = req.PaidAmount,
+                    DueDate = req.DueDate,
+                    PaymentType = req.PaidAmount >= req.TotalAmount ? PaymentType.CASH : PaymentType.CREDIT,
+                    Details = req.Details.Select(d => new SaleDetail { ProductId = d.ProductId, Quantity = d.Quantity, UnitPrice = d.UnitPrice }).ToList()
+                };
+
+                var createdSale = await _saleService.CreateAsync(sale);
+                createdSaleId = createdSale.Id;
+
+                // If there is an initial payment, record it using sale payment flow (this will also create a cash movement if cashRegisterId provided)
+                if (req.PaidAmount > 0 && req.Payment != null)
+                {
+                    var pay = new Payment { CompanyId = req.CompanyId, Amount = req.PaidAmount, CreateBy = req.Payment.Reference };
+                    await _saleService.AddPaymentAsync(createdSale.Id, pay, req.Payment.Method, req.Payment.CashRegisterId);
+                }
+            }
+
             var ar = new Onion.Domain.Finance.AccountReceivable
             {
                 CompanyId = req.CompanyId,
                 CustomerId = req.CustomerId,
-                SaleId = req.SaleId,
+                SaleId = createdSaleId,
                 TotalAmount = req.TotalAmount,
                 PaidAmount = req.PaidAmount,
                 DueDate = req.DueDate ?? DateTime.UtcNow.AddDays(30),
@@ -242,7 +273,8 @@ namespace Onion.Controllers
 
     public record PaymentRequest(decimal Amount, string? Method = null, string? Reference = null, string? Notes = null, DateTime? Date = null, int? CashRegisterId = null);
 
-    public record CreateReceivableRequest(int CompanyId, int? CustomerId, int? SaleId, decimal TotalAmount, decimal PaidAmount = 0m, DateTime? DueDate = null, PaymentPlanRequest? Plan = null);
+    public record CreateReceivableRequest(int CompanyId, int? CustomerId, int? SaleId, decimal TotalAmount, decimal PaidAmount = 0m, DateTime? DueDate = null, PaymentPlanRequest? Plan = null,
+        System.Collections.Generic.IEnumerable<Onion.BussinesLogic.Dtos.SaleDetailDto>? Details = null, PaymentRequest? Payment = null);
 
     public record PaymentPlanRequest(decimal InstallmentAmount, int TotalInstallments, string Frequency, DateTime? StartsAt = null);
 }

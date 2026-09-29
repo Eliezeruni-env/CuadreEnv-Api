@@ -252,7 +252,7 @@ app.UseSwagger();
 // --- UPDATED SWAGGER UI CONFIGURATION ---
 app.UseSwaggerUI(c =>
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Onion API v1");
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Cuadre Env v1");
     c.RoutePrefix = "swagger";
     c.EnablePersistAuthorization(); // Keeps you logged in across page refreshes
     // No custom JS injection. Swagger UI will use the generated OpenAPI JSON.
@@ -287,9 +287,34 @@ app.MapControllers();
 // to avoid accidental schema changes in production. Tests or dev may enable via configuration.
 if (builder.Configuration.GetValue<bool>("ApplyMigrationsOnStartup"))
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<Onion.DataAccess.OnionDbContext>();
-    db.Database.Migrate();
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Onion.DataAccess.OnionDbContext>();
+        db.Database.Migrate();
+    }
+    catch (Exception ex)
+    {
+        // Log migration errors but do not stop the application startup so Swagger and routes can load.
+        var logger = app.Services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "Failed to apply EF migrations on startup. Startup will continue without applying migrations.");
+    }
+}
+
+// Enable Swagger UI so API routes can be explored even if migrations failed
+try
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "CuadreEnv API v1");
+        c.RoutePrefix = string.Empty; // serve swagger at app root
+    });
+}
+catch (Exception ex)
+{
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogWarning(ex, "Failed to enable Swagger middleware. Continuing without Swagger.");
 }
 
 // Optional demo data seeding when enabled explicitly via configuration

@@ -90,6 +90,8 @@ namespace Onion.Domain
         public int ProductId { get; set; }
         public decimal Quantity { get; set; }
         public decimal UnitPrice { get; set; }
+        // Optional warehouse where the product will be taken from
+        public int? WarehouseId { get; set; }
     }
 
     public class Payment : BaseEntity

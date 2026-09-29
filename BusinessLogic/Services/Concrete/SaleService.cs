@@ -90,7 +90,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 await _uow.Sales.AddAsync(sale);
                 await _uow.SaveChangesAsync();
                 // Reserve stock for each product first to avoid race conditions
-                var reserved = new List<(int productId, decimal qty)>();
+                var reserved = new List<(int productId, decimal qty, int warehouseId)>();
                 var hasServiceItem = false;
                 try
                 {
@@ -99,11 +99,25 @@ namespace Onion.BussinesLogic.Services.Concrete
                         var product = await _uow.Products.GetByIdAsync(d.ProductId);
                         if (product != null && !product.InvoiceWithoutStock)
                         {
-                            var okReserve = await _uow.Products.TryReserveStockAsync(d.ProductId, d.Quantity);
-                            if (!okReserve)
-                                throw new CustomException(new Onion.Common.Models.Error { Code = "INSUFFICIENT_STOCK", Message = $"Insufficient stock for product {product.Description}", Language = "ES" });
+                            if (d.WarehouseId.HasValue && d.WarehouseId.Value > 0)
+                            {
+                                var whId = d.WarehouseId.Value;
+                                var inv = await _uow.Inventories.GetByProductAndWarehouseAsync(d.ProductId, whId);
+                                if (inv == null || inv.Quantity < d.Quantity)
+                                    throw new CustomException(new Onion.Common.Models.Error { Code = "INSUFFICIENT_STOCK", Message = $"Insufficient stock for product {product.Description} in warehouse {whId}", Language = "ES" });
 
-                            reserved.Add((d.ProductId, d.Quantity));
+                                inv.Quantity -= d.Quantity;
+                                _uow.Inventories.Update(inv);
+                                reserved.Add((d.ProductId, d.Quantity, whId));
+                            }
+                            else
+                            {
+                                var okReserve = await _uow.Products.TryReserveStockAsync(d.ProductId, d.Quantity);
+                                if (!okReserve)
+                                    throw new CustomException(new Onion.Common.Models.Error { Code = "INSUFFICIENT_STOCK", Message = $"Insufficient stock for product {product.Description}", Language = "ES" });
+
+                                reserved.Add((d.ProductId, d.Quantity, 0));
+                            }
                         }
                         else if (product?.ProductTypeId == 2)
                         {
@@ -114,35 +128,38 @@ namespace Onion.BussinesLogic.Services.Concrete
                     // At this point reservations succeeded; finalize by reducing actual stock
                     foreach (var r in reserved)
                     {
-                        var ok = await _uow.Products.TryCommitReservedStockAsync(r.productId, r.qty);
-                        if (!ok)
-                            throw new CustomException(new Onion.Common.Models.Error { Code = "INSUFFICIENT_STOCK", Message = $"Insufficient stock when finalizing product {r.productId}", Language = "ES" });
-                    try
-                    {
-                        // Determine performing user from sale.CreateBy if numeric
-                        int performedBy = 0;
-                        if (!string.IsNullOrWhiteSpace(sale.CreateBy) && int.TryParse(sale.CreateBy, out var parsed))
-                            performedBy = parsed;
-
-                        // Record inventory movement (audit)
-                        var mv = new Onion.Domain.Inventory.InventoryMovement
+                        if (r.warehouseId == 0)
                         {
-                            CompanyId = sale.CompanyId,
-                            Type = Onion.Domain.Inventory.MovementType.Sale,
-                            ProductId = r.productId,
-                            Quantity = r.qty,
-                            WarehouseId = 0,
-                            PerformedByUserId = performedBy,
-                            Reference = sale.Id.ToString(),
-                            Comment = "Sale deduction."
-                        };
-                        await _uow.InventoryMovements.AddAsync(mv);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger?.LogError(ex, "Failed to record inventory movement for product {ProductId} on sale {SaleId}", r.productId, sale.Id);
-                        throw;
-                    }
+                            var ok = await _uow.Products.TryCommitReservedStockAsync(r.productId, r.qty);
+                            if (!ok)
+                                throw new CustomException(new Onion.Common.Models.Error { Code = "INSUFFICIENT_STOCK", Message = $"Insufficient stock when finalizing product {r.productId}", Language = "ES" });
+                        }
+                        try
+                        {
+                            // Determine performing user from sale.CreateBy if numeric
+                            int performedBy = 0;
+                            if (!string.IsNullOrWhiteSpace(sale.CreateBy) && int.TryParse(sale.CreateBy, out var parsed))
+                                performedBy = parsed;
+
+                            // Record inventory movement (audit)
+                            var mv = new Onion.Domain.Inventory.InventoryMovement
+                            {
+                                CompanyId = sale.CompanyId,
+                                Type = Onion.Domain.Inventory.MovementType.Sale,
+                                ProductId = r.productId,
+                                Quantity = r.qty,
+                                WarehouseId = r.warehouseId,
+                                PerformedByUserId = performedBy,
+                                Reference = sale.Id.ToString(),
+                                Comment = "Sale deduction."
+                            };
+                            await _uow.InventoryMovements.AddAsync(mv);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogError(ex, "Failed to record inventory movement for product {ProductId} on sale {SaleId}", r.productId, sale.Id);
+                            throw;
+                        }
                     }
                 }
                 catch
@@ -150,7 +167,23 @@ namespace Onion.BussinesLogic.Services.Concrete
                     // Release any reservations
                     foreach (var r in reserved)
                     {
-                        try { await _uow.Products.ReleaseReservedStockAsync(r.productId, r.qty); } catch { }
+                        if (r.warehouseId == 0)
+                        {
+                            try { await _uow.Products.ReleaseReservedStockAsync(r.productId, r.qty); } catch { }
+                        }
+                        else
+                        {
+                            try
+                            {
+                                var inv = await _uow.Inventories.GetByProductAndWarehouseAsync(r.productId, r.warehouseId);
+                                if (inv != null)
+                                {
+                                    inv.Quantity += r.qty;
+                                    _uow.Inventories.Update(inv);
+                                }
+                            }
+                            catch { }
+                        }
                     }
                     throw;
                 }
@@ -236,8 +269,21 @@ namespace Onion.BussinesLogic.Services.Concrete
                 // Reverse stock for each sale detail
                 foreach (var d in sale.Details)
                 {
-                    // increase stock back
-                    await _uow.Products.TryIncreaseStockAsync(d.ProductId, d.Quantity);
+                    var warehouseId = d.WarehouseId.HasValue && d.WarehouseId.Value > 0 ? d.WarehouseId.Value : 0;
+                    if (warehouseId > 0)
+                    {
+                        var inv = await _uow.Inventories.GetByProductAndWarehouseAsync(d.ProductId, warehouseId);
+                        if (inv != null)
+                        {
+                            inv.Quantity += d.Quantity;
+                            _uow.Inventories.Update(inv);
+                        }
+                    }
+                    else
+                    {
+                        // increase product-level stock back
+                        await _uow.Products.TryIncreaseStockAsync(d.ProductId, d.Quantity);
+                    }
                     // record inventory movement
                     try
                     {
@@ -247,7 +293,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                             Type = Onion.Domain.Inventory.MovementType.In,
                             ProductId = d.ProductId,
                             Quantity = d.Quantity,
-                            WarehouseId = 0,
+                            WarehouseId = warehouseId,
                             PerformedByUserId = 0,
                             Reference = sale.Id.ToString(),
                             Comment = $"Sale cancelled: {reason}"

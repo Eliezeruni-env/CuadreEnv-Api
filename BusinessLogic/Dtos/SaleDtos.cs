@@ -8,6 +8,7 @@ namespace Onion.BussinesLogic.Dtos
         public int ProductId { get; set; }
         public decimal Quantity { get; set; }
         public decimal UnitPrice { get; set; }
+        public int? WarehouseId { get; set; }
     }
 
     public class SaleRequestDto
