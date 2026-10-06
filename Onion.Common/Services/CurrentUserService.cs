@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Linq;
 using System.Security.Claims;
@@ -8,10 +9,12 @@ namespace Onion.Common.Services
     public class CurrentUserService : ICurrentUserService
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IConfiguration _configuration;
 
-        public CurrentUserService(IHttpContextAccessor httpContextAccessor)
+        public CurrentUserService(IHttpContextAccessor httpContextAccessor, IConfiguration configuration)
         {
             _httpContextAccessor = httpContextAccessor;
+            _configuration = configuration;
         }
 
         public string? UserEmail => _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.Email)?.Value
@@ -81,8 +84,11 @@ namespace Onion.Common.Services
                 if (isSuperUser) return true;
 
                 var role = user.FindFirst(ClaimTypes.Role)?.Value ?? user.FindFirst("role")?.Value;
-                return string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
-                       string.Equals(role, "SysAdmin", StringComparison.OrdinalIgnoreCase);
+                var isSystemAdministrator = string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
+                                            string.Equals(role, "SysAdmin", StringComparison.OrdinalIgnoreCase);
+                if (isSystemAdministrator) return true;
+
+                return false;
             }
         }
     }

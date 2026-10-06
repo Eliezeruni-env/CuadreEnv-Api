@@ -28,17 +28,6 @@ namespace Onion.DataAccess
         {
             get
             {
-                // If an ambient bypass flag is set (development admin override), do not apply tenant filtering
-                try
-                {
-                    if (Onion.DataAccess.Tenant.AmbientTenantProvider.BypassTenant)
-                        return null;
-                }
-                catch
-                {
-                    // ignore errors reading ambient provider
-                }
-
                 var userCompany = _currentUserService?.CompanyId;
                 if (userCompany.HasValue) return userCompany;
 
@@ -99,6 +88,7 @@ namespace Onion.DataAccess
         public DbSet<Onion.Domain.Warehouses.Movement> Movements { get; set; } = null!;
         public DbSet<Onion.Domain.Inventory.InventoryMovement> InventoryMovements { get; set; } = null!;
         public DbSet<Onion.Domain.Invoices.InvoiceSequence> InvoiceSequences { get; set; } = null!;
+        public DbSet<Onion.Domain.Invoices.FiscalSequence> FiscalSequences { get; set; } = null!;
         public DbSet<Onion.Domain.Invoices.FiscalDocument> FiscalDocuments { get; set; } = null!;
         public DbSet<Onion.Domain.Invoices.FiscalSubmissionAudit> FiscalSubmissionAudits { get; set; } = null!;
         public DbSet<Onion.Domain.Audit.AuditLog> AuditLogs { get; set; } = null!;
@@ -111,8 +101,11 @@ namespace Onion.DataAccess
         public DbSet<Onion.Domain.Finance.AccountPayable> AccountPayables { get; set; } = null!;
         public DbSet<Onion.Domain.Finance.PaymentPlan> PaymentPlans { get; set; } = null!;
         public DbSet<Onion.Domain.Finance.Installment> Installments { get; set; } = null!;
+        public DbSet<Onion.Domain.Finance.CashSession> CashSessions { get; set; } = null!;
+        public DbSet<Onion.Domain.Finance.Taxpayer> Taxpayers { get; set; } = null!;
         public DbSet<Onion.Domain.Billing.SubscriptionPlan> SubscriptionPlans { get; set; } = null!;
         public DbSet<Onion.Domain.Billing.CompanySubscription> CompanySubscriptions { get; set; } = null!;
+        public DbSet<Onion.Domain.Requests.ProcessedRequest> ProcessedRequests { get; set; } = null!;
         // Credits module
         public DbSet<Onion.Domain.Credits.Credit> Credits { get; set; } = null!;
         public DbSet<Onion.Domain.Credits.CreditPayment> CreditPayments { get; set; } = null!;
@@ -146,6 +139,53 @@ namespace Onion.DataAccess
                 entity.Property(e => e.FirstName).HasMaxLength(150);
                 entity.Property(e => e.LastName).HasMaxLength(150);
                 entity.Property(e => e.ImageUrl).HasMaxLength(2048);
+            });
+
+            modelBuilder.Entity<Onion.Domain.Requests.ProcessedRequest>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.IdempotencyKey).HasMaxLength(100).IsRequired();
+                entity.Property(e => e.RequestPath).HasMaxLength(512).IsRequired();
+                entity.Property(e => e.ResponseJson).IsRequired();
+                entity.HasIndex(e => new { e.CompanyId, e.IdempotencyKey, e.RequestPath }).IsUnique();
+                entity.HasIndex(e => e.ExpiresAtUtc);
+                entity.HasQueryFilter(e => this.IsGlobalTenantAccess || e.CompanyId == this.TenantCompanyIdForQuery);
+            });
+
+            modelBuilder.Entity<Onion.Domain.Invoices.FiscalSequence>(entity =>
+            {
+                entity.Property(e => e.Prefix).HasMaxLength(3).IsRequired();
+                entity.Property(e => e.RowVersion).IsRowVersion().IsConcurrencyToken();
+                entity.HasIndex(e => new { e.CompanyId, e.VoucherType }).IsUnique();
+                entity.HasIndex(e => new { e.CompanyId, e.IsActive, e.ExpirationDate });
+                entity.HasQueryFilter(e => this.IsGlobalTenantAccess || e.CompanyId == this.TenantCompanyIdForQuery);
+            });
+
+            modelBuilder.Entity<Onion.Domain.Finance.CashSession>(entity =>
+            {
+                entity.Property(e => e.OpeningAmount).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.ExpectedCash).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.DeclaredCash).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.DeclaredCards).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.DeclaredTransfers).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.Difference).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.RowVersion).IsRowVersion().IsConcurrencyToken();
+                entity.HasIndex(e => new { e.CompanyId, e.CashierUserId })
+                    .IsUnique()
+                    .HasFilter("[Status] = 1");
+                entity.HasIndex(e => new { e.CompanyId, e.CashRegisterId })
+                    .IsUnique()
+                    .HasFilter("[Status] = 1");
+                entity.HasQueryFilter(e => this.IsGlobalTenantAccess || e.CompanyId == this.TenantCompanyIdForQuery);
+            });
+
+            modelBuilder.Entity<Onion.Domain.Finance.Taxpayer>(entity =>
+            {
+                entity.Property(e => e.RncOrCedula).HasMaxLength(20).IsRequired();
+                entity.Property(e => e.BusinessName).HasMaxLength(250).IsRequired();
+                entity.Property(e => e.CommercialName).HasMaxLength(250);
+                entity.Property(e => e.Category).HasMaxLength(150);
+                entity.HasIndex(e => e.RncOrCedula).IsUnique();
             });
 
             modelBuilder.Entity<ClerkOrganization>(entity =>
@@ -194,6 +234,7 @@ namespace Onion.DataAccess
 
             modelBuilder.Entity<CashRegister>(entity =>
             {
+                entity.ToTable(tb => tb.HasTrigger("TR_CashRegisters_ImmutableAfterClose"));
                 entity.Property(e => e.OpeningAmount).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.InitialAmount).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.ExpectedAmount).HasColumnType("decimal(18,2)");
@@ -202,15 +243,20 @@ namespace Onion.DataAccess
                 entity.Property(e => e.PhysicalCountBreakdownJson).HasColumnType("nvarchar(max)");
                 entity.Property(e => e.RowVersion).IsRowVersion().IsConcurrencyToken();
                 entity.HasIndex(e => new { e.CompanyId, e.Status });
+                entity.HasIndex(e => new { e.CompanyId, e.OpenedByUserId })
+                    .IsUnique()
+                    .HasFilter("[Status] IN (1, 2)");
             });
 
             modelBuilder.Entity<CashMovement>(entity =>
             {
+                entity.ToTable(tb => tb.HasTrigger("TR_CashMovements_AppendOnly"));
                 entity.Property(e => e.Amount).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.Reason).HasMaxLength(500).IsRequired();
                 entity.Property(e => e.RecordedAt).HasDefaultValueSql("SYSUTCDATETIME()");
                 entity.Property(e => e.RowVersion).IsRowVersion().IsConcurrencyToken();
                 entity.HasIndex(e => new { e.CompanyId, e.CashRegisterId, e.RecordedAt });
+                entity.HasIndex(e => new { e.CompanyId, e.CashSessionId, e.RecordedAt });
             });
 
             modelBuilder.Entity<Onion.Domain.Invoices.InvoiceSequence>(entity =>
@@ -224,7 +270,17 @@ namespace Onion.DataAccess
                 entity.HasIndex(e => new { e.CompanyId, e.IdempotencyKey, e.IsDeleted })
                     .IsUnique()
                     .HasFilter("[IdempotencyKey] IS NOT NULL AND [IsDeleted] = 0");
+                entity.Property(e => e.VoucherType).HasDefaultValue(Onion.Domain.Invoices.VoucherType.B02);
+                entity.Property(e => e.TaxRate).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.TaxWithheld).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.LegalTip).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.RowVersion).IsRowVersion().IsConcurrencyToken();
+            });
+
+            modelBuilder.Entity<CompanySettings>(entity =>
+            {
+                entity.Property(e => e.CashToleranceAmount).HasColumnType("decimal(18,2)").HasDefaultValue(50m);
+                entity.Property(e => e.AllowNegativeStock).HasDefaultValue(false);
             });
 
             modelBuilder.Entity<Onion.Domain.Invoices.FiscalDocument>(entity =>

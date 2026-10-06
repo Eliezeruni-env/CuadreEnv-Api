@@ -65,41 +65,76 @@ namespace Onion.Controllers
             }
         }
 
-        [HttpPut("{id}")]
+        [HttpPut("{id:int}")]
         [Onion.Common.Authorization.RequireRole("Admin")]
         public async Task<IActionResult> Put(int id, [FromBody] UpdateUserRequest req)
         {
             var performedBy = _currentUserService.UserId?.ToString() ?? "system";
-            await _svc.UpdateAsync(id, req, performedBy);
-            return Ok(ApiResponse<object>.Ok(null, "User updated"));
+            try
+            {
+                await _svc.UpdateAsync(id, req, performedBy);
+                return Ok(ApiResponse<object>.Ok(null, "User updated"));
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (string.Equals(ex.Message, "User not found", StringComparison.Ordinal))
+                    return NotFound(ApiResponse<object>.Fail("User not found"));
+                return BadRequest(ApiResponse<object>.Fail(ex.Message));
+            }
         }
 
-        [HttpPatch("{id}/status")]
+        [HttpPatch("{id:int}/status")]
         [Onion.Common.Authorization.RequireRole("Admin")]
         public async Task<IActionResult> ToggleStatus(int id, [FromBody] Onion.BussinesLogic.Dtos.UserStatusToggleRequest req)
         {
             var performedBy = _currentUserService.UserId?.ToString() ?? "system";
-            await _svc.ToggleActiveAsync(id, req.Active, performedBy);
-            return Ok(ApiResponse<object>.Ok(null, "User status updated"));
+            try
+            {
+                await _svc.ToggleActiveAsync(id, req.Active, performedBy);
+                return Ok(ApiResponse<object>.Ok(null, "User status updated"));
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (string.Equals(ex.Message, "User not found", StringComparison.Ordinal))
+                    return NotFound(ApiResponse<object>.Fail("User not found"));
+                return BadRequest(ApiResponse<object>.Fail(ex.Message));
+            }
         }
 
-        [HttpPost("{id}/reset-password")]
+        [HttpPost("{id:int}/reset-password")]
         [Onion.Common.Authorization.RequireRole("Admin")]
         public async Task<IActionResult> ResetPassword(int id, [FromBody] ResetPasswordRequest req)
         {
             var performedBy = _currentUserService.UserId?.ToString() ?? "system";
-            var result = await _svc.ResetPasswordAsync(id, req, performedBy);
-            // result is either 'sent' or the temporary password
-            return Ok(ApiResponse<object>.Ok(new { result }, "Password reset"));
+            try
+            {
+                var result = await _svc.ResetPasswordAsync(id, req, performedBy);
+                return Ok(ApiResponse<object>.Ok(new { result }, "Password reset"));
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (string.Equals(ex.Message, "User not found", StringComparison.Ordinal))
+                    return NotFound(ApiResponse<object>.Fail("User not found"));
+                return BadRequest(ApiResponse<object>.Fail(ex.Message));
+            }
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:int}")]
         [Onion.Common.Authorization.RequireRole("Admin")]
         public async Task<IActionResult> Delete(int id)
         {
             var performedBy = _currentUserService.UserId?.ToString() ?? "system";
-            await _svc.DeleteAsync(id, performedBy);
-            return Ok(ApiResponse<object>.Ok(null, "User deleted"));
+            try
+            {
+                await _svc.DeleteAsync(id, performedBy);
+                return Ok(ApiResponse<object>.Ok(null, "User deleted"));
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (string.Equals(ex.Message, "User not found", StringComparison.Ordinal))
+                    return NotFound(ApiResponse<object>.Fail("User not found"));
+                return BadRequest(ApiResponse<object>.Fail(ex.Message));
+            }
         }
     }
 }

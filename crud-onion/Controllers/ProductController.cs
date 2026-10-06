@@ -58,6 +58,10 @@ namespace Onion.Controllers
         {
             _logger.LogInformation("Get Paged Products");
 
+            filterPayload ??= new FilterPayload();
+            filterPayload.PageNumber = Math.Max(1, filterPayload.PageNumber);
+            filterPayload.PageSize = Math.Clamp(filterPayload.PageSize, 1, 100);
+
             var result = await _productService.GetPagedListAsync(filterPayload, ct);
 
             return Ok(Onion.Common.Models.ApiResponse<object>.Ok(result));

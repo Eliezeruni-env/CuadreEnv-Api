@@ -72,7 +72,16 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var pn = Math.Max(1, pageNumber);
             var ps = Math.Max(1, Math.Min(pageSize, 100));
-            var list = (await _credits.ListAsync()).Select(MapToDto).AsQueryable();
+            var list = _credits.Query().Select(e => new CreditDto(
+                e.Id,
+                e.CustomerId,
+                e.TotalAmount,
+                e.PaidAmount,
+                e.Balance,
+                e.DueDate,
+                e.Status.ToString(),
+                e.MinimumPaymentAmount,
+                e.PaymentFrequency));
             return await _paginationService.ToPagedListAsync(list, pn, ps);
         }
 

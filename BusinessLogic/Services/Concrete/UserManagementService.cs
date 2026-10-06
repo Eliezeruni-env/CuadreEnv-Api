@@ -13,7 +13,6 @@ namespace Onion.BussinesLogic.Services.Concrete
 {
     using Microsoft.AspNetCore.Http;
     using Microsoft.Extensions.Configuration;
-    using System.Security.Claims;
 
     public class UserManagementService : IUserManagementService
     {
@@ -23,7 +22,6 @@ namespace Onion.BussinesLogic.Services.Concrete
         private readonly Onion.Common.Services.IEmailService? _emailService;
         private readonly IConfiguration _config;
         private readonly IHttpContextAccessor _httpContextAccessor;
-        private readonly string[] _superUserEmails;
         private readonly ILogger<UserManagementService> _logger;
 
         public UserManagementService(IRepository<User> userRepo, Onion.DataAccess.OnionDbContext db, Onion.Common.Services.ICurrentUserService currentUserService, ILogger<UserManagementService> logger, Onion.Common.Services.IEmailService? emailService = null, IConfiguration? config = null, IHttpContextAccessor? httpContextAccessor = null)
@@ -35,8 +33,6 @@ namespace Onion.BussinesLogic.Services.Concrete
             _config = config ?? throw new ArgumentNullException(nameof(config));
             _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
             _logger = logger;
-            var raw = _config["SuperUsers:Emails"] ?? "admin@cuadre.com";
-            _superUserEmails = raw.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToArray();
         }
 
         public async Task<PagedResult<UserListDto>> GetPagedAsync(int pageNumber, int pageSize, string? q, string? role, bool? active, int? companyId)
@@ -139,6 +135,9 @@ namespace Onion.BussinesLogic.Services.Concrete
                 ? (req.CompanyId.HasValue && req.CompanyId.Value <= 0 ? null : req.CompanyId)
                 : _currentUserService.CompanyId;
 
+            if (!companyId.HasValue && !_currentUserService.IsGlobalAdministrator)
+                throw new InvalidOperationException("Tenant company id is required.");
+
             if (companyId.HasValue)
             {
                 var company = await _db.Companies
@@ -179,7 +178,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 Role = companyId.HasValue ? requestedRole : "Admin",
                 CompanyId = companyId,
                 PasswordHash = hash,
-                Active = true,
+                Active = req.Active,
                 CreateBy = performedByUserId
                 , Address = req.Address
                 , City = req.City
@@ -274,7 +273,14 @@ namespace Onion.BussinesLogic.Services.Concrete
             u.Role = req.Role;
             if (!_currentUserService.IsGlobalAdministrator && u.CompanyId != _currentUserService.CompanyId)
                 throw new InvalidOperationException("User not found");
-            u.CompanyId = _currentUserService.IsGlobalAdministrator ? req.CompanyId : u.CompanyId;
+            if (_currentUserService.IsGlobalAdministrator && req.CompanyId.HasValue && req.CompanyId != u.CompanyId)
+            {
+                var companyExists = await _db.Companies.IgnoreQueryFilters()
+                    .AnyAsync(c => c.Id == req.CompanyId.Value && !c.IsDeleted);
+                if (!companyExists)
+                    throw new InvalidOperationException("The selected company does not exist.");
+                u.CompanyId = req.CompanyId;
+            }
             u.ModificationDate = DateTime.UtcNow;
             u.ModifiedBy = performedByUserId;
             u.Address = req.Address;
@@ -295,11 +301,8 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (u == null) throw new InvalidOperationException("User not found");
             if (!_currentUserService.IsGlobalAdministrator && u.CompanyId != _currentUserService.CompanyId)
                 throw new InvalidOperationException("User not found");
-            // Allow configured super-users to perform actions on themselves
             var currentUserId = _currentUserService.UserId;
-            var currentEmail = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.Email)?.Value ?? _httpContextAccessor.HttpContext?.User?.FindFirst("email")?.Value;
-            var isSuperUser = !string.IsNullOrEmpty(currentEmail) && _superUserEmails.Any(e => string.Equals(e, currentEmail, StringComparison.OrdinalIgnoreCase));
-            if (!isSuperUser && currentUserId.HasValue && currentUserId.Value == id)
+            if (!_currentUserService.IsGlobalAdministrator && currentUserId.HasValue && currentUserId.Value == id)
                 throw new InvalidOperationException("Cannot change your own active status");
             u.Active = active;
             u.ModificationDate = DateTime.UtcNow;
@@ -350,11 +353,8 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (u == null) throw new InvalidOperationException("User not found");
             if (!_currentUserService.IsGlobalAdministrator && u.CompanyId != _currentUserService.CompanyId)
                 throw new InvalidOperationException("User not found");
-            // Allow configured super-users to delete themselves
             var currentUserId = _currentUserService.UserId;
-            var currentEmail = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.Email)?.Value ?? _httpContextAccessor.HttpContext?.User?.FindFirst("email")?.Value;
-            var isSuperUser = !string.IsNullOrEmpty(currentEmail) && _superUserEmails.Any(e => string.Equals(e, currentEmail, StringComparison.OrdinalIgnoreCase));
-            if (!isSuperUser && currentUserId.HasValue && currentUserId.Value == id)
+            if (!_currentUserService.IsGlobalAdministrator && currentUserId.HasValue && currentUserId.Value == id)
                 throw new InvalidOperationException("Cannot delete your own account");
             u.IsDeleted = true;
             u.Active = false;
@@ -366,15 +366,17 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<bool> ExistsEmailAsync(string email, int? excludeId = null)
         {
-            var found = await _userRepo.FindAsync(u => u.Email == email);
-            if (excludeId.HasValue) return found.Any(f => f.Id != excludeId.Value);
+            var normalized = email.Trim().ToLowerInvariant();
+            var found = await _userRepo.FindAsync(u => u.Email.ToLower() == normalized &&
+                (!excludeId.HasValue || u.Id != excludeId.Value));
             return found.Any();
         }
 
         public async Task<bool> ExistsUserNameAsync(string userName, int? excludeId = null)
         {
-            var found = await _userRepo.FindAsync(u => u.UserName == userName);
-            if (excludeId.HasValue) return found.Any(f => f.Id != excludeId.Value);
+            var normalized = userName.Trim().ToLowerInvariant();
+            var found = await _userRepo.FindAsync(u => u.UserName.ToLower() == normalized &&
+                (!excludeId.HasValue || u.Id != excludeId.Value));
             return found.Any();
         }
 

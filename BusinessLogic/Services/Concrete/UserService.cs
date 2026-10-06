@@ -82,9 +82,9 @@ namespace Onion.BussinesLogic.Services.Concrete
                     throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Cannot assign user to a different company", Language = "EN" });
             }
 
-            var user = !callerCompany.HasValue
-                ? await _uow.Users.GetByIdUnscopedAsync(userId)
-                : await _uow.Users.GetByIdAsync(userId);
+            // Assignment is part of onboarding: the user does not have a
+            // company yet, so a tenant-scoped lookup cannot find it.
+            var user = await _uow.Users.GetByIdUnscopedAsync(userId);
             if (user == null)
                 throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
 

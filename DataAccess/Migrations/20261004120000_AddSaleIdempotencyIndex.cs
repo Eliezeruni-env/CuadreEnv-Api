@@ -8,18 +8,23 @@ public partial class AddSaleIdempotencyIndex : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.CreateIndex(
-            name: "IX_Sales_CompanyId_IdempotencyKey_Active",
-            table: "Sales",
-            columns: new[] { "CompanyId", "IdempotencyKey", "IsDeleted" },
-            unique: true,
-            filter: "[IdempotencyKey] IS NOT NULL AND [IsDeleted] = 0");
+        migrationBuilder.Sql(@"
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Sales_CompanyId_IdempotencyKey_IsDeleted' AND object_id = OBJECT_ID(N'[Sales]'))
+BEGIN
+    CREATE UNIQUE INDEX [IX_Sales_CompanyId_IdempotencyKey_IsDeleted]
+        ON [Sales] ([CompanyId], [IdempotencyKey], [IsDeleted])
+        WHERE [IdempotencyKey] IS NOT NULL AND [IsDeleted] = 0;
+END
+");
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DropIndex(
-            name: "IX_Sales_CompanyId_IdempotencyKey_Active",
-            table: "Sales");
+        migrationBuilder.Sql(@"
+IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Sales_CompanyId_IdempotencyKey_IsDeleted' AND object_id = OBJECT_ID(N'[Sales]'))
+BEGIN
+    DROP INDEX [IX_Sales_CompanyId_IdempotencyKey_IsDeleted] ON [Sales];
+END
+");
     }
 }

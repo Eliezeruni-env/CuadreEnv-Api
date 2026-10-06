@@ -11,6 +11,8 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.Extensions.Caching.Memory;
 using crud_onion.Middleware;
+using crud_onion.Hubs;
+using crud_onion.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,10 +20,10 @@ var connectionString = builder.Configuration.GetConnectionString("OnionCrud");
 if (string.IsNullOrWhiteSpace(connectionString) && builder.Environment.IsProduction())
     throw new InvalidOperationException("ConnectionStrings:OnionCrud must be configured before starting in Production.");
 
-// Ensure the app listens on the development ports commonly used by frontends.
-// Allow override via ASPNETCORE_URLS or PORT environment variables. Default to 8080 and 5000.
+// Ensure the local HTTP API is available on the port consumed by Angular.
+// Allow an explicit ASPNETCORE_URLS/PORT override for hosting scenarios.
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
-var urls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS") ?? $"http://*:{port};http://*:5000";
+var urls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS") ?? $"http://localhost:{port}";
 builder.WebHost.UseUrls(urls);
 
 builder.Services.AddSingleton<Onion.Common.Services.IGlobalizationService, Onion.Common.Services.GlobalizationService>();
@@ -41,12 +43,15 @@ builder.Services.AddControllers(options =>
         // Don't emit nulls to reduce payloads
         opts.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
     });
+builder.Services.AddSignalR();
+builder.Services.AddScoped<Onion.Common.Services.ISecurityAlertPublisher, SignalRSecurityAlertPublisher>();
 builder.Services.AddHttpClient("Dgii", client =>
 {
     var baseUrl = builder.Configuration["Dgii:BaseUrl"];
     if (!string.IsNullOrWhiteSpace(baseUrl)) client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
     client.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("Dgii:TimeoutSeconds", 15));
 });
+
 builder.Services.AddSingleton<Onion.BussinesLogic.Services.Concrete.ILicenseStartupValidator, Onion.BussinesLogic.Services.Concrete.LicenseStartupValidator>();
 
 // Swagger configuration including Internal API key definition for /internal endpoints
@@ -59,6 +64,10 @@ builder.Services.AddSwaggerGen(c =>
         Version = "v1",
         Description = "API de CuadreEnv SaaS"
     });
+
+    // Avoid schema name collisions when DTOs share the same class name
+    // across different namespaces or nested controller types.
+    c.CustomSchemaIds(type => type.FullName!.Replace('+', '.'));
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -110,18 +119,6 @@ builder.Services.AddHealthChecks();
 builder.Services.AddServices();
 builder.Services.AddDomainServices();
 builder.Services.AddValidators();
-// CORS: allow frontend origin (development). Configure FRONTEND__URL in environment or fallback to http://localhost:3000
-var frontendUrl = builder.Configuration["Frontend:Url"] ?? Environment.GetEnvironmentVariable("FRONTEND__URL") ?? "http://localhost:3000";
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("DefaultCors", policy =>
-    {
-        policy.WithOrigins(frontendUrl)
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
-    });
-});
 // HttpClient factory used by UM proxy example
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
@@ -222,19 +219,16 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services.AddCors(options =>
 {
-    // Restrictive CORS policy for demo: allow localhost:4200 and a placeholder production origin
-    options.AddPolicy("DefaultCors", policy =>
+options.AddPolicy("DefaultCors", policy =>
     {
-        // Allow common dev origins (Angular dev server, API running on http:8080, IIS Express https)
         policy.WithOrigins(
             "http://localhost:4200",
-            "http://localhost:5160",
             "http://localhost:8080",
-            "https://localhost:7060",
             "https://localhost:44324",
-            "https://your-production-frontend.example.com")
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+            "https://localhost:7060")
+              .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
+              .WithHeaders("Authorization", "Content-Type", "X-Company-Id", "X-Idempotency-Key", "X-Requested-With", "X-Correlation-ID", "X-SignalR-User-Agent")
+              .AllowCredentials();
     });
 });
 
@@ -247,20 +241,24 @@ await app.Services.GetRequiredService<Onion.BussinesLogic.Services.Concrete.ILic
     .ValidateAsync(app.Lifetime.ApplicationStopping);
 
 app.UseStaticFiles();
-app.UseSwagger();
 
-// --- UPDATED SWAGGER UI CONFIGURATION ---
-app.UseSwaggerUI(c =>
-{
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Cuadre Env v1");
-    c.RoutePrefix = "swagger";
-    c.EnablePersistAuthorization(); // Keeps you logged in across page refreshes
-    // No custom JS injection. Swagger UI will use the generated OpenAPI JSON.
-});
-// ----------------------------------------
+// Configure Swagger UI in a single place so the endpoint is predictable.
+// Serve Swagger UI at /swagger and keep authorization persisted across refreshes.
 
 app.MapHealthChecks("/hc").AllowAnonymous();
 app.MapGet("/", () => Results.Ok(new { service = "Onion API", status = "ok" })).AllowAnonymous();
+
+// Swagger is public in local development and must be available before the
+// global authentication/authorization middleware, which requires a JWT.
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "CuadreEnv API v1");
+    c.RoutePrefix = "swagger";
+    c.EnablePersistAuthorization();
+});
+
+app.MapHub<SecurityAlertsHub>("/hubs/security-alerts");
 
 // Force HTTPS only in non-development environments
 if (!app.Environment.IsDevelopment())
@@ -281,6 +279,7 @@ app.UseMiddleware<Onion.Controllers.Middleware.TenantMiddleware>();
 app.UseAuthorization();
 // Global exception handler -> standardized API responses
 app.UseMiddleware<ApiExceptionMiddleware>();
+
 app.MapControllers();
 
 // Optionally apply EF migrations on startup when configured. This is disabled by default
@@ -299,22 +298,6 @@ if (builder.Configuration.GetValue<bool>("ApplyMigrationsOnStartup"))
         var logger = app.Services.GetRequiredService<ILogger<Program>>();
         logger.LogError(ex, "Failed to apply EF migrations on startup. Startup will continue without applying migrations.");
     }
-}
-
-// Enable Swagger UI so API routes can be explored even if migrations failed
-try
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "CuadreEnv API v1");
-        c.RoutePrefix = string.Empty; // serve swagger at app root
-    });
-}
-catch (Exception ex)
-{
-    var logger = app.Services.GetRequiredService<ILogger<Program>>();
-    logger.LogWarning(ex, "Failed to enable Swagger middleware. Continuing without Swagger.");
 }
 
 // Optional demo data seeding when enabled explicitly via configuration

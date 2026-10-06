@@ -39,6 +39,10 @@ public static class ServicesConfiguration
 
         // Sales domain service
         services.AddScoped<ISaleService, SaleService>();
+        services.AddScoped<IFiscalSequenceService, FiscalSequenceService>();
+        services.AddScoped<ICashSessionService, CashSessionService>();
+        services.AddScoped<ITaxpayerService, TaxpayerService>();
+        services.AddScoped<IDgiiReportService, DgiiReportService>();
         // Cash services
         services.AddScoped<ICashRegisterService, CashRegisterService>();
         services.AddScoped<ICashMovementService, CashMovementService>();

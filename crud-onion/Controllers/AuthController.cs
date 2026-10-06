@@ -92,7 +92,10 @@ namespace Onion.Controllers
                                       [FromBody] DevTokenRequest req)
         {
             if (!env.IsDevelopment())
+            {
+                // Endpoint intentionally disabled outside Development environment.
                 return NotFound();
+            }
 
             if (req == null || (req.CompanyId <= 0 && !req.IsSuperUser))
                 return BadRequest(new { error = "companyId required and must be > 0" });

@@ -101,7 +101,7 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var pn = Math.Max(1, pageNumber);
             var ps = Math.Clamp(pageSize, 1, 100);
-            var list = (await _uow.Warehouses.ListAsync()).Select(w => new WarehouseDto(w.Id, w.Name, w.CompanyId)).AsQueryable();
+            var list = _uow.Warehouses.Query().Select(w => new WarehouseDto(w.Id, w.Name, w.CompanyId));
             return await _paginationService.ToPagedListAsync(list, pn, ps);
         }
 

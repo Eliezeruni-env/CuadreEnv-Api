@@ -24,26 +24,34 @@ END
             // Skipping RowVersion alteration because changing to rowversion/timestamp can fail on some SQL Server setups.
             // No action required here when the database already uses an appropriate concurrency token.
 
-            migrationBuilder.AlterColumn<string>(
-                name: "IdempotencyKey",
-                table: "Sales",
-                type: "nvarchar(450)",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "nvarchar(max)",
-                oldNullable: true);
+            migrationBuilder.Sql(@"
+IF EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID(N'[Sales]')
+      AND name = N'IdempotencyKey'
+      AND max_length = -1)
+BEGIN
+    ALTER TABLE [Sales] ALTER COLUMN [IdempotencyKey] nvarchar(450) NULL;
+END
+");
+
+            migrationBuilder.Sql(@"
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Sales_CompanyId_IdempotencyKey_IsDeleted' AND object_id = OBJECT_ID(N'[Sales]'))
+BEGIN
+    CREATE UNIQUE INDEX [IX_Sales_CompanyId_IdempotencyKey_IsDeleted]
+        ON [Sales] ([CompanyId], [IdempotencyKey], [IsDeleted])
+        WHERE [IdempotencyKey] IS NOT NULL AND [IsDeleted] = 0;
+END
+");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql(@"
-IF EXISTS(
-    SELECT 1 FROM sys.indexes i
-    JOIN sys.objects o ON i.object_id = o.object_id
-    WHERE i.name = 'IX_Sales_CompanyId_IdempotencyKey_IsDeleted' AND o.name = 'Sales')
+IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Sales_CompanyId_IdempotencyKey_IsDeleted' AND object_id = OBJECT_ID(N'[Sales]'))
 BEGIN
-    EXEC sp_rename N'[Sales].[IX_Sales_CompanyId_IdempotencyKey_IsDeleted]', N'IX_Sales_CompanyId_IdempotencyKey_Active', 'INDEX';
+    DROP INDEX [IX_Sales_CompanyId_IdempotencyKey_IsDeleted] ON [Sales];
 END
 ");
 
@@ -62,14 +70,16 @@ BEGIN
 END
 ");
 
-            migrationBuilder.AlterColumn<string>(
-                name: "IdempotencyKey",
-                table: "Sales",
-                type: "nvarchar(max)",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "nvarchar(450)",
-                oldNullable: true);
+            migrationBuilder.Sql(@"
+IF EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID(N'[Sales]')
+      AND name = N'IdempotencyKey'
+      AND max_length <> -1)
+BEGIN
+    ALTER TABLE [Sales] ALTER COLUMN [IdempotencyKey] nvarchar(max) NULL;
+END
+");
         }
     }
 }

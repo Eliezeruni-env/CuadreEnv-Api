@@ -46,7 +46,7 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<Onion.Common.Models.Pagination.PagedList<Customer>> GetPagedAsync(int pageNumber, int pageSize, string? search)
         {
-            var query = (await _uow.Customers.ListAsync()).AsQueryable();
+            var query = _uow.Customers.Query();
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var s = search.ToLowerInvariant();

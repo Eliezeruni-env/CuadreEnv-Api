@@ -79,6 +79,10 @@ namespace Onion.Domain
         public int? CashSessionId { get; set; }
         public decimal SubTotal { get; set; }
         public decimal Tax { get; set; }
+        public decimal TaxRate { get; set; }
+        public decimal TaxWithheld { get; set; }
+        public decimal LegalTip { get; set; }
+        public Onion.Domain.Invoices.VoucherType VoucherType { get; set; } = Onion.Domain.Invoices.VoucherType.B02;
         public string? Notes { get; set; }
         // Concurrency token
         public byte[]? RowVersion { get; set; }
@@ -176,11 +180,13 @@ namespace Onion.Domain
     public class CashMovement : BaseEntity
     {
         public int CashRegisterId { get; set; }
+        public int? CashSessionId { get; set; }
         public string? Description { get; set; }
         public decimal Amount { get; set; }
         public int CompanyId { get; set; }
         public string Reason { get; set; } = string.Empty;
         public int? ApprovedByUserId { get; set; }
+        public Onion.Domain.Finance.CashMovementType Type { get; set; } = Onion.Domain.Finance.CashMovementType.CashIn;
         public DateTime RecordedAt { get; set; } = DateTime.UtcNow;
         public byte[] RowVersion { get; set; } = Array.Empty<byte>();
     }
@@ -199,5 +205,7 @@ namespace Onion.Domain
         public string? CommercialName { get; set; }
         public int DefaultStockAlertThreshold { get; set; } = 5;
         public decimal DefaultTaxPercentage { get; set; } = 0m;
+        public decimal CashToleranceAmount { get; set; } = 50m;
+        public bool AllowNegativeStock { get; set; }
     }
 }

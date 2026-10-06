@@ -21,16 +21,16 @@ public sealed class ActiveAccountMiddleware
         var idValue = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? context.User.FindFirst("sub")?.Value
             ?? context.User.FindFirst("userId")?.Value;
-        if (!int.TryParse(idValue, out var userId) || !await accountStatus.IsActiveAsync(userId, context.RequestAborted))
+        if (!int.TryParse(idValue, out var userId))
         {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync(JsonSerializer.Serialize(new
-            {
-                success = false,
-                code = "ACCOUNT_SUSPENDED",
-                message = "Su cuenta se encuentra suspendida o deshabilitada. Comuníquese con la administración de CuadreEnv."
-            }));
+            await WriteIdentityErrorAsync(context, "INVALID_USER_TOKEN", "El token autenticado no contiene un usuario válido.", StatusCodes.Status401Unauthorized);
+            return;
+        }
+
+        var accountExistsAndIsActive = await accountStatus.IsActiveAsync(userId, context.RequestAborted);
+        if (!accountExistsAndIsActive)
+        {
+            await WriteIdentityErrorAsync(context, "ACCOUNT_SUSPENDED", "Su cuenta se encuentra suspendida, deshabilitada o ya no existe. Inicie sesión nuevamente o comuníquese con la administración de CuadreEnv.", StatusCodes.Status403Forbidden);
             return;
         }
 
@@ -44,4 +44,17 @@ public sealed class ActiveAccountMiddleware
         path.StartsWithSegments("/auth/revoke") ||
         path.StartsWithSegments("/hc") ||
         path == "/";
+
+    private static async Task WriteIdentityErrorAsync(HttpContext context, string code, string message, int statusCode)
+    {
+        context.Response.StatusCode = statusCode;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsync(JsonSerializer.Serialize(new
+        {
+            success = false,
+            code,
+            message,
+            requestId = context.TraceIdentifier
+        }));
+    }
 }

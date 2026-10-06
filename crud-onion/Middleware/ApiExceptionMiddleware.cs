@@ -37,11 +37,38 @@ namespace Onion.Controllers.Middleware
                 await context.Response.WriteAsync(JsonSerializer.Serialize(new { statusCode = status, errors = hex.Errors }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
                 return;
             }
+            catch (Onion.Common.Exceptions.TenantRequiredException ex)
+            {
+                await WriteBusinessErrorAsync(context, StatusCodes.Status401Unauthorized, "TENANT_REQUIRED", ex.Message);
+                return;
+            }
+            catch (Onion.Common.Exceptions.FiscalSequenceExhaustedException ex)
+            {
+                await WriteBusinessErrorAsync(context, StatusCodes.Status409Conflict, "FISCAL_SEQUENCE_EXHAUSTED", ex.Message);
+                return;
+            }
+            catch (Onion.Common.Exceptions.FiscalSequenceExpiredException ex)
+            {
+                await WriteBusinessErrorAsync(context, StatusCodes.Status409Conflict, "FISCAL_SEQUENCE_EXPIRED", ex.Message);
+                return;
+            }
+            catch (Onion.Common.Exceptions.InsufficientStockException ex)
+            {
+                await WriteBusinessErrorAsync(context, StatusCodes.Status409Conflict, "INSUFFICIENT_STOCK", ex.Message);
+                return;
+            }
+            catch (Onion.Common.Exceptions.CashSessionException ex)
+            {
+                await WriteBusinessErrorAsync(context, ex.Code == "CASH_SESSION_NOT_FOUND" ? StatusCodes.Status404NotFound : ex.Code == "OUT_OF_TOLERANCE_CLOSING" ? StatusCodes.Status422UnprocessableEntity : StatusCodes.Status409Conflict, ex.Code, ex.Message);
+                return;
+            }
             catch (CustomException cex)
             {
                 int status;
                 // Map known error codes to HTTP statuses
-                if (cex.Error.Code == "NOT_FOUND")
+                if (cex.Error.Code == "INVALID_TOKEN" || cex.Error.Code == "INVALID_USER_TOKEN")
+                    status = StatusCodes.Status401Unauthorized;
+                else if (cex.Error.Code == "NOT_FOUND")
                     status = StatusCodes.Status404NotFound;
                 else if (cex.Error.Code == "FORBIDDEN")
                     status = StatusCodes.Status403Forbidden;
@@ -72,6 +99,7 @@ namespace Onion.Controllers.Middleware
                 await context.Response.WriteAsync(JsonSerializer.Serialize(payload, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull }));
                 return;
             }
+
             catch (System.Exception ex)
             {
                 var requestId = context.TraceIdentifier;
@@ -96,6 +124,14 @@ namespace Onion.Controllers.Middleware
 
                 await context.Response.WriteAsync(JsonSerializer.Serialize(payload, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull }));
             }
+        }
+
+        private static async Task WriteBusinessErrorAsync(HttpContext context, int status, string code, string message)
+        {
+            context.Response.StatusCode = status;
+            context.Response.ContentType = "application/json";
+            var payload = Onion.Common.Models.ApiResponse<object>.Fail(message, new[] { code });
+            await context.Response.WriteAsync(JsonSerializer.Serialize(payload, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
         }
     }
 

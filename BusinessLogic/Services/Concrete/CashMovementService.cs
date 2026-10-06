@@ -28,8 +28,7 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var pn = System.Math.Max(1, pageNumber);
             var ps = System.Math.Clamp(pageSize, 1, 100);
-            var list = (await _uow.CashMovements.ListAsync()).AsQueryable();
-            return await _paginationService.ToPagedListAsync(list, pn, ps);
+            return await _uow.CashMovements.GetPagedAsync(pn, ps);
         }
 
         public async Task<CashMovement> AddAsync(CashMovement movement)
