@@ -29,6 +29,19 @@ namespace Onion.DataAccess.Repositories.Concrete
             return affected > 0;
         }
 
+        public async Task<bool> TryCommitReservedStockAsync(int productId, decimal quantity)
+        {
+            if (!_context.TenantCompanyId.HasValue) throw new InvalidOperationException("Tenant company id missing for multi-tenant operation.");
+            var companyId = _context.TenantCompanyId.Value;
+            var affected = await _context.Products
+                .Where(p => p.Id == productId && EF.Property<int>(p, "CompanyId") == companyId
+                    && p.Stock >= quantity && p.ReservedStock >= quantity)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(p => p.Stock, p => p.Stock - quantity)
+                    .SetProperty(p => p.ReservedStock, p => p.ReservedStock - quantity));
+            return affected > 0;
+        }
+
         public async Task<IEnumerable<Product>> SearchByNameAsync(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return Enumerable.Empty<Product>();
@@ -96,17 +109,27 @@ namespace Onion.DataAccess.Repositories.Concrete
 
         public async Task<PagedList<ProductRow>> GetPagedProductsAsync(FilterPayload filterPayload, CancellationToken ct = default)
         {
+            ArgumentNullException.ThrowIfNull(filterPayload);
+
+            var pageNumber = Math.Max(1, filterPayload.PageNumber);
+            var pageSize = Math.Clamp(filterPayload.PageSize, 1, 100);
             var query = from p in _context.Products
                         select new ProductRow
                         {
                             Id = p.Id,
                             Description = p.Description,
                             Barcode = p.Barcode,
-                            Cost = (decimal)p.Cost
+                            Cost = p.Cost,
+                            Stock = p.Stock,
+                            Reference = p.Reference,
+                            ShortDescription = p.ShortDescription
                         };
 
             if (!string.IsNullOrWhiteSpace(filterPayload.Description))
-                query = query.Where(p => p.Description.ToLower().Contains(filterPayload.Description.ToLower()));
+            {
+                var description = filterPayload.Description.Trim();
+                query = query.Where(p => p.Description != null && EF.Functions.Like(p.Description, $"%{description}%"));
+            }
 
             if (filterPayload.MinCost.HasValue)
                 query = query.Where(p => p.Cost >= filterPayload.MinCost.Value);
@@ -115,25 +138,24 @@ namespace Onion.DataAccess.Repositories.Concrete
                 query = query.Where(p => p.Cost <= filterPayload.MaxCost.Value);
 
             var totalItemCount = await query.CountAsync(ct);
-            var pageCount = (int)Math.Ceiling(totalItemCount / (double)filterPayload.PageSize);
+            var pageCount = (int)Math.Ceiling(totalItemCount / (double)pageSize);
 
             var items = await query
                 .OrderByDescending(p => p.Id)
-                .Skip((filterPayload.PageNumber - 1) * filterPayload.PageSize)
-                .Take(filterPayload.PageSize)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
                 .ToListAsync(ct);
 
-            return new PagedList<ProductRow>(items, filterPayload.PageSize, pageCount, totalItemCount);
-        }
+            return new PagedList<ProductRow>(items, pageSize, pageCount, totalItemCount);
+            }
 
         public async Task<IEnumerable<Product>> GetProductsBySqlAsync(decimal minCost)
         {
             // Ensure tenant scoping: avoid raw SQL that could bypass query filters.
             if (!_context.TenantCompanyId.HasValue) throw new InvalidOperationException("Tenant company id missing for multi-tenant operation.");
             var companyId = _context.TenantCompanyId.Value;
-            var minCostDouble = Convert.ToDouble(minCost);
             return await _context.Products
-                .Where(p => p.Cost >= minCostDouble && EF.Property<int>(p, "CompanyId") == companyId)
+                .Where(p => p.Cost >= minCost && EF.Property<int>(p, "CompanyId") == companyId)
                 .ToListAsync();
         }
 
@@ -151,7 +173,7 @@ namespace Onion.DataAccess.Repositories.Concrete
             // Use LINQ update pattern: load, validate company, update field
             var entity = await _context.Products.FirstOrDefaultAsync(p => p.Id == id && EF.Property<int>(p, "CompanyId") == companyId);
             if (entity == null) return 0;
-            entity.Cost = Convert.ToDouble(newCost);
+            entity.Cost = newCost;
             _context.Products.Update(entity);
             await _context.SaveChangesAsync();
             return 1;

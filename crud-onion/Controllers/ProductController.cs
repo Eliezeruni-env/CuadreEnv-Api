@@ -21,6 +21,13 @@ namespace Onion.Controllers
             _logger = logger;
         }
 
+        [HttpGet("services")]
+        public async Task<IActionResult> GetServices()
+        {
+            var services = await _productService.GetByTypeAsync(2);
+            return Ok(Onion.Common.Models.ApiResponse<object>.Ok(services));
+        }
+
         [HttpGet("{id}")]
         public async Task<IActionResult> Get(int id)
         {
@@ -51,6 +58,10 @@ namespace Onion.Controllers
         {
             _logger.LogInformation("Get Paged Products");
 
+            filterPayload ??= new FilterPayload();
+            filterPayload.PageNumber = Math.Max(1, filterPayload.PageNumber);
+            filterPayload.PageSize = Math.Clamp(filterPayload.PageSize, 1, 100);
+
             var result = await _productService.GetPagedListAsync(filterPayload, ct);
 
             return Ok(Onion.Common.Models.ApiResponse<object>.Ok(result));
@@ -60,24 +71,73 @@ namespace Onion.Controllers
         public async Task<IActionResult> Post([FromBody] ProductDto productDto)
         {
             _logger.LogInformation("Create Product");
-            await _productService.AddAsync(productDto);
-            return Created(string.Empty, Onion.Common.Models.ApiResponse<object>.Ok(productDto, "Product created"));
+            try
+            {
+                await _productService.AddAsync(productDto);
+                return Created(string.Empty, Onion.Common.Models.ApiResponse<object>.Ok(productDto, "Product created"));
+            }
+            catch (CustomException ex)
+            {
+                return MapCustomExceptionToActionResult(ex);
+            }
         }
 
         [HttpPut]
         public async Task<IActionResult> Put([FromBody] ProductDto productDto)
         {
             _logger.LogInformation("Update Product");
-            await _productService.UpdateAsync(productDto);
-            return Ok(Onion.Common.Models.ApiResponse<object>.Ok(null, "Product updated"));
+            try
+            {
+                await _productService.UpdateAsync(productDto);
+                return Ok(Onion.Common.Models.ApiResponse<object>.Ok(null, "Product updated"));
+            }
+            catch (CustomException ex)
+            {
+                return MapCustomExceptionToActionResult(ex);
+            }
         }
 
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {
             _logger.LogInformation("Delete Product");
-            await _productService.DeleteAsync(id);
-            return Ok(Onion.Common.Models.ApiResponse<object>.Ok(null, "Product deleted"));
+            try
+            {
+                await _productService.DeleteAsync(id);
+                return Ok(Onion.Common.Models.ApiResponse<object>.Ok(null, "Product deleted"));
+            }
+            catch (CustomException ex)
+            {
+                return MapCustomExceptionToActionResult(ex);
+            }
+        }
+
+        private IActionResult MapCustomExceptionToActionResult(CustomException ex)
+        {
+            var code = ex.Error?.Code ?? string.Empty;
+            var message = ex.Error?.Message ?? ex.Message;
+            // Log the mapped error to help debugging from server side
+            _logger?.LogWarning("Product operation failed: {Code} - {Message}", code, message);
+
+            switch (code)
+            {
+                case "DUPLICATE_BARCODE":
+                case "DUPLICATE_NAME":
+                    return Conflict(Onion.Common.Models.ApiResponse<object>.Fail(message));
+                case "NOT_FOUND":
+                    return NotFound(Onion.Common.Models.ApiResponse<object>.Fail(message));
+                case "PLAN_LIMIT":
+                    return StatusCode(403, Onion.Common.Models.ApiResponse<object>.Fail(message));
+                case "DB_ERROR":
+                    return StatusCode(500, Onion.Common.Models.ApiResponse<object>.Fail(message));
+                case "INVALID_NAME":
+                case "INVALID_COST":
+                case "INVALID_STOCK":
+                case "COMPANY_REQUIRED":
+                case "FK_NOT_FOUND":
+                default:
+                    return BadRequest(Onion.Common.Models.ApiResponse<object>.Fail(message));
+            }
         }
     }
 }

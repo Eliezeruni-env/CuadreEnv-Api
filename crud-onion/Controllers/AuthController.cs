@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Mvc;
 using Onion.BussinesLogic.Services.Abstract;
 using Onion.BussinesLogic.Dtos;
 using Microsoft.AspNetCore.Authorization;
+using Onion.Common.Authorization;
 using System.Security.Claims;
+using Onion.BussinesLogic.Services.Abstract;
 
 namespace Onion.Controllers
 {
@@ -18,6 +20,7 @@ namespace Onion.Controllers
         }
 
         [HttpPost("register")]
+        [AllowAnonymous]
         public async Task<IActionResult> Register([FromBody] RegisterRequestDto req)
         {
             var user = await _auth.RegisterAsync(req);
@@ -28,31 +31,115 @@ namespace Onion.Controllers
         }
 
         [HttpPost("login")]
+        [AllowAnonymous]
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("LoginPolicy")]
         public async Task<IActionResult> Login([FromBody] LoginRequestDto req)
         {
             var tokens = await _auth.LoginAsync(req);
-            var resp = new TokenResponseDto(tokens.AccessToken, tokens.RefreshToken);
+            var resp = tokens;
             var json = System.Text.Json.JsonSerializer.Serialize(resp, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
             return Content(json, "application/json");
         }
 
         [HttpPost("refresh")]
+        [AllowAnonymous]
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("LoginPolicy")]
         public async Task<IActionResult> Refresh([FromBody] RefreshRequestDto req)
         {
             var tokens = await _auth.RefreshTokenAsync(req);
-            var resp = new TokenResponseDto(tokens.AccessToken, tokens.RefreshToken);
+            var resp = tokens;
             var json = System.Text.Json.JsonSerializer.Serialize(resp, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
             return Content(json, "application/json");
         }
 
         [HttpPost("revoke")]
+        [AllowAnonymous]
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("LoginPolicy")]
         public async Task<IActionResult> Revoke([FromBody] RevokeRequestDto req)
         {
             await _auth.RevokeTokenAsync(req);
             return NoContent();
+        }
+
+        [Authorize]
+        [HttpGet("me")]
+        public IActionResult Me()
+        {
+            var modules = User.Claims
+                .Where(c => string.Equals(c.Type, "allowedModules", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(c.Type, "allowed_modules", StringComparison.OrdinalIgnoreCase))
+                .SelectMany(c => ModuleCodes.FromClaim(c.Value))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            var idValue = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            _ = int.TryParse(idValue, out var userId);
+
+            return Ok(new
+            {
+                user = new
+                {
+                    id = userId,
+                    email = User.FindFirst(ClaimTypes.Email)?.Value ?? User.FindFirst("email")?.Value,
+                    role = User.FindFirst("role")?.Value ?? User.FindFirst(ClaimTypes.Role)?.Value,
+                    allowedModules = modules
+                }
+            });
+        }
+
+        [Authorize]
+        [HttpGet("/v1/auth/me/modules")]
+        [HttpGet("/api/me/modules")]
+        public async Task<IActionResult> Modules(
+            [FromServices] Onion.Common.Services.ICompanyEntitlementService entitlements,
+            [FromServices] IUserService users)
+        {
+            var idValue = User.FindFirst("sub")?.Value ??
+                          User.FindFirst("userId")?.Value ??
+                          User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(idValue, out var userId) || userId <= 0)
+                return Unauthorized();
+
+            var currentUser = await users.GetByIdAsync(userId);
+            if (currentUser is null || !currentUser.Active || currentUser.IsDeleted)
+                return Unauthorized();
+
+            var assignedModules = ModuleCodes.FromClaimPreservingIds(currentUser.AllowedModulesJson).ToArray();
+
+            var isGlobalAdministrator = currentUser.IsSuperUser ||
+                string.Equals(currentUser.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase);
+
+            IReadOnlyCollection<string> licensedModules;
+            if (isGlobalAdministrator)
+            {
+                licensedModules = new[] { ModuleCodes.All };
+            }
+            else
+            {
+                var companyClaim = User.FindFirst("companyId") ?? User.FindFirst("CompanyId");
+                licensedModules = int.TryParse(companyClaim?.Value, out var companyId) && companyId > 0
+                    ? ModuleCodes.Normalize((await entitlements.GetAsync(companyId)).Modules)
+                    : Array.Empty<string>();
+            }
+
+            var hasAllAssignedModules = assignedModules.Contains(ModuleCodes.All, StringComparer.Ordinal);
+            var hasAllLicensedModules = licensedModules.Contains(ModuleCodes.All, StringComparer.Ordinal);
+            var effectiveModules = hasAllAssignedModules && hasAllLicensedModules
+                ? new[] { ModuleCodes.All }
+                : hasAllAssignedModules
+                    ? licensedModules.ToArray()
+                    : hasAllLicensedModules
+                        ? assignedModules
+                        : assignedModules
+                            .Where(assigned => licensedModules.Contains(ModuleCodes.Normalize(assigned), StringComparer.Ordinal))
+                            .ToArray();
+
+            return Ok(new
+            {
+                assignedModules,
+                licensedModules,
+                modules = effectiveModules,
+                hasAllModules = effectiveModules.Contains(ModuleCodes.All, StringComparer.Ordinal)
+            });
         }
 
         [Authorize]
@@ -70,15 +157,19 @@ namespace Onion.Controllers
         // Development-only helper: return a test JWT containing the provided companyId.
         // Enabled only when the app runs in Development environment. Accepts JSON body { companyId, userId?, email? }.
         [HttpPost("dev/token")]
+        [AllowAnonymous]
         [ApiExplorerSettings(IgnoreApi = true)]
         public IActionResult DevToken([FromServices] Microsoft.Extensions.Configuration.IConfiguration config,
                                       [FromServices] Microsoft.AspNetCore.Hosting.IWebHostEnvironment env,
                                       [FromBody] DevTokenRequest req)
         {
             if (!env.IsDevelopment())
+            {
+                // Endpoint intentionally disabled outside Development environment.
                 return NotFound();
+            }
 
-            if (req == null || req.CompanyId <= 0)
+            if (req == null || (req.CompanyId <= 0 && !req.IsSuperUser))
                 return BadRequest(new { error = "companyId required and must be > 0" });
 
             var key = config["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key not configured");
@@ -88,12 +179,17 @@ namespace Onion.Controllers
             var claims = new List<System.Security.Claims.Claim>
             {
                 new(System.Security.Claims.ClaimTypes.NameIdentifier, (req.UserId ?? 9999).ToString()),
-                new(System.Security.Claims.ClaimTypes.Email, req.Email ?? "dev@local")
+                new(System.Security.Claims.ClaimTypes.Email, req.Email ?? "dev@local"),
+                new(System.Security.Claims.ClaimTypes.Role, "Admin"),
+                new("role", "Admin")
             };
             if (req.CompanyId > 0)
             {
+                claims.Add(new System.Security.Claims.Claim("companyId", req.CompanyId.ToString()));
                 claims.Add(new System.Security.Claims.Claim("CompanyId", req.CompanyId.ToString()));
             }
+            if (req.IsSuperUser)
+                claims.Add(new System.Security.Claims.Claim("isSuperUser", "true"));
 
             var keyBytes = System.Text.Encoding.UTF8.GetBytes(key);
             var creds = new Microsoft.IdentityModel.Tokens.SigningCredentials(new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(keyBytes), Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha256);
@@ -116,4 +212,4 @@ namespace Onion.Controllers
     public record RevokeRequest(string RefreshToken);
 }
 
-public record DevTokenRequest(int CompanyId, int? UserId = null, string? Email = null);
+public record DevTokenRequest(int CompanyId, int? UserId = null, string? Email = null, bool IsSuperUser = false);

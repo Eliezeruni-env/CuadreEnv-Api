@@ -23,6 +23,7 @@ namespace Onion.DataAccess.Repositories.Abstract
         Task DeleteAsync(int id, CancellationToken ct = default);
         // Try to reduce stock atomically; returns true if stock was reduced, false if insufficient stock
         Task<bool> TryReduceStockAsync(int productId, decimal quantity);
+        Task<bool> TryCommitReservedStockAsync(int productId, decimal quantity);
         // Reserve stock atomically (increase ReservedStock and ensure Stock - ReservedStock >= 0)
         Task<bool> TryReserveStockAsync(int productId, decimal quantity);
         // Release reserved stock (decrease ReservedStock)

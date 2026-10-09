@@ -33,7 +33,7 @@ namespace Onion.IntegrationTests
                 {
                     cfg.AddInMemoryCollection(new Dictionary<string, string?>
                     {
-                        ["ConnectionStrings:DefaultConnection"] = $"Server=(localdb)\\MSSQLLocalDB;Database={dbName};Trusted_Connection=True;MultipleActiveResultSets=true",
+                        ["ConnectionStrings:OnionCrud"] = $"Server=(localdb)\\MSSQLLocalDB;Database={dbName};Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True",
                         ["ApplyMigrationsOnStartup"] = "true"
                     });
                 });
@@ -69,12 +69,12 @@ namespace Onion.IntegrationTests
                 CreateCompanyName = "IntegrationTestCo"
             };
 
-            var regResp = await client.PostAsync("/auth/register", new StringContent(JsonSerializer.Serialize(register), Encoding.UTF8, "application/json"));
+            var regResp = await client.PostAsync("/v1/auth/register", new StringContent(JsonSerializer.Serialize(register), Encoding.UTF8, "application/json"));
             regResp.EnsureSuccessStatusCode();
 
             // Login
             var login = new { Email = register.Email, Password = register.Password };
-            var loginResp = await client.PostAsync("/auth/login", new StringContent(JsonSerializer.Serialize(login), Encoding.UTF8, "application/json"));
+            var loginResp = await client.PostAsync("/v1/auth/login", new StringContent(JsonSerializer.Serialize(login), Encoding.UTF8, "application/json"));
             loginResp.EnsureSuccessStatusCode();
             var loginBody = await loginResp.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(loginBody);
@@ -82,7 +82,7 @@ namespace Onion.IntegrationTests
             access.Should().NotBeNullOrEmpty();
 
             // Second login attempt with same credentials should also succeed and return a token
-            var loginResp2 = await client.PostAsync("/auth/login", new StringContent(JsonSerializer.Serialize(login), Encoding.UTF8, "application/json"));
+            var loginResp2 = await client.PostAsync("/v1/auth/login", new StringContent(JsonSerializer.Serialize(login), Encoding.UTF8, "application/json"));
             loginResp2.EnsureSuccessStatusCode();
             var loginBody2 = await loginResp2.Content.ReadAsStringAsync();
             using var doc2 = JsonDocument.Parse(loginBody2);
@@ -105,7 +105,7 @@ namespace Onion.IntegrationTests
 
             // Call warehouse
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", access);
-            var whResp = await client.GetAsync("/warehouse");
+            var whResp = await client.GetAsync("/v1/warehouse");
             whResp.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
 
             // Read full response as string before deserializing to avoid TestHost streaming compatibility issues

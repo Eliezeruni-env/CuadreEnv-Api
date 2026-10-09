@@ -2,7 +2,9 @@ using Onion.BussinesLogic.Services.Abstract;
 using Onion.DataAccess.Repositories.Abstract;
 using Onion.Domain;
 using Onion.Common.Exceptions;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Onion.DataAccess.Repositories.Concrete;
 using Onion.BussinesLogic.Models;
 using Onion.DataAccess.Repositories.Concrete;
@@ -12,10 +14,12 @@ namespace Onion.BussinesLogic.Services.Concrete
     public class CustomerService : ICustomerService
     {
         private readonly IUnitOfWork _uow;
+        private readonly Onion.BussinesLogic.Services.Abstract.IPaginationService _paginationService;
 
-        public CustomerService(IUnitOfWork uow)
+        public CustomerService(IUnitOfWork uow, Onion.BussinesLogic.Services.Abstract.IPaginationService paginationService)
         {
             _uow = uow;
+            _paginationService = paginationService;
         }
 
         public async Task<Customer> CreateAsync(Customer customer)
@@ -40,17 +44,18 @@ namespace Onion.BussinesLogic.Services.Concrete
             return await _uow.Customers.ListAsync();
         }
 
-        public async Task<PagedResult<Customer>> GetPagedAsync(int pageNumber, int pageSize, string? search)
+        public async Task<Onion.Common.Models.Pagination.PagedList<Customer>> GetPagedAsync(int pageNumber, int pageSize, string? search)
         {
-            var query = (await _uow.Customers.ListAsync()).AsQueryable();
+            var query = _uow.Customers.Query();
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var s = search.ToLowerInvariant();
                 query = query.Where(c => (c.Name ?? string.Empty).ToLower().Contains(s) || (c.Email ?? string.Empty).ToLower().Contains(s) || (c.Identification ?? string.Empty).ToLower().Contains(s));
             }
-            var total = query.Count();
-            var items = query.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
-            return new PagedResult<Customer>(items, pageNumber, pageSize, total);
+
+            var pn = Math.Max(1, pageNumber);
+            var ps = Math.Clamp(pageSize, 1, 100);
+            return await _paginationService.ToPagedListAsync(query, pn, ps);
         }
 
         public async Task<Customer?> GetByIdAsync(int id)

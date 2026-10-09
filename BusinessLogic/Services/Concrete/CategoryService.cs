@@ -14,19 +14,51 @@ using System.Text;
 
 namespace Onion.BusinessLogic.Services.Concrete
 {
-    public class CategoryService(
-        ICategoryRepository categoryRepository,
-        IMapper mapper,
-        ILogger<CategoryService> logger) : ICategoryService
+    public class CategoryService : ICategoryService
     {
+        private readonly Onion.DataAccess.Repositories.Concrete.IUnitOfWork _uow;
+        private readonly IMapper _mapper;
+        private readonly ILogger<CategoryService> _logger;
+        private readonly Onion.Common.Services.ICurrentUserService _currentUserService;
 
-        private readonly ICategoryRepository categoryRepository = categoryRepository;
-        private readonly IMapper mapper = mapper;
-        private readonly ILogger<CategoryService> logger = logger;
+        public CategoryService(Onion.DataAccess.Repositories.Concrete.IUnitOfWork uow, IMapper mapper, ILogger<CategoryService> logger, Onion.Common.Services.ICurrentUserService currentUserService)
+        {
+            _uow = uow;
+            _mapper = mapper;
+            _logger = logger;
+            _currentUserService = currentUserService;
+        }
+
         public async Task AddAsync(CategoryDto entityDto)
         {
-            var entity = mapper.Map<Category>(entityDto);
-            await categoryRepository.AddAsync(entity);
+            var entity = _mapper.Map<Category>(entityDto);
+            // Set CompanyId from tenant context when creating
+            entity.CompanyId = _currentUserService?.CompanyId ?? 0;
+            await _uow.Categories.AddAsync(entity);
+            await _uow.SaveChangesAsync();
+        }
+
+        public async Task<IEnumerable<CategoryDto>> GetAllAsync()
+        {
+            var list = await _uow.Categories.ListAsync();
+            return _mapper.Map<IEnumerable<CategoryDto>>(list);
+        }
+
+        public async Task<CategoryDto?> GetByIdAsync(int id)
+        {
+            var entity = await _uow.Categories.GetByIdAsync(id);
+            if (entity == null) return null;
+            return _mapper.Map<CategoryDto>(entity);
+        }
+
+        public async Task DeleteAsync(int id)
+        {
+            var existing = await _uow.Categories.GetByIdAsync(id);
+            if (existing == null)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "Category not found", Language = "EN" });
+
+            _uow.Categories.Remove(existing);
+            await _uow.SaveChangesAsync();
         }
     }
 }

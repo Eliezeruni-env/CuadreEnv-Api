@@ -27,7 +27,22 @@ namespace Onion.Controllers.Middleware
             // POST /company is used to register a new tenant; authenticated callers without a CompanyId
             // should be allowed to create a company and then be associated to it. Skip tenant validation
             // for that specific case.
-            if (string.Equals(path, "/company", System.StringComparison.OrdinalIgnoreCase) &&
+            var normalizedPath = path.TrimEnd('/');
+            var pathSegments = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            var resource = pathSegments.Length > 0 ? pathSegments[^1] : string.Empty;
+            var parentResource = pathSegments.Length > 1 ? pathSegments[^2] : string.Empty;
+
+            // Authentication and company-plan discovery are valid before onboarding.
+            if (resource.Equals("auth", StringComparison.OrdinalIgnoreCase) ||
+                (parentResource.Equals("company", StringComparison.OrdinalIgnoreCase) &&
+                 resource.Equals("plans", StringComparison.OrdinalIgnoreCase)))
+            {
+                await _next(context);
+                return;
+            }
+
+            if ((string.Equals(normalizedPath, "/company", System.StringComparison.OrdinalIgnoreCase) ||
+                 normalizedPath.EndsWith("/company", System.StringComparison.OrdinalIgnoreCase)) &&
                 string.Equals(method, "POST", System.StringComparison.OrdinalIgnoreCase))
             {
                 await _next(context);
@@ -36,28 +51,57 @@ namespace Onion.Controllers.Middleware
 
             if (user?.Identity != null && user.Identity.IsAuthenticated)
             {
-                var claim = user.FindFirst("CompanyId");
+                var currentUser = context.RequestServices?.GetService<Onion.Common.Services.ICurrentUserService>();
+                var isGlobalAdministrator = currentUser?.IsGlobalAdministrator == true || IsGlobalAdministratorClaim(user);
+                if (isGlobalAdministrator)
+                {
+                    await _next(context);
+                    return;
+                }
+
+                var claim = user.FindFirst("companyId") ?? user.FindFirst("CompanyId");
                 if (claim == null || string.IsNullOrWhiteSpace(claim.Value))
                 {
-                    context.Response.StatusCode = StatusCodes.Status400BadRequest;
-                    context.Response.ContentType = "application/json";
-                    var resp = ApiResponse<object>.Fail("CompanyId claim missing or invalid", new[] { "MISSING_COMPANY_CLAIM" });
-                    await context.Response.WriteAsync(JsonSerializer.Serialize(resp));
+                    await WriteCompanyRequiredAsync(context);
                     return;
                 }
 
                 // Reject non-positive company ids (0 or negative) as invalid tenant context
                 if (!int.TryParse(claim.Value, out var cid) || cid <= 0)
                 {
-                    context.Response.StatusCode = StatusCodes.Status400BadRequest;
-                    context.Response.ContentType = "application/json";
-                    var resp = ApiResponse<object>.Fail("CompanyId claim missing or invalid", new[] { "MISSING_COMPANY_CLAIM" });
-                    await context.Response.WriteAsync(JsonSerializer.Serialize(resp));
+                    await WriteCompanyRequiredAsync(context);
                     return;
                 }
             }
 
             await _next(context);
+        }
+
+        private static bool IsGlobalAdministratorClaim(System.Security.Claims.ClaimsPrincipal user)
+        {
+            var isSuperUser = user.Claims.Any(c =>
+                string.Equals(c.Type, "isSuperUser", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(c.Value, "true", StringComparison.OrdinalIgnoreCase));
+
+            if (isSuperUser) return true;
+
+            var role = user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value
+                ?? user.FindFirst("role")?.Value;
+
+            return string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(role, "SysAdmin", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static async Task WriteCompanyRequiredAsync(HttpContext context)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            context.Response.ContentType = "application/json";
+            var response = new
+            {
+                errorCode = "COMPANY_REQUIRED",
+                message = "El usuario no tiene una empresa asignada.",
+            };
+            await context.Response.WriteAsync(JsonSerializer.Serialize(response));
         }
     }
 

@@ -17,8 +17,12 @@ namespace Onion.BussinesLogic.Dtos
     public record LoginRequestDto(string Email, string Password, string? DeviceId = null);
     public record RefreshRequestDto(string RefreshToken);
     public record RevokeRequestDto(string RefreshToken);
-    public record TokenResponseDto(string AccessToken, string RefreshToken);
-    public record UserResponseDto(int Id, string Email);
+    public record TokenResponseDto(string AccessToken, string RefreshToken, UserResponseDto? User = null);
+    public record UserResponseDto(
+        int Id,
+        string Email,
+        string Role = "Employee",
+        List<string>? AllowedModules = null);
 
     public record SessionDto(string DeviceId, DateTime CreatedAt, DateTime? LastUsedAt, bool IsActive, DateTime Expires);
 }

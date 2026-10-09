@@ -11,5 +11,8 @@ namespace Onion.BussinesLogic.Services.Abstract
         Task<IEnumerable<AccountReceivable>> GetOverdueAsync();
         Task<IEnumerable<AccountReceivable>> GetDueSoonAsync(int days);
         Task<IEnumerable<AccountReceivable>> GetByCustomerAsync(int customerId);
+        Task<AccountReceivable> CreateWithPlanAsync(AccountReceivable ar, PaymentPlan plan = null);
+        Task<IEnumerable<Installment>> GetInstallmentsAsync(int paymentPlanId);
+        Task PayInstallmentAsync(int installmentId, decimal amount);
     }
 }

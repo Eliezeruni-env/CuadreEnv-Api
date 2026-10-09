@@ -12,10 +12,12 @@ namespace Onion.BussinesLogic.Services.Concrete
     public class CompanyService : ICompanyService
     {
         private readonly IUnitOfWork _uow;
+        private readonly Onion.Common.Services.ICurrentUserService? _currentUserService;
 
-        public CompanyService(IUnitOfWork uow)
+        public CompanyService(IUnitOfWork uow, Onion.Common.Services.ICurrentUserService? currentUserService = null)
         {
             _uow = uow;
+            _currentUserService = currentUserService;
         }
 
         // DTO-based creation used by controllers
@@ -27,6 +29,8 @@ namespace Onion.BussinesLogic.Services.Concrete
             var company = new Company
             {
                 Name = request.Name.Trim(),
+                Rnc = string.IsNullOrWhiteSpace(request.Rnc) ? null : request.Rnc.Trim(),
+                Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim(),
                 Address = string.IsNullOrWhiteSpace(request.Address) ? null : request.Address.Trim(),
                 Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim()
             };
@@ -42,7 +46,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 BlockSalesIfOverdue = false
             };
             await _uow.CompanySettingsRepo.AddAsync(settings);
-            await _uow.SaveChangesAsync();
+            await SaveCompanySettingsAsync(company.Id);
 
             company.Settings = settings;
             return company;
@@ -67,7 +71,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                     BlockSalesIfOverdue = false
                 };
                 await _uow.CompanySettingsRepo.AddAsync(settings);
-                await _uow.SaveChangesAsync();
+                await SaveCompanySettingsAsync(company.Id);
                 company.Settings = settings;
             }
 
@@ -76,6 +80,7 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task DeleteAsync(int id)
         {
+            EnsureCompanyAccess(id);
             var existing = await _uow.Companies.GetByIdAsync(id) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "Company not found", Language = "EN" });
             _uow.Companies.Remove(existing);
             await _uow.SaveChangesAsync();
@@ -88,6 +93,7 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<Company?> GetByIdAsync(int id)
         {
+            if (!CanAccessCompany(id)) return null;
             var company = await _uow.Companies.GetByIdAsync(id);
             if (company == null) return null;
 
@@ -104,6 +110,7 @@ namespace Onion.BussinesLogic.Services.Concrete
         public async Task UpdateAsync(Company company)
         {
             if (company is null) throw new ArgumentNullException(nameof(company));
+            EnsureCompanyAccess(company.Id);
             var existing = await _uow.Companies.GetByIdAsync(company.Id) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "Company not found", Language = "EN" });
 
             existing.Name = company.Name;
@@ -112,6 +119,32 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             _uow.Companies.Update(existing);
             await _uow.SaveChangesAsync();
+        }
+
+        private bool CanAccessCompany(int companyId)
+        {
+            if (_currentUserService?.IsGlobalAdministrator == true) return true;
+            return _currentUserService?.CompanyId == companyId;
+        }
+
+        private void EnsureCompanyAccess(int companyId)
+        {
+            if (!CanAccessCompany(companyId))
+                throw new CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Access to another company is forbidden", Language = "ES" });
+        }
+
+        private async Task SaveCompanySettingsAsync(int companyId)
+        {
+            var previousAmbientCompanyId = Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId;
+            try
+            {
+                Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = companyId;
+                await _uow.SaveChangesAsync();
+            }
+            finally
+            {
+                Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = previousAmbientCompanyId;
+            }
         }
     }
 }

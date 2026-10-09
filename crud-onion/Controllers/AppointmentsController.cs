@@ -23,7 +23,8 @@ namespace Onion.Controllers
         private async Task<bool> EnsureFeatureAsync()
         {
             // Use feature key 'appointments' to gate functionality
-            var companyIdClaim = HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var companyIdClaim = HttpContext.User.FindFirst("companyId")?.Value
+                ?? HttpContext.User.FindFirst("CompanyId")?.Value;
             int companyId = 0;
             if (int.TryParse(companyIdClaim, out var cid)) companyId = cid;
             // If no company context, allow in development scenarios by returning true

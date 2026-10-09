@@ -19,7 +19,7 @@ namespace Onion.BusinessLogic.Services.Concrete
             return Task.CompletedTask;
         }
 
-        public Task SendEmailAsync(string to, string subject, string body)
+        public Task SendEmailAsync(string to, string subject, string body, bool isHtml = true, byte[]? attachmentBytes = null, string? attachmentName = null)
         {
             // TODO: Implement real send
             return Task.CompletedTask;

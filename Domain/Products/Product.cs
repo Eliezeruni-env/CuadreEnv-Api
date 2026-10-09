@@ -24,13 +24,15 @@ namespace Onion.Domain.Products
 
         public DateTime? ExpirationDate { get; set; }
         public bool InvoiceWithoutStock { get; set; }
+        public bool IsOrganic { get; set; }
 
         #region Cost
-        public double Cost { get; set; }
+        public decimal Cost { get; set; }
         // Current stock quantity available for sale
         public decimal Stock { get; set; }
         // Quantity reserved (not yet deducted from stock until sale is confirmed)
         public decimal ReservedStock { get; set; }
+        public byte[] RowVersion { get; set; } = Array.Empty<byte>();
         #endregion
     }
 }

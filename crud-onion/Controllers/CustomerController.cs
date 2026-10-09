@@ -20,6 +20,23 @@ namespace Onion.Controllers
             _globalizationService = globalizationService;
         }
 
+        // POST /customer/minimal
+        // Create a minimal customer from receivable modal (Name, Identification, Phone, CompanyId)
+        [HttpPost("minimal")]
+        public async Task<IActionResult> CreateMinimal([FromBody] MinimalCustomerRequest req)
+        {
+            if (req == null) return BadRequest();
+            var c = new Customer
+            {
+                Name = req.Name,
+                Identification = req.Identification,
+                Phone = req.Phone,
+                CompanyId = req.CompanyId
+            };
+            var created = await _service.CreateAsync(c);
+            return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null)
         {
@@ -63,5 +80,7 @@ namespace Onion.Controllers
             await _service.DeleteAsync(id);
             return NoContent();
         }
+
+    public record MinimalCustomerRequest(string Name, string? Identification = null, string? Phone = null, int CompanyId = 0);
     }
 }
