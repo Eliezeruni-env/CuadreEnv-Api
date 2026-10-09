@@ -1,2 +1,13 @@
 <Solution>
+  <Folder Name="/BusinessLogic/">
+    <Project Path="BusinessLogic/Onion.BusinessLogic.csproj" />
+  </Folder>
+  <Folder Name="/DataAccess/">
+    <Project Path="DataAccess/Onion.DataAccess.csproj" />
+  </Folder>
+  <Folder Name="/Domain/">
+    <Project Path="Domain/Onion.Domain.csproj" />
+  </Folder>
+  <Project Path="crud-onion/crud-onion.csproj" />
+  <Project Path="Onion.Common/Onion.Common.csproj" />
 </Solution>

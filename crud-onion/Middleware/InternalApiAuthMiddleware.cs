@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using System.Threading.Tasks;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Onion.Controllers.Middleware
 {
@@ -30,7 +32,8 @@ namespace Onion.Controllers.Middleware
             // 1) If an API key is configured, accept requests that present it in X-Internal-ApiKey
             if (!string.IsNullOrWhiteSpace(_apiKey))
             {
-                if (context.Request.Headers.TryGetValue("X-Internal-ApiKey", out var provided) && provided == _apiKey)
+                if (context.Request.Headers.TryGetValue("X-Internal-ApiKey", out var provided) &&
+                    FixedTimeEquals(provided.ToString(), _apiKey))
                 {
                     await _next(context);
                     return;
@@ -49,6 +52,14 @@ namespace Onion.Controllers.Middleware
 
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             await context.Response.WriteAsync("Unauthorized");
+        }
+
+        private static bool FixedTimeEquals(string provided, string expected)
+        {
+            var providedBytes = Encoding.UTF8.GetBytes(provided);
+            var expectedBytes = Encoding.UTF8.GetBytes(expected);
+            return providedBytes.Length == expectedBytes.Length &&
+                   CryptographicOperations.FixedTimeEquals(providedBytes, expectedBytes);
         }
     }
 }

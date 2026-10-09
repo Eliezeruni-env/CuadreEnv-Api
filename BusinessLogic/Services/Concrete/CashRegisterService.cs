@@ -27,13 +27,18 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var pn = Math.Max(1, pageNumber);
             var ps = Math.Clamp(pageSize, 1, 100);
-            var list = (await _uow.CashRegisters.ListAsync()).AsQueryable();
-            return await _paginationService.ToPagedListAsync(list, pn, ps);
+            return await _uow.CashRegisters.GetPagedAsync(pn, ps);
         }
 
         public async Task<CashRegister> OpenAsync(CashRegister register)
         {
             if (register.OpeningAmount < 0) throw new InvalidOperationException("Opening amount cannot be negative");
+            if (register.CompanyId <= 0) throw new InvalidOperationException("Company is required");
+            if (register.OpenedByUserId.HasValue)
+            {
+                var existing = (await _uow.CashRegisters.FindAsync(x => x.CompanyId == register.CompanyId && x.OpenedByUserId == register.OpenedByUserId && x.Status != CashRegisterStatus.CLOSED)).FirstOrDefault();
+                if (existing != null) throw new InvalidOperationException("The cashier already has an open cash register.");
+            }
             register.InitialAmount = register.OpeningAmount;
             register.OpenedAt = DateTime.UtcNow;
             register.IsOpen = true;

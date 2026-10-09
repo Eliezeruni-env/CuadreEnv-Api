@@ -61,6 +61,13 @@ namespace Onion.Controllers
         [HttpPost("open")]
         public async Task<IActionResult> Open([FromBody] CashRegister cash)
         {
+            var companyId = _currentUser.CompanyId;
+            if (!companyId.HasValue || companyId.Value <= 0)
+                return BadRequest(new { code = "COMPANY_REQUIRED", message = "El usuario autenticado no tiene una empresa asignada." });
+
+            cash.CompanyId = companyId.Value;
+            cash.OpenedByUserId ??= _currentUser.UserId;
+
             var created = await _service.OpenAsync(cash);
             return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
         }

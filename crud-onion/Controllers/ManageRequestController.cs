@@ -6,6 +6,8 @@ using System.Text.Json;
 using Onion.Domain.ManageRequests;
 using Onion.BussinesLogic.Dtos;
 using Onion.Domain.Purchases;
+using System.Linq;
+using Onion.Common.Authorization;
 
 namespace Onion.Controllers
 {
@@ -15,17 +17,37 @@ namespace Onion.Controllers
     {
         private readonly IUnitOfWork _uow;
         private readonly IGlobalizationService _globalizationService;
+        private readonly ICurrentUserService _currentUser;
 
-        public ManageRequestController(IUnitOfWork uow, IGlobalizationService globalizationService)
+        public ManageRequestController(IUnitOfWork uow, IGlobalizationService globalizationService, ICurrentUserService currentUser)
         {
             _uow = uow;
             _globalizationService = globalizationService;
+            _currentUser = currentUser;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAll([FromQuery] int? statusId)
+        {
+            var companyId = _currentUser.CompanyId;
+            if (companyId is not > 0)
+                return BadRequest(new { code = "COMPANY_REQUIRED", message = "El usuario autenticado no tiene una empresa asignada." });
+
+            var requests = await _uow.ManageRequests.ListAsync();
+            var query = requests.Where(x => x.CompanyId == companyId.Value);
+            if (statusId.HasValue && Enum.IsDefined(typeof(ManageRequestStatus), statusId.Value))
+                query = query.Where(x => (int)x.Status == statusId.Value);
+
+            return Ok(query.OrderByDescending(x => x.CreatedAt));
         }
 
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] ManageRequest req)
         {
             if (req == null) return BadRequest();
+            if (_currentUser.CompanyId is not > 0)
+                return BadRequest(new { code = "COMPANY_REQUIRED", message = "El usuario autenticado no tiene una empresa asignada." });
+            req.CompanyId = _currentUser.CompanyId.Value;
             req.Status = ManageRequestStatus.Pending;
             await _uow.ManageRequests.AddAsync(req);
             await _uow.SaveChangesAsync();
@@ -41,6 +63,7 @@ namespace Onion.Controllers
         }
 
         [HttpPost("{id}/approve")]
+        [RequireRole("Admin", "SuperAdmin")]
         public async Task<IActionResult> Approve(int id, [FromQuery] string approvedBy = "system")
         {
             var mr = await _uow.ManageRequests.GetByIdAsync(id);
@@ -120,6 +143,7 @@ namespace Onion.Controllers
         }
 
         [HttpPost("{id}/reject")]
+        [RequireRole("Admin", "SuperAdmin")]
         public async Task<IActionResult> Reject(int id, [FromBody] string reason)
         {
             var mr = await _uow.ManageRequests.GetByIdAsync(id);

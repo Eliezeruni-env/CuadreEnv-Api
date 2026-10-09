@@ -51,10 +51,9 @@ namespace Onion.Controllers.Middleware
 
             if (user?.Identity != null && user.Identity.IsAuthenticated)
             {
-                var isSuperUser = user.HasClaim(c =>
-                    string.Equals(c.Type, "isSuperUser", System.StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(c.Value, "true", System.StringComparison.OrdinalIgnoreCase));
-                if (isSuperUser)
+                var currentUser = context.RequestServices?.GetService<Onion.Common.Services.ICurrentUserService>();
+                var isGlobalAdministrator = currentUser?.IsGlobalAdministrator == true || IsGlobalAdministratorClaim(user);
+                if (isGlobalAdministrator)
                 {
                     await _next(context);
                     return;
@@ -76,6 +75,21 @@ namespace Onion.Controllers.Middleware
             }
 
             await _next(context);
+        }
+
+        private static bool IsGlobalAdministratorClaim(System.Security.Claims.ClaimsPrincipal user)
+        {
+            var isSuperUser = user.Claims.Any(c =>
+                string.Equals(c.Type, "isSuperUser", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(c.Value, "true", StringComparison.OrdinalIgnoreCase));
+
+            if (isSuperUser) return true;
+
+            var role = user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value
+                ?? user.FindFirst("role")?.Value;
+
+            return string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(role, "SysAdmin", StringComparison.OrdinalIgnoreCase);
         }
 
         private static async Task WriteCompanyRequiredAsync(HttpContext context)

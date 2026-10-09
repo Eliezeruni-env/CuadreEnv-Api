@@ -11,6 +11,10 @@ public sealed class DeletionApprovalController : ControllerBase
     private readonly IDeletionApprovalService _service;
     public DeletionApprovalController(IDeletionApprovalService service) => _service = service;
 
+    [HttpGet]
+    [RequireRole("Admin", "SuperAdmin")]
+    public async Task<IActionResult> GetAll() => Ok(await _service.GetPendingAsync());
+
     [HttpGet("pending")]
     [RequireRole("Admin", "SuperAdmin")]
     public async Task<IActionResult> Pending() => Ok(await _service.GetPendingAsync());

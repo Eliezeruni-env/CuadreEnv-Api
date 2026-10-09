@@ -8,12 +8,13 @@ using Onion.BussinesLogic.Dtos;
 using Onion.DataAccess.Repositories.Abstract;
 using Onion.Domain.Users;
 using Onion.Common.Models.Pagination;
+using Onion.Common.Authorization;
+using System.Text.Json;
 
 namespace Onion.BussinesLogic.Services.Concrete
 {
     using Microsoft.AspNetCore.Http;
     using Microsoft.Extensions.Configuration;
-    using System.Security.Claims;
 
     public class UserManagementService : IUserManagementService
     {
@@ -23,7 +24,6 @@ namespace Onion.BussinesLogic.Services.Concrete
         private readonly Onion.Common.Services.IEmailService? _emailService;
         private readonly IConfiguration _config;
         private readonly IHttpContextAccessor _httpContextAccessor;
-        private readonly string[] _superUserEmails;
         private readonly ILogger<UserManagementService> _logger;
 
         public UserManagementService(IRepository<User> userRepo, Onion.DataAccess.OnionDbContext db, Onion.Common.Services.ICurrentUserService currentUserService, ILogger<UserManagementService> logger, Onion.Common.Services.IEmailService? emailService = null, IConfiguration? config = null, IHttpContextAccessor? httpContextAccessor = null)
@@ -35,48 +35,74 @@ namespace Onion.BussinesLogic.Services.Concrete
             _config = config ?? throw new ArgumentNullException(nameof(config));
             _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
             _logger = logger;
-            var raw = _config["SuperUsers:Emails"] ?? "admin@cuadre.com";
-            _superUserEmails = raw.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToArray();
         }
 
         public async Task<PagedResult<UserListDto>> GetPagedAsync(int pageNumber, int pageSize, string? q, string? role, bool? active, int? companyId)
         {
             if (!_currentUserService.IsGlobalAdministrator)
+            {
                 companyId = _currentUserService.CompanyId;
+                if (companyId is not > 0)
+                    throw new InvalidOperationException("Tenant company id is required.");
+            }
 
             var qset = _db.Users.AsQueryable();
             if (!string.IsNullOrWhiteSpace(q)) qset = qset.Where(u => (u.FirstName + " " + u.LastName).Contains(q) || u.Email.Contains(q));
             if (!string.IsNullOrWhiteSpace(role)) qset = qset.Where(u => u.Role == role);
             if (active.HasValue) qset = qset.Where(u => u.Active == active.Value);
             if (companyId.HasValue) qset = qset.Where(u => u.CompanyId == companyId.Value);
-            var dtoQuery = qset.Select(u => new UserListDto(
+            var dtoQuery = qset.Select(u => new
+            {
                 u.Id,
-                u.FirstName + " " + u.LastName,
+                FullName = u.FirstName + " " + u.LastName,
                 u.FirstName,
                 u.LastName,
                 u.Email,
                 u.UserName,
                 u.Role,
                 u.CompanyId,
-                (string?)null,
+                CompanyName = (string?)null,
                 u.Active,
                 u.LastLoginAt,
-                 u.IsSuperUser,
-                 u.Address,
-                 u.City,
-                 u.Country,
-                 u.OperatingLocation,
-                 u.IpAddress,
-                 u.Latitude,
-                 u.Longitude,
-                 u.LastLoginIp
-            ));
+                u.IsSuperUser,
+                u.Address,
+                u.City,
+                u.Country,
+                u.OperatingLocation,
+                u.IpAddress,
+                u.Latitude,
+                u.Longitude,
+                u.LastLoginIp,
+                u.AllowedModulesJson
+            });
 
             var paged = await DataAccess.Extensions.PaginationExtensions.ToPagedListAsync(dtoQuery, pageNumber, pageSize);
 
             var result = new PagedResult<UserListDto>
             {
-                Items = paged.Items.ToList(),
+                Items = paged.Items.Select(u => new UserListDto(
+                    u.Id,
+                    u.FullName,
+                    u.FirstName,
+                    u.LastName,
+                    u.Email,
+                    u.UserName,
+                    u.Role,
+                    u.CompanyId,
+                    u.CompanyName,
+                    u.Active,
+                    u.LastLoginAt,
+                    u.IsSuperUser,
+                    u.Address,
+                    u.City,
+                    u.Country,
+                    u.OperatingLocation,
+                    u.IpAddress,
+                    u.Latitude,
+                    u.Longitude,
+                    u.LastLoginIp,
+                    ParseAllowedModules(u.AllowedModulesJson, u.Id)
+                )).ToList(),
                 Total = paged.TotalItemCount,
                 Page = pageNumber,
                 PageSize = pageSize,
@@ -90,6 +116,8 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var u = await _userRepo.GetByIdAsync(id);
             if (u == null) return null;
+            if (!_currentUserService.IsGlobalAdministrator && u.CompanyId != _currentUserService.CompanyId)
+                return null;
             return new UserDetailDto
             {
                 Id = u.Id,
@@ -110,6 +138,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 LastLoginAt = u.LastLoginAt
                 ,
                 IsSuperUser = u.IsSuperUser,
+                AllowedModules = ParseAllowedModules(u.AllowedModulesJson, u.Id),
                 Address = u.Address,
                 City = u.City,
                 Country = u.Country,
@@ -138,6 +167,9 @@ namespace Onion.BussinesLogic.Services.Concrete
             var companyId = _currentUserService.IsGlobalAdministrator
                 ? (req.CompanyId.HasValue && req.CompanyId.Value <= 0 ? null : req.CompanyId)
                 : _currentUserService.CompanyId;
+
+            if (!companyId.HasValue && !_currentUserService.IsGlobalAdministrator)
+                throw new InvalidOperationException("Tenant company id is required.");
 
             if (companyId.HasValue)
             {
@@ -179,11 +211,12 @@ namespace Onion.BussinesLogic.Services.Concrete
                 Role = companyId.HasValue ? requestedRole : "Admin",
                 CompanyId = companyId,
                 PasswordHash = hash,
-                Active = true,
+                AllowedModulesJson = SerializeAllowedModules(req.AllowedModules),
+                Active = req.Active,
                 CreateBy = performedByUserId
                 , Address = req.Address
                 , City = req.City
-                , Country = string.IsNullOrWhiteSpace(req.Country) ? "Rep�blica Dominicana" : req.Country.Trim()
+                , Country = string.IsNullOrWhiteSpace(req.Country) ? "Rep�blica Dominicana" : req.Country.Trim()
                 , OperatingLocation = req.OperatingLocation
                 , IpAddress = req.IpAddress
                 , Latitude = req.Latitude
@@ -216,6 +249,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 TempPasswordSent = false
                 ,
                 IsSuperUser = user.IsSuperUser
+                , AllowedModules = ParseAllowedModules(user.AllowedModulesJson, user.Id)
                 , Address = user.Address
                 , City = user.City
                 , Country = user.Country
@@ -272,9 +306,18 @@ namespace Onion.BussinesLogic.Services.Concrete
                 u.BirthDate = req.BirthDate.Value;
             u.Gender = req.Gender;
             u.Role = req.Role;
+            if (req.AllowedModules is not null)
+                u.AllowedModulesJson = SerializeAllowedModules(req.AllowedModules);
             if (!_currentUserService.IsGlobalAdministrator && u.CompanyId != _currentUserService.CompanyId)
                 throw new InvalidOperationException("User not found");
-            u.CompanyId = _currentUserService.IsGlobalAdministrator ? req.CompanyId : u.CompanyId;
+            if (_currentUserService.IsGlobalAdministrator && req.CompanyId.HasValue && req.CompanyId != u.CompanyId)
+            {
+                var companyExists = await _db.Companies.IgnoreQueryFilters()
+                    .AnyAsync(c => c.Id == req.CompanyId.Value && !c.IsDeleted);
+                if (!companyExists)
+                    throw new InvalidOperationException("The selected company does not exist.");
+                u.CompanyId = req.CompanyId;
+            }
             u.ModificationDate = DateTime.UtcNow;
             u.ModifiedBy = performedByUserId;
             u.Address = req.Address;
@@ -295,11 +338,8 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (u == null) throw new InvalidOperationException("User not found");
             if (!_currentUserService.IsGlobalAdministrator && u.CompanyId != _currentUserService.CompanyId)
                 throw new InvalidOperationException("User not found");
-            // Allow configured super-users to perform actions on themselves
             var currentUserId = _currentUserService.UserId;
-            var currentEmail = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.Email)?.Value ?? _httpContextAccessor.HttpContext?.User?.FindFirst("email")?.Value;
-            var isSuperUser = !string.IsNullOrEmpty(currentEmail) && _superUserEmails.Any(e => string.Equals(e, currentEmail, StringComparison.OrdinalIgnoreCase));
-            if (!isSuperUser && currentUserId.HasValue && currentUserId.Value == id)
+            if (!_currentUserService.IsGlobalAdministrator && currentUserId.HasValue && currentUserId.Value == id)
                 throw new InvalidOperationException("Cannot change your own active status");
             u.Active = active;
             u.ModificationDate = DateTime.UtcNow;
@@ -350,11 +390,8 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (u == null) throw new InvalidOperationException("User not found");
             if (!_currentUserService.IsGlobalAdministrator && u.CompanyId != _currentUserService.CompanyId)
                 throw new InvalidOperationException("User not found");
-            // Allow configured super-users to delete themselves
             var currentUserId = _currentUserService.UserId;
-            var currentEmail = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.Email)?.Value ?? _httpContextAccessor.HttpContext?.User?.FindFirst("email")?.Value;
-            var isSuperUser = !string.IsNullOrEmpty(currentEmail) && _superUserEmails.Any(e => string.Equals(e, currentEmail, StringComparison.OrdinalIgnoreCase));
-            if (!isSuperUser && currentUserId.HasValue && currentUserId.Value == id)
+            if (!_currentUserService.IsGlobalAdministrator && currentUserId.HasValue && currentUserId.Value == id)
                 throw new InvalidOperationException("Cannot delete your own account");
             u.IsDeleted = true;
             u.Active = false;
@@ -366,21 +403,58 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<bool> ExistsEmailAsync(string email, int? excludeId = null)
         {
-            var found = await _userRepo.FindAsync(u => u.Email == email);
-            if (excludeId.HasValue) return found.Any(f => f.Id != excludeId.Value);
+            var normalized = email.Trim().ToLowerInvariant();
+            var found = await _userRepo.FindAsync(u => u.Email.ToLower() == normalized &&
+                (!excludeId.HasValue || u.Id != excludeId.Value));
             return found.Any();
         }
 
         public async Task<bool> ExistsUserNameAsync(string userName, int? excludeId = null)
         {
-            var found = await _userRepo.FindAsync(u => u.UserName == userName);
-            if (excludeId.HasValue) return found.Any(f => f.Id != excludeId.Value);
+            var normalized = userName.Trim().ToLowerInvariant();
+            var found = await _userRepo.FindAsync(u => u.UserName.ToLower() == normalized &&
+                (!excludeId.HasValue || u.Id != excludeId.Value));
             return found.Any();
         }
 
         private string GenerateTemporaryPassword()
         {
             return "Temp#" + Guid.NewGuid().ToString("N").Substring(0, 8);
+        }
+
+        private static string SerializeAllowedModules(IEnumerable<string>? moduleCodes)
+        {
+            var normalized = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var moduleCode in moduleCodes ?? Array.Empty<string>())
+            {
+                if (string.Equals(moduleCode?.Trim(), ModuleCodes.All, StringComparison.Ordinal))
+                    throw new InvalidOperationException("El comodín de acceso total no se puede asignar desde User Management.");
+
+                var module = ModuleCodes.Normalize(moduleCode);
+                if (module is null)
+                    throw new InvalidOperationException($"El módulo '{moduleCode}' no es válido.");
+
+                normalized.Add(module);
+            }
+
+            return JsonSerializer.Serialize(normalized);
+        }
+
+        private List<string> ParseAllowedModules(string? allowedModulesJson, int userId)
+        {
+            if (string.IsNullOrWhiteSpace(allowedModulesJson))
+                return new List<string>();
+
+            try
+            {
+                var modules = JsonSerializer.Deserialize<List<string>>(allowedModulesJson);
+                return ModuleCodes.Normalize(modules).ToList();
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "Invalid AllowedModulesJson for user {UserId}", userId);
+                return new List<string>();
+            }
         }
     }
 }

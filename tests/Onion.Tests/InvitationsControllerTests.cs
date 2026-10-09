@@ -64,6 +64,7 @@ namespace Onion.Tests
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Products.ProductType> ProductTypes => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Inventory.InventoryMovement> InventoryMovements => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Invoices.InvoiceSequence> InvoiceSequences => throw new System.NotImplementedException();
+            public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Invoices.FiscalDocument> FiscalDocuments => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Finance.AccountReceivable> AccountReceivables => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Finance.AccountPayable> AccountPayables => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Billing.SubscriptionPlan> SubscriptionPlans => throw new System.NotImplementedException();

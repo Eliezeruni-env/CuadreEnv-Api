@@ -46,8 +46,7 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var pn = Math.Max(1, pageNumber);
             var ps = Math.Clamp(pageSize, 1, 100);
-            var list = (await _uow.Suppliers.ListAsync()).AsQueryable();
-            return await _paginationService.ToPagedListAsync(list, pn, ps);
+            return await _uow.Suppliers.GetPagedAsync(pn, ps);
         }
 
         public async Task<Supplier?> GetByIdAsync(int id)

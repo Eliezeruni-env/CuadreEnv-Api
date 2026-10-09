@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Onion.Domain.Finance;
 using Onion.BussinesLogic.Services.Abstract;
 using Onion.DataAccess.Repositories.Concrete;
 using Onion.Common.Exceptions;
@@ -14,6 +15,17 @@ namespace Onion.BussinesLogic.Services.Concrete
         private readonly IUnitOfWork _uow;
         private readonly ILogger<SaleService> _logger;
         private readonly Onion.BussinesLogic.Services.Abstract.IPaginationService _paginationService;
+        private readonly Onion.BussinesLogic.Services.Abstract.IFiscalSequenceService? _fiscalSequenceService;
+        private readonly Onion.Common.Services.ICurrentUserService? _currentUserService;
+
+        public SaleService(IUnitOfWork uow, ILogger<SaleService> logger, Onion.BussinesLogic.Services.Abstract.IPaginationService paginationService, Onion.BussinesLogic.Services.Abstract.IFiscalSequenceService fiscalSequenceService, Onion.Common.Services.ICurrentUserService currentUserService)
+        {
+            _uow = uow;
+            _logger = logger;
+            _paginationService = paginationService;
+            _fiscalSequenceService = fiscalSequenceService;
+            _currentUserService = currentUserService;
+        }
 
         public SaleService(IUnitOfWork uow, ILogger<SaleService> logger, Onion.BussinesLogic.Services.Abstract.IPaginationService paginationService)
         {
@@ -31,8 +43,7 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var pn = Math.Max(1, pageNumber);
             var ps = Math.Clamp(pageSize, 1, 100);
-            var list = (await _uow.Sales.ListAsync()).AsQueryable();
-            return await _paginationService.ToPagedListAsync(list, pn, ps);
+            return await _uow.Sales.GetPagedAsync(pn, ps);
         }
 
         public async Task<Sale?> GetByIdAsync(int id)
@@ -43,6 +54,14 @@ namespace Onion.BussinesLogic.Services.Concrete
         public async Task<Sale> CreateAsync(Sale sale)
         {
             if (sale == null) throw new ArgumentNullException(nameof(sale));
+            if (_currentUserService is not null)
+            {
+                if (_currentUserService.CompanyId is not > 0)
+                    throw new CustomException(new Onion.Common.Models.Error { Code = "COMPANY_REQUIRED", Message = "A valid company is required.", Language = "ES" });
+                if (sale.CompanyId <= 0) sale.CompanyId = _currentUserService.CompanyId.Value;
+                if (sale.CompanyId != _currentUserService.CompanyId)
+                    throw new CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "The sale belongs to another company.", Language = "ES" });
+            }
             if (sale.Details == null || sale.Details.Count == 0)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "NO_ITEMS", Message = "Sale must have at least one item", Language = "ES" });
 
@@ -91,7 +110,6 @@ namespace Onion.BussinesLogic.Services.Concrete
                 await _uow.SaveChangesAsync();
                 // Reserve stock for each product first to avoid race conditions
                 var reserved = new List<(int productId, decimal qty, int warehouseId)>();
-                var hasServiceItem = false;
                 try
                 {
                     foreach (var d in sale.Details)
@@ -118,10 +136,6 @@ namespace Onion.BussinesLogic.Services.Concrete
 
                                 reserved.Add((d.ProductId, d.Quantity, 0));
                             }
-                        }
-                        else if (product?.ProductTypeId == 2)
-                        {
-                            hasServiceItem = true;
                         }
                     }
 
@@ -196,37 +210,21 @@ namespace Onion.BussinesLogic.Services.Concrete
                         CashRegisterId = sale.CashRegisterId.Value,
                         Amount = sale.PaidAmount,
                         Description = $"Sale #{sale.Id}",
-                        CompanyId = sale.CompanyId
+                        CompanyId = sale.CompanyId,
+                        CashSessionId = sale.CashSessionId,
+                        Type = CashMovementType.Sale,
+                        Reason = "Sale"
                     };
 
                     await _uow.CashMovements.AddAsync(cashMovement);
                 }
 
-                var fiscalDocument = Onion.Domain.Invoices.FiscalDocument.ForSale(sale.CompanyId, sale.Id);
+                if (_fiscalSequenceService is null)
+                    throw new InvalidOperationException("Fiscal sequence service is not configured.");
+                var ncf = await _fiscalSequenceService.NextFiscalNumberAsync(sale.CompanyId, sale.VoucherType);
+                sale.InvoiceFolio = ncf;
+                var fiscalDocument = Onion.Domain.Invoices.FiscalDocument.ForSale(sale.CompanyId, sale.Id, ncf);
                 await _uow.FiscalDocuments.AddAsync(fiscalDocument);
-
-                // Assign invoice folio (simple sequence per company)
-                try
-                {
-                    var seqList = await _uow.InvoiceSequences.FindAsync(x => x.CompanyId == sale.CompanyId);
-                    var seq = seqList.FirstOrDefault();
-                    if (seq == null)
-                    {
-                        seq = new Onion.Domain.Invoices.InvoiceSequence { CompanyId = sale.CompanyId, LastFolio = 1 };
-                        await _uow.InvoiceSequences.AddAsync(seq);
-                        sale.InvoiceFolio = hasServiceItem ? $"VTA-SERV-{seq.LastFolio:0000}" : seq.LastFolio.ToString();
-                    }
-                    else
-                    {
-                        seq.LastFolio += 1;
-                        _uow.InvoiceSequences.Update(seq);
-                        sale.InvoiceFolio = hasServiceItem ? $"VTA-SERV-{seq.LastFolio:0000}" : seq.LastFolio.ToString();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger?.LogWarning(ex, "Failed to assign invoice folio for sale");
-                }
 
                 await _uow.SaveChangesAsync();
                 await tx.CommitAsync();

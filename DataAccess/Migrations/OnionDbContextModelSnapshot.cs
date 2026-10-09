@@ -722,6 +722,9 @@ namespace Onion.DataAccess.Migrations
                     b.Property<int>("CashRegisterId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("CashSessionId")
+                        .HasColumnType("int");
+
                     b.Property<int>("CompanyId")
                         .HasColumnType("int");
 
@@ -761,11 +764,21 @@ namespace Onion.DataAccess.Migrations
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("rowversion");
 
+                    b.Property<int>("Type")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CompanyId", "CashRegisterId", "RecordedAt");
 
-                    b.ToTable("CashMovements");
+                    b.HasIndex("CompanyId", "CashSessionId", "RecordedAt");
+
+                    b.ToTable("CashMovements", t =>
+                        {
+                            t.HasTrigger("TR_CashMovements_AppendOnly");
+                        });
+
+                    b.HasAnnotation("SqlServer:UseSqlOutputClause", false);
                 });
 
             modelBuilder.Entity("Onion.Domain.CashRegister", b =>
@@ -858,9 +871,18 @@ namespace Onion.DataAccess.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CompanyId", "OpenedByUserId")
+                        .IsUnique()
+                        .HasFilter("[Status] IN (1, 2)");
+
                     b.HasIndex("CompanyId", "Status");
 
-                    b.ToTable("CashRegisters");
+                    b.ToTable("CashRegisters", t =>
+                        {
+                            t.HasTrigger("TR_CashRegisters_ImmutableAfterClose");
+                        });
+
+                    b.HasAnnotation("SqlServer:UseSqlOutputClause", false);
                 });
 
             modelBuilder.Entity("Onion.Domain.CashRegisterPause", b =>
@@ -975,8 +997,18 @@ namespace Onion.DataAccess.Migrations
                     b.Property<bool>("Active")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("AllowNegativeStock")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("BlockSalesIfOverdue")
                         .HasColumnType("bit");
+
+                    b.Property<decimal>("CashToleranceAmount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(50m);
 
                     b.Property<string>("CommercialName")
                         .HasColumnType("nvarchar(max)");
@@ -1472,6 +1504,105 @@ namespace Onion.DataAccess.Migrations
                     b.ToTable("AccountReceivables");
                 });
 
+            modelBuilder.Entity("Onion.Domain.Finance.CashSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("CashRegisterId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CashierUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ClosingDenominationsJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("ClosingStatus")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal?>("DeclaredCards")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("DeclaredCash")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("DeclaredTransfers")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("Difference")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("ExpectedCash")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("OpenedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("OpeningAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("OpeningDenominationsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SupervisorNotes")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("SupervisorUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "CashRegisterId")
+                        .IsUnique()
+                        .HasFilter("[Status] = 1");
+
+                    b.HasIndex("CompanyId", "CashierUserId")
+                        .IsUnique()
+                        .HasFilter("[Status] = 1");
+
+                    b.ToTable("CashSessions");
+                });
+
             modelBuilder.Entity("Onion.Domain.Finance.Installment", b =>
                 {
                     b.Property<int>("Id")
@@ -1573,6 +1704,66 @@ namespace Onion.DataAccess.Migrations
                     b.ToTable("PaymentPlans");
                 });
 
+            modelBuilder.Entity("Onion.Domain.Finance.Taxpayer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("BusinessName")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("CommercialName")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("LastSynchronizedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("RncOrCedula")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RncOrCedula")
+                        .IsUnique();
+
+                    b.ToTable("Taxpayers");
+                });
+
             modelBuilder.Entity("Onion.Domain.Inventory.InventoryMovement", b =>
                 {
                     b.Property<int>("Id")
@@ -1584,12 +1775,21 @@ namespace Onion.DataAccess.Migrations
                     b.Property<bool>("Active")
                         .HasColumnType("bit");
 
+                    b.Property<decimal>("BalanceCost")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("BalanceStock")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("Comment")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("CompanyId")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("CostUnit")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("CreateBy")
                         .IsRequired()
@@ -1764,6 +1964,79 @@ namespace Onion.DataAccess.Migrations
                     b.HasIndex("CompanyId", "Status", "NextAttemptAt");
 
                     b.ToTable("FiscalDocuments");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Invoices.FiscalSequence", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long>("CurrentNumber")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("ExpirationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<long>("FromNumber")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Prefix")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<long>("ToNumber")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("VoucherType")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarningThreshold")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "VoucherType")
+                        .IsUnique();
+
+                    b.HasIndex("CompanyId", "IsActive", "ExpirationDate");
+
+                    b.ToTable("FiscalSequences");
                 });
 
             modelBuilder.Entity("Onion.Domain.Invoices.FiscalSubmissionAudit", b =>
@@ -2077,63 +2350,6 @@ namespace Onion.DataAccess.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Categories");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            Active = true,
-                            CompanyId = 0,
-                            CreateBy = "system",
-                            CreationDate = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "General",
-                            IsDeleted = false,
-                            ModifiedBy = "system"
-                        },
-                        new
-                        {
-                            Id = 2,
-                            Active = true,
-                            CompanyId = 0,
-                            CreateBy = "system",
-                            CreationDate = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Alimentos",
-                            IsDeleted = false,
-                            ModifiedBy = "system"
-                        },
-                        new
-                        {
-                            Id = 3,
-                            Active = true,
-                            CompanyId = 0,
-                            CreateBy = "system",
-                            CreationDate = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Bebidas",
-                            IsDeleted = false,
-                            ModifiedBy = "system"
-                        },
-                        new
-                        {
-                            Id = 4,
-                            Active = true,
-                            CompanyId = 0,
-                            CreateBy = "system",
-                            CreationDate = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Papeler�a",
-                            IsDeleted = false,
-                            ModifiedBy = "system"
-                        },
-                        new
-                        {
-                            Id = 5,
-                            Active = true,
-                            CompanyId = 0,
-                            CreateBy = "system",
-                            CreationDate = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Servicios",
-                            IsDeleted = false,
-                            ModifiedBy = "system"
-                        });
                 });
 
             modelBuilder.Entity("Onion.Domain.Products.Product", b =>
@@ -2270,63 +2486,6 @@ namespace Onion.DataAccess.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("ProductTypes");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            Active = true,
-                            CompanyId = 0,
-                            CreateBy = "system",
-                            CreationDate = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Producto Est�ndar",
-                            IsDeleted = false,
-                            ModifiedBy = "system"
-                        },
-                        new
-                        {
-                            Id = 2,
-                            Active = true,
-                            CompanyId = 0,
-                            CreateBy = "system",
-                            CreationDate = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Servicio",
-                            IsDeleted = false,
-                            ModifiedBy = "system"
-                        },
-                        new
-                        {
-                            Id = 3,
-                            Active = true,
-                            CompanyId = 0,
-                            CreateBy = "system",
-                            CreationDate = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Digital",
-                            IsDeleted = false,
-                            ModifiedBy = "system"
-                        },
-                        new
-                        {
-                            Id = 4,
-                            Active = true,
-                            CompanyId = 0,
-                            CreateBy = "system",
-                            CreationDate = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Combo",
-                            IsDeleted = false,
-                            ModifiedBy = "system"
-                        },
-                        new
-                        {
-                            Id = 5,
-                            Active = true,
-                            CompanyId = 0,
-                            CreateBy = "system",
-                            CreationDate = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Materia Prima",
-                            IsDeleted = false,
-                            ModifiedBy = "system"
-                        });
                 });
 
             modelBuilder.Entity("Onion.Domain.Purchase", b =>
@@ -2529,6 +2688,53 @@ namespace Onion.DataAccess.Migrations
                     b.ToTable("PurchaseOrderReceiptDetails");
                 });
 
+            modelBuilder.Entity("Onion.Domain.Requests.ProcessedRequest", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("RequestPath")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<string>("ResponseJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("StatusCode")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAtUtc");
+
+                    b.HasIndex("CompanyId", "IdempotencyKey", "RequestPath")
+                        .IsUnique();
+
+                    b.ToTable("ProcessedRequests");
+                });
+
             modelBuilder.Entity("Onion.Domain.Return", b =>
                 {
                     b.Property<int>("Id")
@@ -2667,6 +2873,9 @@ namespace Onion.DataAccess.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<decimal>("LegalTip")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<DateTime?>("ModificationDate")
                         .HasColumnType("datetime2");
 
@@ -2697,8 +2906,19 @@ namespace Onion.DataAccess.Migrations
                     b.Property<decimal>("Tax")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal>("TaxRate")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("TaxWithheld")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal>("Total")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("VoucherType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(2);
 
                     b.HasKey("Id");
 
@@ -2889,6 +3109,9 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("Address")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("AllowedModulesJson")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("BirthDate")

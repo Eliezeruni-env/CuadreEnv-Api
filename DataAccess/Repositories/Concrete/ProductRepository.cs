@@ -109,6 +109,10 @@ namespace Onion.DataAccess.Repositories.Concrete
 
         public async Task<PagedList<ProductRow>> GetPagedProductsAsync(FilterPayload filterPayload, CancellationToken ct = default)
         {
+            ArgumentNullException.ThrowIfNull(filterPayload);
+
+            var pageNumber = Math.Max(1, filterPayload.PageNumber);
+            var pageSize = Math.Clamp(filterPayload.PageSize, 1, 100);
             var query = from p in _context.Products
                         select new ProductRow
                         {
@@ -122,7 +126,10 @@ namespace Onion.DataAccess.Repositories.Concrete
                         };
 
             if (!string.IsNullOrWhiteSpace(filterPayload.Description))
-                query = query.Where(p => p.Description.ToLower().Contains(filterPayload.Description.ToLower()));
+            {
+                var description = filterPayload.Description.Trim();
+                query = query.Where(p => p.Description != null && EF.Functions.Like(p.Description, $"%{description}%"));
+            }
 
             if (filterPayload.MinCost.HasValue)
                 query = query.Where(p => p.Cost >= filterPayload.MinCost.Value);
@@ -131,15 +138,15 @@ namespace Onion.DataAccess.Repositories.Concrete
                 query = query.Where(p => p.Cost <= filterPayload.MaxCost.Value);
 
             var totalItemCount = await query.CountAsync(ct);
-            var pageCount = (int)Math.Ceiling(totalItemCount / (double)filterPayload.PageSize);
+            var pageCount = (int)Math.Ceiling(totalItemCount / (double)pageSize);
 
             var items = await query
                 .OrderByDescending(p => p.Id)
-                .Skip((filterPayload.PageNumber - 1) * filterPayload.PageSize)
-                .Take(filterPayload.PageSize)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
                 .ToListAsync(ct);
 
-            return new PagedList<ProductRow>(items, filterPayload.PageSize, pageCount, totalItemCount);
+            return new PagedList<ProductRow>(items, pageSize, pageCount, totalItemCount);
             }
 
         public async Task<IEnumerable<Product>> GetProductsBySqlAsync(decimal minCost)

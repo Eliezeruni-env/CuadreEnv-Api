@@ -69,8 +69,8 @@ namespace Onion.BussinesLogic.Services.Concrete
                 await _db.SaveChangesAsync();
 
                 // Stock reintegration: add stock back to the first available warehouse for the company
-                var warehouses = await _warehouseService.GetAllAsync();
-                var warehouseForCompany = warehouses.FirstOrDefault(w => w.CompanyId == companyId);
+                var warehouses = await _warehouseService.GetAllAsync(companyId);
+                var warehouseForCompany = warehouses.FirstOrDefault();
                 if (warehouseForCompany != null)
                 {
                     var performedBy = _currentUserService?.UserId?.ToString() ?? "system";

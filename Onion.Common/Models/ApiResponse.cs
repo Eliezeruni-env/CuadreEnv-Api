@@ -5,12 +5,12 @@ namespace Onion.Common.Models
         public bool Success { get; set; }
         public T? Data { get; set; }
         public string? Message { get; set; }
-        public IEnumerable<string>? Errors { get; set; }
+        public IEnumerable<string> Errors { get; set; } = Array.Empty<string>();
 
         public static ApiResponse<T> Ok(T data, string? message = null)
-            => new ApiResponse<T> { Success = true, Data = data, Message = message };
+            => new ApiResponse<T> { Success = true, Data = data, Message = message, Errors = Array.Empty<string>() };
 
         public static ApiResponse<T> Fail(string message, IEnumerable<string>? errors = null)
-            => new ApiResponse<T> { Success = false, Message = message, Errors = errors };
+            => new ApiResponse<T> { Success = false, Message = message, Errors = errors ?? Array.Empty<string>() };
     }
 }

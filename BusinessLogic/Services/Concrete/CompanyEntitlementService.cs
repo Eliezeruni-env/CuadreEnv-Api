@@ -4,8 +4,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Onion.Common.Authorization;
 using Onion.Common.Services;
 using Onion.DataAccess;
+using System.Text.Json;
 
 namespace Onion.BussinesLogic.Services.Concrete;
 
@@ -64,13 +66,36 @@ public sealed class CompanyEntitlementService : ICompanyEntitlementService
             var client = _httpClientFactory.CreateClient("Usm");
             try
             {
-                var modules = await client.GetFromJsonAsync<List<EntitlementItem>>($"api/companies/{companyId}/modules", cancellationToken) ?? new();
-                var projects = await client.GetFromJsonAsync<List<EntitlementItem>>($"api/companies/{companyId}/projects", cancellationToken) ?? new();
+                var apiKey = _configuration["Usm:ApiKey"];
+                if (string.IsNullOrWhiteSpace(apiKey))
+                {
+                    _logger.LogError("USM entitlement API key is not configured; denying module access for company {CompanyId}", companyId);
+                    return Empty;
+                }
+
+                using var modulesRequest = new HttpRequestMessage(
+                    HttpMethod.Get,
+                    $"api/internal/companies/{companyId}/modules");
+                modulesRequest.Headers.TryAddWithoutValidation("X-Api-Key", apiKey);
+                using var modulesResponse = await client.SendAsync(modulesRequest, cancellationToken);
+                modulesResponse.EnsureSuccessStatusCode();
+                var modulePayload = await modulesResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+
+                using var projectsRequest = new HttpRequestMessage(
+                    HttpMethod.Get,
+                    $"api/internal/companies/{companyId}/projects");
+                projectsRequest.Headers.TryAddWithoutValidation("X-Api-Key", apiKey);
+                using var projectsResponse = await client.SendAsync(projectsRequest, cancellationToken);
+                projectsResponse.EnsureSuccessStatusCode();
+                var projectPayload = await projectsResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+
+                var modules = ReadModuleEntitlements(modulePayload);
+                var projects = ReadProjectEntitlements(projectPayload);
                 return new CompanyEntitlements(
-                    modules.Where(x => x.Enabled != false).Select(x => x.Code ?? x.Id ?? string.Empty).Where(x => x.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase),
-                    projects.Where(x => x.Enabled != false).Select(x => x.Code ?? x.Id ?? string.Empty).Where(x => x.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase));
+                    ModuleCodes.Normalize(modules).ToHashSet(StringComparer.Ordinal),
+                    projects);
             }
-            catch (HttpRequestException ex)
+            catch (Exception ex) when (ex is HttpRequestException or JsonException)
             {
                 _logger.LogError(ex, "USM entitlement lookup failed for company {CompanyId}; denying module access", companyId);
                 return Empty;
@@ -81,6 +106,117 @@ public sealed class CompanyEntitlementService : ICompanyEntitlementService
             return await LoadLocalAsync(companyId, cancellationToken);
 
         return Empty;
+    }
+
+    private static IReadOnlyCollection<string> ReadModuleEntitlements(JsonElement payload)
+    {
+        var items = FindArray(payload);
+        var modules = new List<string>();
+        foreach (var item in items)
+        {
+            if (item.ValueKind == JsonValueKind.String)
+            {
+                AddModule(modules, item.GetString());
+                continue;
+            }
+
+            if (item.ValueKind != JsonValueKind.Object || TryGetBoolean(item, "enabled", out var enabled) && !enabled)
+                continue;
+
+            AddModule(modules,
+                GetString(item, "code") ??
+                GetString(item, "moduleCode") ??
+                GetString(item, "moduleId") ??
+                GetString(item, "id"));
+        }
+
+        return modules;
+    }
+
+    private static HashSet<string> ReadProjectEntitlements(JsonElement payload)
+    {
+        var data = GetProperty(payload, "data");
+        if (data.ValueKind == JsonValueKind.Object)
+        {
+            var projectIds = GetProperty(data, "projectIds");
+            if (projectIds.ValueKind == JsonValueKind.Array)
+            {
+                return projectIds.EnumerateArray()
+                    .Select(item => item.ValueKind == JsonValueKind.String ? item.GetString() : null)
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Select(value => value!)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
+        return FindArray(payload)
+            .Select(item => item.ValueKind == JsonValueKind.String
+                ? item.GetString()
+                : GetString(item, "projectId") ?? GetString(item, "id"))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<JsonElement> FindArray(JsonElement payload)
+    {
+        if (payload.ValueKind == JsonValueKind.Array)
+            return payload.EnumerateArray().ToArray();
+
+        var data = GetProperty(payload, "data");
+        if (data.ValueKind == JsonValueKind.Array)
+            return data.EnumerateArray().ToArray();
+
+        if (data.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var name in new[] { "items", "modules", "projects" })
+            {
+                var nested = GetProperty(data, name);
+                if (nested.ValueKind == JsonValueKind.Array)
+                    return nested.EnumerateArray().ToArray();
+            }
+        }
+
+        return Array.Empty<JsonElement>();
+    }
+
+    private static JsonElement GetProperty(JsonElement value, string propertyName)
+    {
+        if (value.ValueKind != JsonValueKind.Object)
+            return default;
+
+        foreach (var property in value.EnumerateObject())
+        {
+            if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+                return property.Value;
+        }
+
+        return default;
+    }
+
+    private static string? GetString(JsonElement value, string propertyName)
+    {
+        var property = GetProperty(value, propertyName);
+        return property.ValueKind == JsonValueKind.String ? property.GetString() : null;
+    }
+
+    private static bool TryGetBoolean(JsonElement value, string propertyName, out bool result)
+    {
+        var property = GetProperty(value, propertyName);
+        if (property.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            result = property.GetBoolean();
+            return true;
+        }
+
+        result = false;
+        return false;
+    }
+
+    private static void AddModule(ICollection<string> modules, string? module)
+    {
+        if (!string.IsNullOrWhiteSpace(module))
+            modules.Add(module);
     }
 
     private async Task<CompanyEntitlements> LoadLocalAsync(int companyId, CancellationToken cancellationToken)
@@ -109,5 +245,4 @@ public sealed class CompanyEntitlementService : ICompanyEntitlementService
     }
 
     private static readonly CompanyEntitlements Empty = new(new HashSet<string>(StringComparer.OrdinalIgnoreCase), new HashSet<string>(StringComparer.OrdinalIgnoreCase));
-    private sealed record EntitlementItem(string? Id, string? Code, bool? Enabled);
 }

@@ -115,6 +115,13 @@ namespace Onion.Controllers
 
                     // update or create inventory record
                     var inv = await _uow.Inventories.GetByProductAndWarehouseAsync(line.ProductId, line.WarehouseId);
+                    var product = await _uow.Products.GetByIdAsync(line.ProductId) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "PRODUCT_NOT_FOUND", Message = "Product not found", Language = "EN" });
+                    var currentStock = product.Stock;
+                    var currentCost = product.Cost;
+                    var newStock = currentStock + line.QuantityReceived;
+                    product.Cost = newStock <= 0 ? line.UnitCost : decimal.Round(((currentStock * currentCost) + (line.QuantityReceived * line.UnitCost)) / newStock, 4);
+                    product.Stock = newStock;
+                    _uow.Products.Update(product);
                     if (inv == null)
                     {
                         inv = new Onion.Domain.Warehouses.Inventory { ProductId = line.ProductId, WarehouseId = line.WarehouseId, Quantity = line.QuantityReceived, CompanyId = purchase.CompanyId };
@@ -125,6 +132,20 @@ namespace Onion.Controllers
                         inv.Quantity += line.QuantityReceived;
                         _uow.Inventories.Update(inv);
                     }
+
+                    await _db.InventoryMovements.AddAsync(new Onion.Domain.Inventory.InventoryMovement
+                    {
+                        CompanyId = purchase.CompanyId,
+                        ProductId = line.ProductId,
+                        WarehouseId = line.WarehouseId,
+                        Type = Onion.Domain.Inventory.MovementType.Purchase,
+                        Quantity = line.QuantityReceived,
+                        CostUnit = line.UnitCost,
+                        BalanceStock = newStock,
+                        BalanceCost = product.Cost,
+                        Reference = $"PurchaseReceipt:{dto.PurchaseId}",
+                        Comment = "Purchase receipt weighted-average cost update."
+                    });
 
                     // update purchase detail received qty
                     var pd = purchase.Details.First(d => d.ProductId == line.ProductId);

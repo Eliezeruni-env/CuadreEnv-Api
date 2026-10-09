@@ -12,6 +12,7 @@ namespace Onion.DataAccess.Repositories.Abstract
         Task<T?> GetByIdAsync(int id);
         Task<IEnumerable<T>> FindAsync(Expression<Func<T, bool>> predicate);
         Task<IEnumerable<T>> ListAsync();
+        IQueryable<T> Query() => throw new NotSupportedException("This repository does not expose a query source.");
         // Return a paged list of entities. PageNumber starts at 1.
         Task<Onion.Common.Models.Pagination.PagedList<T>> GetPagedAsync(int pageNumber, int pageSize);
         // Return a paged list from a pre-filtered query (caller can apply filters before paging)

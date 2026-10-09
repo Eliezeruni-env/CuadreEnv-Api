@@ -73,6 +73,8 @@ namespace Onion.DataAccess.Repositories.Concrete
             }
         }
 
+        public IQueryable<T> Query() => _dbSet.AsQueryable();
+
         public async Task<Onion.Common.Models.Pagination.PagedList<T>> GetPagedAsync(int pageNumber, int pageSize)
         {
             if (pageNumber < 1) pageNumber = 1;
@@ -137,8 +139,7 @@ namespace Onion.DataAccess.Repositories.Concrete
             _dbSet.Update(entity);
         }
 
-        private bool HasGlobalTenantBypass() =>
-            _context.IsGlobalTenantAccess || Onion.DataAccess.Tenant.AmbientTenantProvider.BypassTenant;
+        private bool HasGlobalTenantBypass() => _context.IsGlobalTenantAccess;
 
         private bool TenantOwnsEntity(System.Reflection.PropertyInfo companyProp, T entity)
         {

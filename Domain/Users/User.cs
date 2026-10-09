@@ -43,6 +43,7 @@ namespace Onion.Domain.Users
         public decimal? Latitude { get; set; }
         public decimal? Longitude { get; set; }
         public string? LastLoginIp { get; set; }
+        public string? AllowedModulesJson { get; set; }
         // Allow marking a user as super-user (persistent override for management tools)
         public bool IsSuperUser { get; set; } = false;
     }

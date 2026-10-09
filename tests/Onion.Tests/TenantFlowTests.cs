@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using System.IO;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Onion.Common.Services;
 using Onion.Controllers.Middleware;
 using Xunit;
@@ -82,7 +83,9 @@ public class TenantFlowTests
             new Claim("CompanyId", "7"),
             new Claim("isSuperUser", "true")
         }, "test"));
-        var service = new CurrentUserService(new HttpContextAccessor { HttpContext = httpContext });
+        var service = new CurrentUserService(
+            new HttpContextAccessor { HttpContext = httpContext },
+            new ConfigurationBuilder().Build());
 
         Assert.Equal(7, service.CompanyId);
         Assert.True(service.IsGlobalAdministrator);

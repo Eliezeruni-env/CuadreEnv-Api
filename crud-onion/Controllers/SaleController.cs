@@ -9,6 +9,8 @@ using Onion.Common.Authorization;
 using System.Net;
 using System.Net.Mail;
 using System.Text;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 
 namespace Onion.Controllers
 {
@@ -179,13 +181,23 @@ namespace Onion.Controllers
         public async Task<IActionResult> Post([FromBody] Onion.BussinesLogic.Dtos.SaleRequestDto dto)
         {
             var idempotencyKey = Request.Headers.TryGetValue("X-Idempotency-Key", out var ik) ? ik.ToString() : null;
-            if (!string.IsNullOrWhiteSpace(idempotencyKey) && _dbContext != null)
+            if (string.IsNullOrWhiteSpace(idempotencyKey) || !Guid.TryParse(idempotencyKey, out _))
+                return BadRequest(Onion.Common.Models.ApiResponse<object>.Fail("X-Idempotency-Key must be a valid UUID.", new[] { "IDEMPOTENCY_KEY_REQUIRED" }));
+
+            if (_dbContext != null)
             {
+                var now = DateTime.UtcNow;
+                var existingRequest = await _dbContext.ProcessedRequests.AsNoTracking()
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(x => x.CompanyId == (_dbContext.TenantCompanyId ?? 0) && x.IdempotencyKey == idempotencyKey && x.RequestPath == Request.Path && x.ExpiresAtUtc > now);
+                if (existingRequest != null)
+                    return new ContentResult { StatusCode = existingRequest.StatusCode, ContentType = "application/json", Content = existingRequest.ResponseJson };
+
                 var existing = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(
                     _dbContext.Sales, s => s.IdempotencyKey == idempotencyKey && !s.IsDeleted);
                 if (existing != null)
                 {
-                    return Ok(existing);
+                    return Ok(Onion.Common.Models.ApiResponse<object>.Ok(existing, "The request was already processed."));
                 }
             }
             // Map DTO -> domain Sale
@@ -205,7 +217,64 @@ namespace Onion.Controllers
             }
 
             var created = await _service.CreateAsync(sale);
-            return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
+            var response = Onion.Common.Models.ApiResponse<object>.Ok(created, "Sale created successfully.");
+            var responseJson = JsonSerializer.Serialize(response);
+            if (_dbContext != null)
+            {
+                await _dbContext.ProcessedRequests.AddAsync(new Onion.Domain.Requests.ProcessedRequest
+                {
+                    CompanyId = created.CompanyId,
+                    UserId = null,
+                    IdempotencyKey = idempotencyKey,
+                    RequestPath = Request.Path,
+                    StatusCode = StatusCodes.Status201Created,
+                    ResponseJson = responseJson,
+                    ExpiresAtUtc = DateTime.UtcNow.AddHours(72)
+                });
+                await _dbContext.SaveChangesAsync();
+            }
+            return CreatedAtAction(nameof(Get), new { id = created.Id }, response);
+        }
+
+        [HttpPost("/api/v1/pos/sync-outbox")]
+        public async Task<IActionResult> SyncOutbox([FromBody] List<Onion.BussinesLogic.Dtos.SaleRequestDto> requests)
+        {
+            var results = new List<object>();
+            foreach (var request in requests ?? new())
+            {
+                var key = Guid.NewGuid().ToString();
+                if (request is null)
+                {
+                    results.Add(new { success = false, idempotencyKey = key, data = (object?)null, errors = new[] { "Sale request is required." } });
+                    continue;
+                }
+
+                try
+                {
+                    var sale = new Sale
+                    {
+                        CustomerId = request.CustomerId,
+                        Total = request.Total,
+                        PaidAmount = request.PaidAmount,
+                        CashRegisterId = request.CashRegisterId,
+                        CashSessionId = request.CashSessionId,
+                        VoucherType = request.VoucherType,
+                        PaymentType = request.PaymentType,
+                        TaxRate = request.TaxRate,
+                        TaxWithheld = request.TaxWithheld,
+                        LegalTip = request.LegalTip,
+                        IdempotencyKey = key,
+                        Details = request.Details.Select(d => new SaleDetail { ProductId = d.ProductId, Quantity = d.Quantity, UnitPrice = d.UnitPrice, WarehouseId = d.WarehouseId }).ToList()
+                    };
+                    var created = await _service.CreateAsync(sale);
+                    results.Add(new { success = true, idempotencyKey = key, data = created, errors = Array.Empty<string>() });
+                }
+                catch (Exception ex)
+                {
+                    results.Add(new { success = false, idempotencyKey = key, data = (object?)null, errors = new[] { ex.Message } });
+                }
+            }
+            return Ok(Onion.Common.Models.ApiResponse<object>.Ok(results, "Offline batch processed."));
         }
 
         [HttpPut]
@@ -236,9 +305,7 @@ namespace Onion.Controllers
             return NoContent();
         }
 
-        // Cancel a sale (Manager or Admin)
         [HttpPost("{id}/cancel")]
-        [Onion.Common.Authorization.RequireRole(Onion.Common.Authorization.Roles.Admin, Onion.Common.Authorization.Roles.Manager)]
         public async Task<IActionResult> Cancel(int id, [FromBody] CancelRequest req)
         {
             await _service.CancelAsync(id, req.Reason ?? string.Empty);
