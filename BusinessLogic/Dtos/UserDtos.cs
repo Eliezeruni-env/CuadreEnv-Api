@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Onion.BussinesLogic.Dtos
 {
-    public record UserListDto(int Id, string FullName, string FirstName, string LastName, string Email, string UserName, string Role, int? CompanyId, string? CompanyName, bool Active, DateTime? LastLoginAt, bool IsSuperUser, string? Address = null, string? City = null, string? Country = null, string? OperatingLocation = null, string? IpAddress = null, decimal? Latitude = null, decimal? Longitude = null, string? LastLoginIp = null);
+    public record UserListDto(int Id, string FullName, string FirstName, string LastName, string Email, string UserName, string Role, int? CompanyId, string? CompanyName, bool Active, DateTime? LastLoginAt, bool IsSuperUser, string? Address = null, string? City = null, string? Country = null, string? OperatingLocation = null, string? IpAddress = null, decimal? Latitude = null, decimal? Longitude = null, string? LastLoginIp = null, IReadOnlyList<string>? AllowedModules = null);
 
     public class UserDetailDto
     {
@@ -34,6 +34,7 @@ namespace Onion.BussinesLogic.Dtos
         // Indicates whether a temporary password was emailed to the user
         public bool TempPasswordSent { get; set; }
         public bool IsSuperUser { get; set; }
+        public List<string> AllowedModules { get; set; } = new();
         public string? Address { get; set; }
         public string? City { get; set; }
         public string Country { get; set; } = "República Dominicana";
@@ -64,6 +65,7 @@ namespace Onion.BussinesLogic.Dtos
         public string? TemporaryPassword { get; set; }
         public bool SendByEmail { get; set; } = true;
         public bool Active { get; set; } = true;
+        public List<string> AllowedModules { get; set; } = new();
         public string? Address { get; set; }
         public string? City { get; set; }
         public string? Country { get; set; }
@@ -91,6 +93,7 @@ namespace Onion.BussinesLogic.Dtos
         public string Role { get; set; } = "Employee";
         public int? CompanyId { get; set; }
         public bool Active { get; set; }
+        public List<string>? AllowedModules { get; set; }
         public string? Address { get; set; }
         public string? City { get; set; }
         public string? Country { get; set; }

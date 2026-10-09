@@ -9,43 +9,20 @@ public sealed class ModuleAuthorizationConvention : IApplicationModelConvention
     private static readonly IReadOnlyDictionary<string, string> Modules =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["AccountReceivableController"] = "RECEIVABLES",
-            ["AppointmentsController"] = "APPOINTMENTS",
-            ["CategoryController"] = "SALES",
-            ["CompanyController"] = "COMPANY",
-            ["CompanySettingsController"] = "COMPANY",
-            ["CreditsController"] = "RECEIVABLES",
-            ["CreditNoteController"] = "SALES",
-            ["CustomerController"] = "CUSTOMERS",
-            ["DashboardController"] = "REPORTS",
-            ["DeletionApprovalController"] = "AUDIT",
-            ["InvitationsController"] = "COMPANY",
-            ["InventoryController"] = "INVENTORY",
-            ["ManageRequestController"] = "COMPANY",
-            ["MeController"] = "COMPANY",
-            ["PaymentController"] = "SALES",
-            ["ProductController"] = "SALES",
-            ["ProductTypeController"] = "SALES",
-            ["PurchaseController"] = "PURCHASES",
-            ["PurchaseOrderReceiptController"] = "PURCHASES",
-            ["ProyectosController"] = "PROJECTS",
-            ["RoleController"] = "RBAC",
-            ["PermissionController"] = "RBAC",
-            ["ReportsController"] = "REPORTS",
-            ["ReturnController"] = "SALES",
-            ["SubscriptionController"] = "BILLING",
-            ["SupplierController"] = "PURCHASES",
-            ["UserController"] = "USER_MANAGEMENT",
-            ["UserManagementController"] = "USER_MANAGEMENT",
-            ["WarehouseController"] = "INVENTORY",
-            ["WarehouseEntryController"] = "INVENTORY",
-            ["WarehouseOutletController"] = "INVENTORY",
-            ["WarehouseTransferController"] = "INVENTORY",
-            ["PasswordController"] = "USER_MANAGEMENT",
-            ["UmProxyController"] = "COMPANY",
-            ["SeedController"] = "COMPANY",
-            ["SuperUsersController"] = "USER_MANAGEMENT",
-            ["MetricsController"] = "REPORTS"
+            ["AccountReceivableController"] = "receivables", ["CreditsController"] = "receivables",
+            ["AppointmentsController"] = "company", ["CategoryController"] = "sales", ["CompanyController"] = "company",
+            ["CompanySettingsController"] = "company", ["CreditNoteController"] = "sales", ["CustomerController"] = "customers",
+            ["DashboardController"] = "reports", ["DeletionApprovalController"] = "audit", ["InvitationsController"] = "company",
+            ["InventoryController"] = "inventory", ["ManageRequestController"] = "company", ["MeController"] = "company",
+            ["PaymentController"] = "sales", ["ProductController"] = "sales", ["ProductTypeController"] = "sales",
+            ["PurchaseController"] = "purchases", ["PurchaseOrderReceiptController"] = "purchases", ["ProyectosController"] = "company",
+            ["RoleController"] = "company", ["PermissionController"] = "company", ["ReportsController"] = "reports",
+            ["ReturnController"] = "sales", ["SubscriptionController"] = "billing", ["SupplierController"] = "purchases",
+            ["UserController"] = "company", ["UserManagementController"] = "company",
+            ["WarehouseEntryController"] = "inventory", ["WarehouseOutletController"] = "inventory", ["WarehouseTransferController"] = "inventory",
+            ["PasswordController"] = "company", ["UmProxyController"] = "company", ["SuperUsersController"] = "company", ["MetricsController"] = "reports",
+            ["CashRegisterController"] = "cashregister", ["CashMovementController"] = "cashregister", ["CajaController"] = "cashregister", ["CashSessionController"] = "cashregister",
+            ["SaleController"] = "sales", ["TaxpayerController"] = "company", ["FiscalSequenceController"] = "billing", ["DgiiReportsController"] = "reports"
         };
 
     public void Apply(ApplicationModel application)
@@ -61,7 +38,7 @@ public sealed class ModuleAuthorizationConvention : IApplicationModelConvention
                 continue;
 
             var controllerName = controller.ControllerType.Name;
-            if (controllerName is "AuthController" or "ClerkWebhookController" or "WeatherForecastController" ||
+            if (controllerName is "AuthController" or "ClerkWebhookController" or "WeatherForecastController" or "WarehouseController" ||
                 controllerName.StartsWith("Internal", StringComparison.OrdinalIgnoreCase))
                 continue;
 

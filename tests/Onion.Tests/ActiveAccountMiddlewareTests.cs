@@ -2,6 +2,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Caching.Memory;
 using Onion.BussinesLogic.Services.Abstract;
 using Onion.Middleware;
 using System.Security.Claims;
@@ -26,7 +27,7 @@ public sealed class ActiveAccountMiddlewareTests
         {
             nextCalled = true;
             return Task.CompletedTask;
-        });
+        }, new MemoryCache(new MemoryCacheOptions()));
 
         await middleware.InvokeAsync(context, new StubAccountStatusService(false));
 

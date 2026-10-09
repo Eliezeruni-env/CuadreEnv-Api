@@ -305,9 +305,7 @@ namespace Onion.Controllers
             return NoContent();
         }
 
-        // Cancel a sale (Manager or Admin)
         [HttpPost("{id}/cancel")]
-        [Onion.Common.Authorization.RequireRole(Onion.Common.Authorization.Roles.Admin, Onion.Common.Authorization.Roles.Manager)]
         public async Task<IActionResult> Cancel(int id, [FromBody] CancelRequest req)
         {
             await _service.CancelAsync(id, req.Reason ?? string.Empty);

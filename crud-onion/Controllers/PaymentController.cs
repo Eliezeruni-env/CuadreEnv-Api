@@ -5,6 +5,7 @@ using Onion.Common.Services;
 using Onion.Common.Exceptions;
 using Onion.Common.Enums;
 using Onion.BussinesLogic.Dtos;
+using System.Security.Claims;
 
 namespace Onion.Controllers
 {
@@ -29,7 +30,7 @@ namespace Onion.Controllers
                 return BadRequest(new { code = "PAYMENT_TARGET_REQUIRED", message = "A sale, receivable, or payable target is required" });
 
             var method = Enum.TryParse<PaymentMethod>(request.Method, true, out var parsed) ? parsed : PaymentMethod.OTHER;
-            var companyId = request.CompanyId;
+            if (!TryGetCompanyId(out var companyId)) return Forbid();
             var payment = new Payment
             {
                 SaleId = request.SaleId,
@@ -97,12 +98,15 @@ namespace Onion.Controllers
         {
             var item = await _uow.Payments.GetByIdAsync(id);
             if (item == null) return NotFound();
+            if (!TryGetCompanyId(out var companyId) || item.CompanyId != companyId) return NotFound();
             return Ok(item);
         }
 
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] Payment payment)
         {
+            if (!TryGetCompanyId(out var companyId)) return Forbid();
+            payment.CompanyId = companyId;
             await _uow.Payments.AddAsync(payment);
             await _uow.SaveChangesAsync();
             return CreatedAtAction(nameof(Get), new { id = payment.Id }, payment);
@@ -111,6 +115,10 @@ namespace Onion.Controllers
         [HttpPut]
         public async Task<IActionResult> Put([FromBody] Payment payment)
         {
+            if (!TryGetCompanyId(out var companyId)) return Forbid();
+            var existing = await _uow.Payments.GetByIdAsync(payment.Id);
+            if (existing == null || existing.CompanyId != companyId) return NotFound();
+            payment.CompanyId = companyId;
             _uow.Payments.Update(payment);
             await _uow.SaveChangesAsync();
             return NoContent();
@@ -121,9 +129,13 @@ namespace Onion.Controllers
         {
             var existing = await _uow.Payments.GetByIdAsync(id);
             if (existing == null) return NotFound();
+            if (!TryGetCompanyId(out var companyId) || existing.CompanyId != companyId) return NotFound();
             _uow.Payments.Remove(existing);
             await _uow.SaveChangesAsync();
             return NoContent();
         }
+
+        private bool TryGetCompanyId(out int companyId) =>
+            int.TryParse(User.FindFirst("companyId")?.Value ?? User.FindFirst("CompanyId")?.Value, out companyId) && companyId > 0;
     }
 }

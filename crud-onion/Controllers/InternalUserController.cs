@@ -5,6 +5,8 @@ using Onion.Domain.Users;
 using System.Threading.Tasks;
 using System.Linq;
 using System;
+using Microsoft.EntityFrameworkCore;
+using Onion.Common.Authorization;
 
 namespace Onion.Controllers
 {
@@ -13,12 +15,14 @@ namespace Onion.Controllers
     public class InternalUserController : ControllerBase
     {
         private readonly IUnitOfWork _uow;
+        private readonly Onion.DataAccess.OnionDbContext _db;
         private readonly IUserService _userService;
         private readonly IAuthService _authService;
 
-        public InternalUserController(IUnitOfWork uow, IUserService userService, IAuthService authService)
+        public InternalUserController(IUnitOfWork uow, Onion.DataAccess.OnionDbContext db, IUserService userService, IAuthService authService)
         {
             _uow = uow;
+            _db = db;
             _userService = userService;
             _authService = authService;
         }
@@ -81,6 +85,8 @@ namespace Onion.Controllers
                     lastName = u.LastName,
                     companyId = u.CompanyId,
                     role = u.Role,
+                    isSuperUser = u.IsSuperUser,
+                    allowedModules = ModuleCodes.FromClaimPreservingIds(u.AllowedModulesJson),
                     accessStatus = (u.Active && !u.IsDeleted) ? "Active" : "Blocked"
                 }),
                 pageNumber,
@@ -106,6 +112,8 @@ namespace Onion.Controllers
                 lastName = user.LastName,
                 companyId = user.CompanyId,
                 role = user.Role,
+                isSuperUser = user.IsSuperUser,
+                allowedModules = ModuleCodes.FromClaimPreservingIds(user.AllowedModulesJson),
                 accessStatus = (user.Active && !user.IsDeleted) ? "Active" : "Blocked",
                 subscriptions = subscriptions.Select(s => new {
                     subscriptionId = s.Id,
@@ -122,19 +130,25 @@ namespace Onion.Controllers
         {
             if (string.IsNullOrWhiteSpace(userIdStr)) return null;
 
-            if (userIdStr.StartsWith("um-"))
+            var normalizedId = userIdStr.Trim();
+
+            // USM may send either the local SaaS id or the external id. Internal
+            // calls are already protected by InternalApiAuthMiddleware, so do not
+            // apply the current request tenant filter while resolving the user.
+            // Prefer the external id first because it can also be numeric.
+            var byExternalId = await _db.Users
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(u => u.Identification == normalizedId);
+            if (byExternalId != null) return byExternalId;
+
+            if (int.TryParse(normalizedId, out var id))
             {
-                var users = await _uow.Users.FindAsync(u => u.Identification == userIdStr);
-                return users.FirstOrDefault();
+                return await _db.Users
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(u => u.Id == id);
             }
 
-            if (int.TryParse(userIdStr, out var id))
-            {
-                return await _uow.Users.GetByIdAsync(id);
-            }
-
-            var byIdent = await _uow.Users.FindAsync(u => u.Identification == userIdStr);
-            return byIdent.FirstOrDefault();
+            return null;
         }
 
         // 1. Create user

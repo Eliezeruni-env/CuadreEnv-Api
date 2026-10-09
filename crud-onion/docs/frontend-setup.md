@@ -19,7 +19,7 @@ Option A — Visual Studio / IIS Express (HTTPS)
 - (Optional) Add a proxy for local development to avoid CORS and cert issues:
   // proxy.conf.json
   {
-	"/auth": {
+	"/v1": {
 	  "target": "https://localhost:44324",
 	  "secure": false,
 	  "changeOrigin": true,
@@ -36,7 +36,7 @@ Option A — Visual Studio / IIS Express (HTTPS)
   ng serve --proxy-config proxy.conf.json
 
 3. Backend CORS
-- Program.cs already includes the common IIS Express origins (https://localhost:44324). Ensure app.UseCors("DefaultCors") is called before authentication/authorization.
+- Program.cs includes the local FE origins and calls app.UseCors("DefaultCors") before authentication/authorization.
 
 Option B — Run API with Kestrel HTTP on port 8080
 
@@ -56,7 +56,7 @@ Option B — Run API with Kestrel HTTP on port 8080
 
 - Optional proxy.conf.json for Angular:
   {
-	"/auth": {
+	"/v1": {
 	  "target": "http://localhost:8080",
 	  "secure": false,
 	  "changeOrigin": true
@@ -69,7 +69,7 @@ Option B — Run API with Kestrel HTTP on port 8080
   }
 
 3. Backend CORS
-- Program.cs allows http://localhost:8080 and http://localhost:5160; ensure app.UseCors("DefaultCors") runs before authentication.
+- Program.cs allows the documented local origins; ensure app.UseCors("DefaultCors") runs before authentication.
 
 Quick test commands (PowerShell)
 
@@ -79,10 +79,10 @@ dotnet run --project crud-onion\crud-onion.csproj
 
 # In another shell test login
 $body = @{ email = 'test@admin.com'; password = '123456'; deviceId = 'web-browser' } | ConvertTo-Json
-Invoke-RestMethod -Uri 'http://localhost:8080/auth/login' -Method Post -ContentType 'application/json' -Body $body
+Invoke-RestMethod -Uri 'http://localhost:8080/v1/auth/login' -Method Post -ContentType 'application/json' -Body $body
 
 # If using IIS Express https
-Invoke-RestMethod -Uri 'https://localhost:44324/auth/login' -Method Post -ContentType 'application/json' -Body $body -SkipCertificateCheck
+Invoke-RestMethod -Uri 'https://localhost:44324/v1/auth/login' -Method Post -ContentType 'application/json' -Body $body -SkipCertificateCheck
 
 Troubleshooting
 - If you get net::ERR_CONNECTION_REFUSED, confirm the backend is running and listening on the port (netstat -ano | Select-String ':8080|:44324').

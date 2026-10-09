@@ -8,6 +8,8 @@ using Onion.BussinesLogic.Dtos;
 using Onion.DataAccess.Repositories.Abstract;
 using Onion.Domain.Users;
 using Onion.Common.Models.Pagination;
+using Onion.Common.Authorization;
+using System.Text.Json;
 
 namespace Onion.BussinesLogic.Services.Concrete
 {
@@ -38,41 +40,69 @@ namespace Onion.BussinesLogic.Services.Concrete
         public async Task<PagedResult<UserListDto>> GetPagedAsync(int pageNumber, int pageSize, string? q, string? role, bool? active, int? companyId)
         {
             if (!_currentUserService.IsGlobalAdministrator)
+            {
                 companyId = _currentUserService.CompanyId;
+                if (companyId is not > 0)
+                    throw new InvalidOperationException("Tenant company id is required.");
+            }
 
             var qset = _db.Users.AsQueryable();
             if (!string.IsNullOrWhiteSpace(q)) qset = qset.Where(u => (u.FirstName + " " + u.LastName).Contains(q) || u.Email.Contains(q));
             if (!string.IsNullOrWhiteSpace(role)) qset = qset.Where(u => u.Role == role);
             if (active.HasValue) qset = qset.Where(u => u.Active == active.Value);
             if (companyId.HasValue) qset = qset.Where(u => u.CompanyId == companyId.Value);
-            var dtoQuery = qset.Select(u => new UserListDto(
+            var dtoQuery = qset.Select(u => new
+            {
                 u.Id,
-                u.FirstName + " " + u.LastName,
+                FullName = u.FirstName + " " + u.LastName,
                 u.FirstName,
                 u.LastName,
                 u.Email,
                 u.UserName,
                 u.Role,
                 u.CompanyId,
-                (string?)null,
+                CompanyName = (string?)null,
                 u.Active,
                 u.LastLoginAt,
-                 u.IsSuperUser,
-                 u.Address,
-                 u.City,
-                 u.Country,
-                 u.OperatingLocation,
-                 u.IpAddress,
-                 u.Latitude,
-                 u.Longitude,
-                 u.LastLoginIp
-            ));
+                u.IsSuperUser,
+                u.Address,
+                u.City,
+                u.Country,
+                u.OperatingLocation,
+                u.IpAddress,
+                u.Latitude,
+                u.Longitude,
+                u.LastLoginIp,
+                u.AllowedModulesJson
+            });
 
             var paged = await DataAccess.Extensions.PaginationExtensions.ToPagedListAsync(dtoQuery, pageNumber, pageSize);
 
             var result = new PagedResult<UserListDto>
             {
-                Items = paged.Items.ToList(),
+                Items = paged.Items.Select(u => new UserListDto(
+                    u.Id,
+                    u.FullName,
+                    u.FirstName,
+                    u.LastName,
+                    u.Email,
+                    u.UserName,
+                    u.Role,
+                    u.CompanyId,
+                    u.CompanyName,
+                    u.Active,
+                    u.LastLoginAt,
+                    u.IsSuperUser,
+                    u.Address,
+                    u.City,
+                    u.Country,
+                    u.OperatingLocation,
+                    u.IpAddress,
+                    u.Latitude,
+                    u.Longitude,
+                    u.LastLoginIp,
+                    ParseAllowedModules(u.AllowedModulesJson, u.Id)
+                )).ToList(),
                 Total = paged.TotalItemCount,
                 Page = pageNumber,
                 PageSize = pageSize,
@@ -86,6 +116,8 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var u = await _userRepo.GetByIdAsync(id);
             if (u == null) return null;
+            if (!_currentUserService.IsGlobalAdministrator && u.CompanyId != _currentUserService.CompanyId)
+                return null;
             return new UserDetailDto
             {
                 Id = u.Id,
@@ -106,6 +138,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 LastLoginAt = u.LastLoginAt
                 ,
                 IsSuperUser = u.IsSuperUser,
+                AllowedModules = ParseAllowedModules(u.AllowedModulesJson, u.Id),
                 Address = u.Address,
                 City = u.City,
                 Country = u.Country,
@@ -178,11 +211,12 @@ namespace Onion.BussinesLogic.Services.Concrete
                 Role = companyId.HasValue ? requestedRole : "Admin",
                 CompanyId = companyId,
                 PasswordHash = hash,
+                AllowedModulesJson = SerializeAllowedModules(req.AllowedModules),
                 Active = req.Active,
                 CreateBy = performedByUserId
                 , Address = req.Address
                 , City = req.City
-                , Country = string.IsNullOrWhiteSpace(req.Country) ? "Rep�blica Dominicana" : req.Country.Trim()
+                , Country = string.IsNullOrWhiteSpace(req.Country) ? "Rep�blica Dominicana" : req.Country.Trim()
                 , OperatingLocation = req.OperatingLocation
                 , IpAddress = req.IpAddress
                 , Latitude = req.Latitude
@@ -215,6 +249,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 TempPasswordSent = false
                 ,
                 IsSuperUser = user.IsSuperUser
+                , AllowedModules = ParseAllowedModules(user.AllowedModulesJson, user.Id)
                 , Address = user.Address
                 , City = user.City
                 , Country = user.Country
@@ -271,6 +306,8 @@ namespace Onion.BussinesLogic.Services.Concrete
                 u.BirthDate = req.BirthDate.Value;
             u.Gender = req.Gender;
             u.Role = req.Role;
+            if (req.AllowedModules is not null)
+                u.AllowedModulesJson = SerializeAllowedModules(req.AllowedModules);
             if (!_currentUserService.IsGlobalAdministrator && u.CompanyId != _currentUserService.CompanyId)
                 throw new InvalidOperationException("User not found");
             if (_currentUserService.IsGlobalAdministrator && req.CompanyId.HasValue && req.CompanyId != u.CompanyId)
@@ -383,6 +420,41 @@ namespace Onion.BussinesLogic.Services.Concrete
         private string GenerateTemporaryPassword()
         {
             return "Temp#" + Guid.NewGuid().ToString("N").Substring(0, 8);
+        }
+
+        private static string SerializeAllowedModules(IEnumerable<string>? moduleCodes)
+        {
+            var normalized = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var moduleCode in moduleCodes ?? Array.Empty<string>())
+            {
+                if (string.Equals(moduleCode?.Trim(), ModuleCodes.All, StringComparison.Ordinal))
+                    throw new InvalidOperationException("El comodín de acceso total no se puede asignar desde User Management.");
+
+                var module = ModuleCodes.Normalize(moduleCode);
+                if (module is null)
+                    throw new InvalidOperationException($"El módulo '{moduleCode}' no es válido.");
+
+                normalized.Add(module);
+            }
+
+            return JsonSerializer.Serialize(normalized);
+        }
+
+        private List<string> ParseAllowedModules(string? allowedModulesJson, int userId)
+        {
+            if (string.IsNullOrWhiteSpace(allowedModulesJson))
+                return new List<string>();
+
+            try
+            {
+                var modules = JsonSerializer.Deserialize<List<string>>(allowedModulesJson);
+                return ModuleCodes.Normalize(modules).ToList();
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "Invalid AllowedModulesJson for user {UserId}", userId);
+                return new List<string>();
+            }
         }
     }
 }

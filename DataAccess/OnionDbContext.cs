@@ -307,24 +307,6 @@ namespace Onion.DataAccess
             modelBuilder.Entity<Onion.Domain.CreditNote>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
             modelBuilder.Entity<Onion.Domain.CreditNoteDetail>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
-            // Seed default product types to allow FE to create products referencing common types
-            // Use fixed seed CreationDate values to avoid non-deterministic migrations
-            var seedDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-            modelBuilder.Entity<Onion.Domain.Products.ProductType>().HasData(
-                new { Id = 1, Description = "Producto Est�ndar", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" },
-                new { Id = 2, Description = "Servicio", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" },
-                new { Id = 3, Description = "Digital", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" },
-                new { Id = 4, Description = "Combo", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" },
-                new { Id = 5, Description = "Materia Prima", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" }
-            );
-            // Seed default categories so FE has values to choose from
-            modelBuilder.Entity<Onion.Domain.Products.Category>().HasData(
-                new { Id = 1, Description = "General", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" },
-                new { Id = 2, Description = "Alimentos", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" },
-                new { Id = 3, Description = "Bebidas", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" },
-                new { Id = 4, Description = "Papeler�a", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" },
-                new { Id = 5, Description = "Servicios", CompanyId = 0, CreationDate = seedDate, Active = true, IsDeleted = false, ModificationDate = (DateTime?)null, CreateBy = "system", ModifiedBy = "system" }
-            );
             modelBuilder.Entity<Customer>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
             modelBuilder.Entity<Supplier>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
             modelBuilder.Entity<Purchase>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);

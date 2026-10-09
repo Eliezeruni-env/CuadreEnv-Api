@@ -8,6 +8,7 @@ using Onion.DataAccess.Repositories.Abstract;
 using Onion.DataAccess.Repositories.Concrete;
 using Onion.DataAccess.Repositories.Concrete;
 using Onion.Domain.Warehouses;
+using Microsoft.EntityFrameworkCore;
 
 namespace Onion.BussinesLogic.Services.Concrete
 {
@@ -91,17 +92,21 @@ namespace Onion.BussinesLogic.Services.Concrete
             return new WarehouseDto(w.Id, w.Name, w.CompanyId);
         }
 
-        public async Task<IEnumerable<WarehouseDto>> GetAllAsync()
+        public async Task<IEnumerable<WarehouseDto>> GetAllAsync(int companyId)
         {
-            var list = await _uow.Warehouses.ListAsync();
-            return list.Select(w => new WarehouseDto(w.Id, w.Name, w.CompanyId));
+            return await _uow.Warehouses.Query()
+                .Where(w => w.CompanyId == companyId)
+                .Select(w => new WarehouseDto(w.Id, w.Name, w.CompanyId))
+                .ToListAsync();
         }
 
-        public async Task<Onion.Common.Models.Pagination.PagedList<WarehouseDto>> GetPagedAsync(int pageNumber, int pageSize)
+        public async Task<Onion.Common.Models.Pagination.PagedList<WarehouseDto>> GetPagedAsync(int pageNumber, int pageSize, int companyId)
         {
             var pn = Math.Max(1, pageNumber);
             var ps = Math.Clamp(pageSize, 1, 100);
-            var list = _uow.Warehouses.Query().Select(w => new WarehouseDto(w.Id, w.Name, w.CompanyId));
+            var list = _uow.Warehouses.Query()
+                .Where(w => w.CompanyId == companyId)
+                .Select(w => new WarehouseDto(w.Id, w.Name, w.CompanyId));
             return await _paginationService.ToPagedListAsync(list, pn, ps);
         }
 

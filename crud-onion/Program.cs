@@ -20,12 +20,6 @@ var connectionString = builder.Configuration.GetConnectionString("OnionCrud");
 if (string.IsNullOrWhiteSpace(connectionString) && builder.Environment.IsProduction())
     throw new InvalidOperationException("ConnectionStrings:OnionCrud must be configured before starting in Production.");
 
-// Ensure the local HTTP API is available on the port consumed by Angular.
-// Allow an explicit ASPNETCORE_URLS/PORT override for hosting scenarios.
-var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
-var urls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS") ?? $"http://localhost:{port}";
-builder.WebHost.UseUrls(urls);
-
 builder.Services.AddSingleton<Onion.Common.Services.IGlobalizationService, Onion.Common.Services.GlobalizationService>();
 builder.Services.AddControllers(options =>
     {
@@ -156,6 +150,22 @@ builder.Services.AddAuthentication(options =>
     {
         options.SaveToken = true;
         options.MapInboundClaims = false;
+         options.Events = new JwtBearerEvents
+         {
+             OnMessageReceived = context =>
+             {
+                 var accessToken = context.Request.Query["access_token"];
+                 var requestPath = context.HttpContext.Request.Path;
+
+                 if (!string.IsNullOrEmpty(accessToken) &&
+                     requestPath.StartsWithSegments("/hubs"))
+                 {
+                     context.Token = accessToken;
+                 }
+
+                 return Task.CompletedTask;
+             }
+         };
          var jwtIssuer = builder.Configuration["Jwt:Issuer"];
          var jwtAudience = builder.Configuration["Jwt:Audience"];
          options.TokenValidationParameters = new TokenValidationParameters
@@ -223,7 +233,10 @@ options.AddPolicy("DefaultCors", policy =>
     {
         policy.WithOrigins(
             "http://localhost:4200",
+            "http://localhost:3000",
+            "http://localhost:5173",
             "http://localhost:8080",
+            "http://localhost:5160",
             "https://localhost:44324",
             "https://localhost:7060")
               .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
@@ -247,6 +260,7 @@ app.UseStaticFiles();
 
 app.MapHealthChecks("/hc").AllowAnonymous();
 app.MapGet("/", () => Results.Ok(new { service = "Onion API", status = "ok" })).AllowAnonymous();
+app.MapGet("/v1", () => Results.Ok(new { service = "Onion API", version = "v1", status = "ok" })).AllowAnonymous();
 
 // Swagger is public in local development and must be available before the
 // global authentication/authorization middleware, which requires a JWT.
@@ -298,15 +312,6 @@ if (builder.Configuration.GetValue<bool>("ApplyMigrationsOnStartup"))
         var logger = app.Services.GetRequiredService<ILogger<Program>>();
         logger.LogError(ex, "Failed to apply EF migrations on startup. Startup will continue without applying migrations.");
     }
-}
-
-// Optional demo data seeding when enabled explicitly via configuration
-if (builder.Configuration.GetValue<bool>("RunDemoSeedOnStartup"))
-{
-    using var scope = app.Services.CreateScope();
-    var services = scope.ServiceProvider;
-    // Run idempotent demo seeder
-    await Onion.DataAccess.Seed.DemoSeeder.SeedAsync(services);
 }
 
 app.Run();

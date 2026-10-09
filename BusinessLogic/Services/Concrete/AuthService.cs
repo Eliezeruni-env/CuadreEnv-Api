@@ -10,8 +10,13 @@ using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Hosting;
 using System.Collections.Generic;
+using System.Linq;
 using Onion.BussinesLogic.Dtos;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Security.Claims;
 
 // BCrypt.Net-Next required (install package in BusinessLogic project)
 namespace Onion.BussinesLogic.Services.Concrete
@@ -28,8 +33,10 @@ namespace Onion.BussinesLogic.Services.Concrete
         private readonly TimeSpan _revokedRetention;
         private readonly IHostEnvironment _env;
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly Onion.DataAccess.OnionDbContext _db;
 
-        public AuthService(IUnitOfWork uow, IConfiguration config, Microsoft.Extensions.Logging.ILogger<AuthService> logger, IUserService userService, ICompanyService companyService, IHostEnvironment env, IHttpContextAccessor httpContextAccessor)
+        public AuthService(IUnitOfWork uow, IConfiguration config, Microsoft.Extensions.Logging.ILogger<AuthService> logger, IUserService userService, ICompanyService companyService, IHostEnvironment env, IHttpContextAccessor httpContextAccessor, IHttpClientFactory httpClientFactory, Onion.DataAccess.OnionDbContext db)
         {
             _uow = uow ?? throw new ArgumentNullException(nameof(uow));
             _config = config ?? throw new ArgumentNullException(nameof(config));
@@ -38,6 +45,8 @@ namespace Onion.BussinesLogic.Services.Concrete
             _companyService = companyService ?? throw new ArgumentNullException(nameof(companyService));
             _env = env ?? throw new ArgumentNullException(nameof(env));
             _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
+            _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
+            _db = db ?? throw new ArgumentNullException(nameof(db));
 
             // Load token lifetimes from configuration (environment variables recommended)
             // Jwt:AccessTokenLifetimeMinutes (int) - default 30
@@ -119,7 +128,7 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             // Do not return password hash to callers
             created.PasswordHash = string.Empty;
-            return new UserResponseDto(created.Id, created.Email ?? string.Empty);
+            return ToUserResponse(created, new[] { "*" });
         }
 
         public async Task<TokenResponseDto> LoginAsync(LoginRequestDto request)
@@ -212,8 +221,10 @@ namespace Onion.BussinesLogic.Services.Concrete
             await _uow.SaveChangesAsync();
 
             _logger?.LogInformation("User {Email} (Id: {Id}) logged in successfully", normalizedEmail, user.Id);
-            var (access, refresh) = await LoginWithTokensAsync(user, request.DeviceId);
-            return new TokenResponseDto(access, refresh);
+            _ = ReportLoginToUsmAsync(user);
+            var modules = await GetAllowedModulesAsync(user);
+            var (access, refresh) = await LoginWithTokensAsync(user, request.DeviceId, modules);
+            return new TokenResponseDto(access, refresh, ToUserResponse(user, modules));
         }
 
         private string GetClientIp()
@@ -227,14 +238,18 @@ namespace Onion.BussinesLogic.Services.Concrete
         }
 
         // New methods for tokens
-        public async Task<(string accessToken, string refreshToken)> LoginWithTokensAsync(User user, string? deviceId = null)
+        public async Task<(string accessToken, string refreshToken)> LoginWithTokensAsync(
+            User user,
+            string? deviceId = null,
+            IReadOnlyCollection<string>? modules = null)
         {
             if (user == null) throw new ArgumentNullException(nameof(user));
 
             // Cleanup old revoked tokens on login activity to keep table bounded
             await CleanupExpiredRevokedTokensAsync();
 
-            var access = GenerateJwtToken(user, deviceId);
+            modules ??= await GetAllowedModulesAsync(user);
+            var access = GenerateJwtToken(user, deviceId, modules);
             var refresh = GenerateRefreshToken();
 
             // Ensure device id exists
@@ -312,7 +327,8 @@ namespace Onion.BussinesLogic.Services.Concrete
             _uow.RefreshTokens.Update(refresh);
 
             // Issue new pair and carry device id forward
-            var newAccess = GenerateJwtToken(user, refresh.DeviceId);
+            var modules = await GetAllowedModulesAsync(user);
+            var newAccess = GenerateJwtToken(user, refresh.DeviceId, modules);
 
             var newRt = new Onion.Domain.Users.RefreshToken
             {
@@ -328,7 +344,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             await _uow.RefreshTokens.AddAsync(newRt);
             await _uow.SaveChangesAsync();
 
-            return new TokenResponseDto(newAccess, newRefresh);
+            return new TokenResponseDto(newAccess, newRefresh, ToUserResponse(user, modules));
         }
 
         public async Task RevokeTokenAsync(RevokeRequestDto request)
@@ -365,8 +381,9 @@ namespace Onion.BussinesLogic.Services.Concrete
         public async Task<TokenResponseDto> IssueTokensForUserAsync(int userId, string? deviceId = null)
         {
             var user = await _uow.Users.GetByIdAsync(userId) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
-            var (access, refresh) = await LoginWithTokensAsync(user, deviceId);
-            return new TokenResponseDto(access, refresh);
+            var modules = await GetAllowedModulesAsync(user);
+            var (access, refresh) = await LoginWithTokensAsync(user, deviceId, modules);
+            return new TokenResponseDto(access, refresh, ToUserResponse(user, modules));
         }
 
         public async Task<IEnumerable<Onion.BussinesLogic.Dtos.SessionDto>> ListSessionsAsync(int userId)
@@ -443,7 +460,64 @@ namespace Onion.BussinesLogic.Services.Concrete
             return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
         }
 
-        private string GenerateJwtToken(User user, string? deviceId = null)
+        private async Task ReportLoginToUsmAsync(User user)
+        {
+            try
+            {
+                var httpContext = _httpContextAccessor.HttpContext;
+                var clientIp = GetClientIp();
+                var userAgent = httpContext?.Request.Headers["User-Agent"].ToString() ?? "Unknown";
+                var baseUrl = _config["Usm:BaseUrl"] ?? "http://localhost:3000";
+                var path = _config["Usm:LoginSyncPath"] ?? "api/users/login-sync";
+                var url = $"{baseUrl.TrimEnd('/')}/{path.TrimStart('/')}";
+                var payload = new
+                {
+                    userId = user.Id,
+                    email = user.Email,
+                    ipAddress = clientIp,
+                    userAgent,
+                    companyId = user.CompanyId
+                };
+
+                var client = _httpClientFactory.CreateClient("Usm");
+                client.Timeout = TimeSpan.FromSeconds(3);
+                using var request = new HttpRequestMessage(HttpMethod.Post, url)
+                {
+                    Content = JsonContent.Create(payload)
+                };
+                request.Headers.Accept.ParseAdd("application/json");
+                using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+                if (!response.IsSuccessStatusCode)
+                    _logger?.LogWarning("USM login synchronization returned HTTP {StatusCode} for user {UserId}", (int)response.StatusCode, user.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning("No se pudo sincronizar IP con USM: {Message}", ex.Message);
+            }
+        }
+
+        private async Task<IReadOnlyCollection<string>> GetAllowedModulesAsync(User user)
+        {
+            if (user.IsSuperUser || string.Equals(user.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
+                return new[] { "*" };
+
+            if (string.IsNullOrWhiteSpace(user.AllowedModulesJson))
+                return Array.Empty<string>();
+
+            var modules = Onion.Common.Authorization.ModuleCodes.FromJson(user.AllowedModulesJson);
+            if (modules.Count == 0 && !string.Equals(user.AllowedModulesJson.Trim(), "[]", StringComparison.Ordinal))
+                _logger?.LogWarning("Invalid or unsupported AllowedModulesJson for user {UserId}", user.Id);
+            return modules;
+        }
+
+        private static UserResponseDto ToUserResponse(User user, IReadOnlyCollection<string> modules) =>
+            new(
+                user.Id,
+                user.Email ?? string.Empty,
+                user.Role ?? "Employee",
+                modules.ToList());
+
+        private string GenerateJwtToken(User user, string? deviceId = null, IReadOnlyCollection<string>? modules = null)
         {
             var key = _config["Jwt:Key"];
             if (string.IsNullOrWhiteSpace(key))
@@ -461,7 +535,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             var issuer = _config["Jwt:Issuer"] ?? string.Empty;
             var audience = _config["Jwt:Audience"] ?? string.Empty;
 
-            var claims = new List<System.Security.Claims.Claim>
+            var claims = new List<Claim>
             {
                 new(System.Security.Claims.ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new("sub", user.Id.ToString()),
@@ -481,6 +555,16 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             if (user.IsSuperUser)
                 claims.Add(new System.Security.Claims.Claim("isSuperUser", "true"));
+            var normalizedModules = Onion.Common.Authorization.ModuleCodes.Normalize(modules);
+            var modulesValue = JsonSerializer.Serialize(normalizedModules);
+            claims.Add(new Claim("modules", modulesValue));
+            claims.Add(new Claim("allowed_modules", modulesValue));
+            claims.Add(new Claim("allowedModules", modulesValue));
+            foreach (var module in normalizedModules)
+                claims.Add(new Claim("module", module));
+            if (user.IsSuperUser || string.Equals(user.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
+                (string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase) && user.CompanyId is > 0))
+                claims.Add(new Claim("permissions", "*"));
             if (!string.IsNullOrWhiteSpace(deviceId))
             {
                 claims.Add(new System.Security.Claims.Claim("DeviceId", deviceId));

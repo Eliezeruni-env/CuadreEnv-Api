@@ -76,6 +76,7 @@ namespace Onion.DataAccess.Configurations.EntityConfigurations
             builder.Property(x => x.OperatingLocation).HasMaxLength(150);
             builder.Property(x => x.IpAddress).HasMaxLength(50);
             builder.Property(x => x.LastLoginIp).HasMaxLength(50);
+            builder.Property(x => x.AllowedModulesJson).HasColumnType("nvarchar(max)");
             builder.Property(x => x.Latitude).HasPrecision(10, 7);
             builder.Property(x => x.Longitude).HasPrecision(10, 7);
         }
