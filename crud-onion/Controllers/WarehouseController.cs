@@ -29,7 +29,6 @@ namespace Onion.Controllers
         }
 
         [HttpPost]
-        [AuthorizeModule("inventory")]
         public async Task<IActionResult> Create([FromBody] CreateWarehouseDto dto)
         {
             // Extract company id from authenticated user claims

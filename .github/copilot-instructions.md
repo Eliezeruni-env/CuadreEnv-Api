@@ -7,3 +7,4 @@
 - El servicio de roles debe usar /roles, sin fallback /Role.
 - El acceso de sidebar/rutas debe cerrarse si falla la carga de licencias.
 - Para módulos SaaS, preservar literalmente los IDs granulares de AllowedModulesJson en la respuesta de sesión y claims JWT; usar aliases únicamente para autorización. Los endpoints críticos deben exigir el módulo granular correspondiente o wildcard, sin inyectar módulos adicionales para usuarios no SuperAdmin.
+- Autoriza subir todos los cambios locales pendientes al repositorio remoto después de la validación, incluyendo commit y push en la rama activa.

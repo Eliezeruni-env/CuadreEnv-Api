@@ -1,22 +1,16 @@
-﻿using System;
-using System.Threading.Tasks;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Onion.BussinesLogic.Dtos;
 using Onion.BussinesLogic.Services.Abstract;
-using Onion.DataAccess.Repositories.Abstract;
-using Onion.Domain.Users;
 using Onion.Common.Exceptions;
 using Onion.DataAccess.Repositories.Concrete;
-using Microsoft.Extensions.Configuration;
-using System.Security.Cryptography;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Hosting;
-using System.Collections.Generic;
-using System.Linq;
-using Onion.BussinesLogic.Dtos;
-using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+using Onion.Domain.Users;
 using System.Net.Http.Json;
-using System.Text.Json;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text.Json;
 
 // BCrypt.Net-Next required (install package in BusinessLogic project)
 namespace Onion.BussinesLogic.Services.Concrete
