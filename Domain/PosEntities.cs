@@ -82,7 +82,7 @@ namespace Onion.Domain
         public decimal TaxRate { get; set; }
         public decimal TaxWithheld { get; set; }
         public decimal LegalTip { get; set; }
-        public Onion.Domain.Invoices.VoucherType VoucherType { get; set; } = Onion.Domain.Invoices.VoucherType.B02;
+        public Onion.Domain.Invoices.VoucherType VoucherType { get; set; }
         public string? Notes { get; set; }
         // Concurrency token
         public byte[]? RowVersion { get; set; }
@@ -195,17 +195,17 @@ namespace Onion.Domain
     {
         public int CompanyId { get; set; }
         public virtual Company? Company { get; set; }
-        public int CreditDaysLimit { get; set; } = 30;
+        public int CreditDaysLimit { get; set; }
         public bool BlockSalesIfOverdue { get; set; }
         // Module 10 settings
-        public string Currency { get; set; } = "USD";
-        public string TimeZone { get; set; } = "UTC";
-        public string InvoiceNumberFormat { get; set; } = "{company}-{sequential}";
+        public string Currency { get; set; } = string.Empty;
+        public string TimeZone { get; set; } = string.Empty;
+        public string InvoiceNumberFormat { get; set; } = string.Empty;
         public string? LogoUrl { get; set; }
         public string? CommercialName { get; set; }
-        public int DefaultStockAlertThreshold { get; set; } = 5;
-        public decimal DefaultTaxPercentage { get; set; } = 0m;
-        public decimal CashToleranceAmount { get; set; } = 50m;
+        public int DefaultStockAlertThreshold { get; set; }
+        public decimal DefaultTaxPercentage { get; set; }
+        public decimal CashToleranceAmount { get; set; }
         public bool AllowNegativeStock { get; set; }
     }
 }

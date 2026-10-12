@@ -314,7 +314,9 @@ namespace Onion.BussinesLogic.Services.Concrete
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_TOKEN", Message = "Refresh token is invalid or expired", Language = "EN" });
 
             // Load user
-            var user = await _uow.Users.GetByIdAsync(refresh.UserId) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_TOKEN", Message = "User not found", Language = "EN" });
+            // Refresh is an unauthenticated endpoint, so the tenant query filter
+            // cannot be used until the user is loaded and the new JWT is issued.
+            var user = await _uow.Users.GetByIdUnscopedAsync(refresh.UserId) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_TOKEN", Message = "User not found", Language = "EN" });
 
             if (!user.Active || user.IsDeleted)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "ACCOUNT_SUSPENDED", Message = "Su cuenta se encuentra suspendida o deshabilitada. Comuníquese con la administración de CuadreEnv.", Language = "ES" });
@@ -380,7 +382,9 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<TokenResponseDto> IssueTokensForUserAsync(int userId, string? deviceId = null)
         {
-            var user = await _uow.Users.GetByIdAsync(userId) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
+            // This method is used immediately after assigning a company, before
+            // the caller has a JWT containing the new CompanyId claim.
+            var user = await _uow.Users.GetByIdUnscopedAsync(userId) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
             var modules = await GetAllowedModulesAsync(user);
             var (access, refresh) = await LoginWithTokensAsync(user, deviceId, modules);
             return new TokenResponseDto(access, refresh, ToUserResponse(user, modules));
@@ -504,7 +508,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (string.IsNullOrWhiteSpace(user.AllowedModulesJson))
                 return Array.Empty<string>();
 
-            var modules = Onion.Common.Authorization.ModuleCodes.FromJson(user.AllowedModulesJson);
+            var modules = Onion.Common.Authorization.ModuleCodes.FromClaimPreservingIds(user.AllowedModulesJson);
             if (modules.Count == 0 && !string.Equals(user.AllowedModulesJson.Trim(), "[]", StringComparison.Ordinal))
                 _logger?.LogWarning("Invalid or unsupported AllowedModulesJson for user {UserId}", user.Id);
             return modules;
@@ -555,12 +559,12 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             if (user.IsSuperUser)
                 claims.Add(new System.Security.Claims.Claim("isSuperUser", "true"));
-            var normalizedModules = Onion.Common.Authorization.ModuleCodes.Normalize(modules);
-            var modulesValue = JsonSerializer.Serialize(normalizedModules);
+            var assignedModules = modules ?? Array.Empty<string>();
+            var modulesValue = JsonSerializer.Serialize(assignedModules);
             claims.Add(new Claim("modules", modulesValue));
             claims.Add(new Claim("allowed_modules", modulesValue));
             claims.Add(new Claim("allowedModules", modulesValue));
-            foreach (var module in normalizedModules)
+            foreach (var module in assignedModules)
                 claims.Add(new Claim("module", module));
             if (user.IsSuperUser || string.Equals(user.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
                 (string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase) && user.CompanyId is > 0))

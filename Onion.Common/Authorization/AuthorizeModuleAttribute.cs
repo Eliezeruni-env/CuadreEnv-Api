@@ -22,6 +22,61 @@ public sealed class AuthorizeAnyModuleAttribute : TypeFilterAttribute
         : base(typeof(AuthorizeAnyModuleFilter)) => Arguments = new object[] { moduleCodes };
 }
 
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
+public sealed class AuthorizeExactModuleAttribute : TypeFilterAttribute
+{
+    public AuthorizeExactModuleAttribute(string moduleCode)
+        : base(typeof(AuthorizeExactModuleFilter)) => Arguments = new object[] { moduleCode };
+}
+
+public sealed class AuthorizeExactModuleFilter : IAsyncActionFilter
+{
+    private readonly ICompanyEntitlementService _entitlements;
+    private readonly string _moduleCode;
+
+    public AuthorizeExactModuleFilter(ICompanyEntitlementService entitlements, string moduleCode)
+    {
+        _entitlements = entitlements;
+        _moduleCode = moduleCode;
+    }
+
+    public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
+    {
+        var user = context.HttpContext.User;
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            context.Result = new UnauthorizedResult();
+            return;
+        }
+
+        var companyClaim = user.FindFirst("companyId") ?? user.FindFirst("CompanyId");
+        if (!int.TryParse(companyClaim?.Value, out var companyId) || companyId <= 0)
+        {
+            context.Result = new ObjectResult(new { success = false, errorCode = "COMPANY_REQUIRED", code = "COMPANY_REQUIRED" }) { StatusCode = StatusCodes.Status403Forbidden };
+            return;
+        }
+
+        var assigned = user.FindClaims("module", "AllowedModulesJson", "allowedModulesJson", "allowedModules", "allowed_modules", "modules")
+            .SelectMany(ModuleCodes.FromClaimPreservingIds)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!assigned.Contains(ModuleCodes.All) && !assigned.Contains(_moduleCode))
+        {
+            context.Result = new ObjectResult(new { success = false, errorCode = "MODULE_NOT_ASSIGNED", code = "MODULE_NOT_ASSIGNED", requiredModule = _moduleCode, assignedModules = assigned }) { StatusCode = StatusCodes.Status403Forbidden };
+            return;
+        }
+
+        var licensed = ModuleCodes.Normalize((await _entitlements.GetAsync(companyId, context.HttpContext.RequestAborted)).Modules);
+        var licensedParent = ModuleCodes.Normalize(_moduleCode);
+        if (!licensed.Contains(ModuleCodes.All) && (licensedParent is null || !licensed.Contains(licensedParent)))
+        {
+            context.Result = new ObjectResult(new { success = false, errorCode = "MODULE_NOT_LICENSED", code = "MODULE_NOT_LICENSED", requiredModule = _moduleCode }) { StatusCode = StatusCodes.Status403Forbidden };
+            return;
+        }
+
+        await next();
+    }
+}
+
 public sealed class AuthorizeModuleFilter : IAsyncActionFilter
 {
     private readonly ICompanyEntitlementService _entitlements;

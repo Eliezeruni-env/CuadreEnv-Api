@@ -49,7 +49,7 @@ namespace Onion.Common.Authorization
         {
             companyId = 0;
             if (user == null) return false;
-            var claim = user.FindFirst("CompanyId")?.Value;
+            var claim = user.FindFirst("companyId")?.Value ?? user.FindFirst("CompanyId")?.Value;
             if (!int.TryParse(claim, out var parsed)) return false;
             companyId = parsed;
             return true;

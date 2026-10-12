@@ -44,10 +44,7 @@ namespace Onion.DataAccess.DesignTime
             }
 
             if (string.IsNullOrWhiteSpace(conn))
-            {
-                // fallback to localdb
-                conn = "Server=(localdb)\\MSSQLLocalDB;Database=onionCrud;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=True";
-            }
+                throw new InvalidOperationException("ConnectionStrings:OnionCrud must be configured for EF Core operations.");
 
             var builder = new DbContextOptionsBuilder<OnionDbContext>();
             builder.UseSqlServer(conn, b => b.MigrationsAssembly("Onion.DataAccess"));

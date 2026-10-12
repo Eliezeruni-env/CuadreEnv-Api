@@ -31,7 +31,9 @@ public sealed class ModuleAuthorizationConvention : IApplicationModelConvention
         {
             if (controller.Attributes.OfType<AllowAnonymousAttribute>().Any() ||
                 controller.Filters.OfType<AuthorizeModuleAttribute>().Any() ||
-                controller.Attributes.OfType<AuthorizeModuleAttribute>().Any())
+                controller.Attributes.OfType<AuthorizeModuleAttribute>().Any() ||
+                controller.Filters.OfType<AuthorizeExactModuleAttribute>().Any() ||
+                controller.Attributes.OfType<AuthorizeExactModuleAttribute>().Any())
                 continue;
 
             if (controller.ControllerType.GetCustomAttributes(typeof(AuthorizeModuleAttribute), inherit: true).Length > 0)

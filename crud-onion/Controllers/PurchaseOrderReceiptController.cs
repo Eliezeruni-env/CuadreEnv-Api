@@ -6,11 +6,15 @@ using Onion.BussinesLogic.Dtos;
 using Onion.Domain.Purchases;
 using Onion.Domain.ManageRequests;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
+using Onion.Common.Authorization;
 
 namespace Onion.Controllers
 {
     [Route("[controller]")]
     [ApiController]
+    [Authorize]
+    [AuthorizeExactModule("purchases-receipts")]
     public class PurchaseOrderReceiptController : ControllerBase
     {
         private readonly IUnitOfWork _uow;

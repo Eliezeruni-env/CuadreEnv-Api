@@ -83,8 +83,6 @@ namespace Onion.BussinesLogic.Services.Concrete
         public async Task<WarehouseDto> CreateWarehouseAsync(CreateWarehouseDto dto, int companyId)
         {
             if (dto is null) throw new ArgumentNullException(nameof(dto));
-            var canCreate = await _subscriptionService.CanCreateWarehouseAsync(companyId);
-            if (!canCreate) throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "PLAN_LIMIT", Message = "Warehouse limit reached for current subscription plan", Language = "EN" });
 
             var w = new Warehouse { Name = dto.Name?.Trim() ?? string.Empty, CompanyId = companyId };
             await _uow.Warehouses.AddAsync(w);

@@ -9,6 +9,7 @@ param(
 	[string]$Password,
 	[string]$AccessToken,
 	[string]$CompanyId = "1",
+ [switch]$SkipBuild,
 	[switch]$SkipMigrations,
 	[switch]$SkipTests,
 	[switch]$RunScenario,
@@ -29,6 +30,7 @@ $results = [System.Collections.Generic.List[object]]::new()
 $apiProcess = $null
 $oldEnvironment = $env:ASPNETCORE_ENVIRONMENT
 $logDirectory = Join-Path $repo $ArtifactDirectory
+New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
 
 function Add-Result([string]$Name, [bool]$Passed, [string]$Detail) {
 	[void]$results.Add([pscustomobject]@{ Name = $Name; Passed = $Passed; Detail = $Detail })
@@ -87,7 +89,10 @@ try {
 	}
 
 	Invoke-CommandStep "Restore" { & dotnet restore $solution }
-	Invoke-CommandStep "Build" { & dotnet build $solution --configuration $Configuration --no-restore }
+	if (-not $SkipBuild) {
+		Invoke-CommandStep "Build" { & dotnet build $solution --configuration $Configuration --no-restore }
+	}
+	else { Add-Result "Build" $true "Skipped by parameter; using existing binaries" }
 
 	if (-not $SkipMigrations) {
 		Invoke-CommandStep "Migrations" {

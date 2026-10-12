@@ -16,4 +16,8 @@
 		<ProjectReference Include="..\Domain\Onion.Domain.csproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <Folder Include="Seeds\" />
+	</ItemGroup>
+
 </Project>

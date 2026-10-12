@@ -19,38 +19,26 @@ namespace Onion.BussinesLogic.Services.Concrete
             _db = db;
         }
 
-        public async Task<Onion.BussinesLogic.Dtos.CompanySettingsEditableDto> GetSettingsAsync(int companyId)
+        public async Task<Onion.BussinesLogic.Dtos.CompanySettingsEditableDto?> GetSettingsAsync(int companyId)
         {
             var s = await _repo.FindAsync(x => x.CompanyId == companyId);
             var settings = s.FirstOrDefault();
             if (settings == null)
-            {
-                return new CompanySettingsEditableDto
-                {
-                    CompanyName = "Mi Empresa Dominicana SRL",
-                    Rnc = "1-01-00000-0",
-                    Phone = "(809) 000-0000",
-                    Email = "contacto@empresa.com",
-                    Address = "Santo Domingo, República Dominicana",
-                    InvoiceFooterPhrase = "¡Gracias por su compra! Garantía válida con su factura.",
-                    Currency = "DOP",
-                    DefaultTaxPercentage = 18.00m
-                };
-            }
+                return null;
 
             // Map using known concrete properties on Domain.CompanySettings (CommercialName -> CompanyName)
             return new CompanySettingsEditableDto
             {
-                CompanyName = settings?.CommercialName ?? string.Empty,
+                CompanyName = settings.CommercialName ?? string.Empty,
                 Rnc = string.Empty,
                 Phone = string.Empty,
                 Email = string.Empty,
                 Address = string.Empty,
-                Website = settings?.LogoUrl,
-                LogoUrl = settings?.LogoUrl,
+                Website = settings.LogoUrl,
+                LogoUrl = settings.LogoUrl,
                 InvoiceFooterPhrase = string.Empty,
-                Currency = settings?.Currency ?? "DOP",
-                DefaultTaxPercentage = settings?.DefaultTaxPercentage ?? 18.00m
+                Currency = settings.Currency,
+                DefaultTaxPercentage = settings.DefaultTaxPercentage
             };
         }
 

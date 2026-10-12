@@ -225,6 +225,8 @@ namespace Onion.DataAccess
                 .HasOne(c => c.Settings)
                 .WithOne(s => s.Company)
                 .HasForeignKey<CompanySettings>(s => s.CompanyId);
+            modelBuilder.Entity<Company>()
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || !e.IsDeleted);
 
             modelBuilder.Entity<Product>(entity =>
             {
@@ -270,7 +272,6 @@ namespace Onion.DataAccess
                 entity.HasIndex(e => new { e.CompanyId, e.IdempotencyKey, e.IsDeleted })
                     .IsUnique()
                     .HasFilter("[IdempotencyKey] IS NOT NULL AND [IsDeleted] = 0");
-                entity.Property(e => e.VoucherType).HasDefaultValue(Onion.Domain.Invoices.VoucherType.B02);
                 entity.Property(e => e.TaxRate).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.TaxWithheld).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.LegalTip).HasColumnType("decimal(18,2)");
@@ -279,8 +280,7 @@ namespace Onion.DataAccess
 
             modelBuilder.Entity<CompanySettings>(entity =>
             {
-                entity.Property(e => e.CashToleranceAmount).HasColumnType("decimal(18,2)").HasDefaultValue(50m);
-                entity.Property(e => e.AllowNegativeStock).HasDefaultValue(false);
+                entity.Property(e => e.CashToleranceAmount).HasColumnType("decimal(18,2)");
             });
 
             modelBuilder.Entity<Onion.Domain.Invoices.FiscalDocument>(entity =>
@@ -337,6 +337,8 @@ namespace Onion.DataAccess
             modelBuilder.Entity<RolePermission>(entity =>
             {
                 entity.HasKey(e => new { e.RoleId, e.PermissionId });
+                entity.Property(e => e.CreateBy).HasMaxLength(450).IsRequired();
+                entity.Property(e => e.ModifiedBy).HasMaxLength(450).IsRequired();
                 entity.HasOne(e => e.Role).WithMany(e => e.RolePermissions).HasForeignKey(e => e.RoleId).OnDelete(DeleteBehavior.Cascade);
                 entity.HasOne(e => e.Permission).WithMany(e => e.RolePermissions).HasForeignKey(e => e.PermissionId).OnDelete(DeleteBehavior.Cascade);
             });
@@ -344,6 +346,8 @@ namespace Onion.DataAccess
             modelBuilder.Entity<UserRole>(entity =>
             {
                 entity.HasKey(e => new { e.UserId, e.RoleId });
+                entity.Property(e => e.CreateBy).HasMaxLength(450).IsRequired();
+                entity.Property(e => e.ModifiedBy).HasMaxLength(450).IsRequired();
                 entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
                 entity.HasOne(e => e.Role).WithMany(e => e.UserRoles).HasForeignKey(e => e.RoleId).OnDelete(DeleteBehavior.Cascade);
                 entity.HasQueryFilter(e => this.IsGlobalTenantAccess || e.CompanyId == this.TenantCompanyIdForQuery);
@@ -488,14 +492,17 @@ namespace Onion.DataAccess
         {
             var now = DateTime.UtcNow;
             var auditEntries = ChangeTracker.Entries()
-                .Where(e => e.Entity is BaseEntity && e.Entity is not Onion.Domain.Audit.AuditLog &&
+                .Where(e => e.Entity is Onion.Common.Models.IAuditableEntity && e.Entity is not Onion.Domain.Audit.AuditLog &&
                     (e.State == EntityState.Added || e.State == EntityState.Modified || e.State == EntityState.Deleted))
                 .ToList();
             var currentUser = _currentUserService;
+            var actor = currentUser?.UserId?.ToString()
+                ?? currentUser?.UserEmail
+                ?? "system";
 
             foreach (var entry in auditEntries)
             {
-                var entity = (BaseEntity)entry.Entity;
+                var entity = (Onion.Common.Models.IAuditableEntity)entry.Entity;
                 var changes = new Dictionary<string, object?>();
                 foreach (var property in entry.Properties)
                 {
@@ -510,6 +517,9 @@ namespace Onion.DataAccess
                 if (entry.State == EntityState.Added)
                 {
                     entity.CreationDate = now;
+                    if (string.IsNullOrWhiteSpace(entity.CreateBy))
+                        entity.CreateBy = actor;
+                    entity.ModifiedBy = actor;
                     // Set CompanyId from the effective tenant source (ICurrentUserService or AmbientTenantProvider or ITenantProvider fallback)
                     var tenantId = this.TenantCompanyId;
                     if (tenantId.HasValue)
@@ -531,6 +541,7 @@ namespace Onion.DataAccess
                 else
                 {
                     entity.ModificationDate = now;
+                    entity.ModifiedBy = actor;
                 }
 
                 var companyProperty = entry.Properties.FirstOrDefault(p => string.Equals(p.Metadata.Name, "CompanyId", StringComparison.OrdinalIgnoreCase));
@@ -546,7 +557,7 @@ namespace Onion.DataAccess
                     Action = entry.State == EntityState.Added ? "Insert" : entry.State == EntityState.Deleted ? "Delete" : "Update",
                     Entity = entityName,
                     EntityName = entityName,
-                    EntityId = entity.Id == 0 ? null : entity.Id,
+                    EntityId = entry.Properties.FirstOrDefault(p => p.Metadata.Name == "Id")?.CurrentValue as int?,
                     PerformedBy = currentUser?.UserId?.ToString() ?? "system",
                     Timestamp = now,
                     AuditPayload = JsonSerializer.Serialize(changes),

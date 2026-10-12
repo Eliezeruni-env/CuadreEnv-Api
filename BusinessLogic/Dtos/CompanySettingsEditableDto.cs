@@ -10,8 +10,8 @@ namespace Onion.BussinesLogic.Dtos
         public string? Website { get; set; }
         public string? LogoUrl { get; set; }
         public string InvoiceFooterPhrase { get; set; } = string.Empty;
-        public string Currency { get; set; } = "DOP";
-        public decimal DefaultTaxPercentage { get; set; } = 18.00m;
+        public string Currency { get; set; } = string.Empty;
+        public decimal DefaultTaxPercentage { get; set; }
     }
 
     public class UpdateCompanySettingsDto : CompanySettingsEditableDto { }

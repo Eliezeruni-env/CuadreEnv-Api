@@ -5,7 +5,7 @@ namespace Onion.BussinesLogic.Services.Abstract
 {
     public interface ICompanySettingsService
     {
-        Task<CompanySettingsEditableDto> GetSettingsAsync(int companyId);
+        Task<CompanySettingsEditableDto?> GetSettingsAsync(int companyId);
         Task UpdateSettingsAsync(int companyId, UpdateCompanySettingsDto dto);
     }
 }
