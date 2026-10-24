@@ -5,6 +5,7 @@ using Onion.Common.Services;
 using Onion.Common.Exceptions;
 using Onion.Common.Enums;
 using Onion.Common.Authorization;
+using Onion.BussinesLogic.Services.Abstract;
 
 namespace Onion.Controllers
 {
@@ -73,18 +74,32 @@ namespace Onion.Controllers
         }
 
         [HttpPost("{id}/close")]
-        public async Task<IActionResult> Close(int id, [FromBody] CloseCashRegisterRequest request)
+        public async Task<IActionResult> Close(int id, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CloseCashRegisterRequest? request)
         {
+            request ??= new CloseCashRegisterRequest();
+            if (request.ActualAmount == 0 && Request.Query.TryGetValue("closingAmount", out var qAmount) && decimal.TryParse(qAmount, out var parsedAmount))
+            {
+                request.ActualAmount = parsedAmount;
+            }
+            if (string.IsNullOrWhiteSpace(request.Notes))
+            {
+                request.Notes = "Cierre de caja registrado desde la aplicación";
+            }
+
             var current = await _service.GetByIdAsync(id);
-            if (current == null) return NotFound();
+            if (current == null) return NotFound(new { code = "CASH_REGISTER_NOT_FOUND", message = "La caja especificada no fue encontrada." });
+            if (current.Status == CashRegisterStatus.CLOSED)
+            {
+                return Ok(new CashRegisterCloseResult(current.InitialAmount, request.ActualAmount, 0m, "EXACT", true, false));
+            }
             if (current.RowVersion.Length > 0 && Request.Headers.TryGetValue("If-Match", out var ifMatch))
             {
                 var token = ifMatch.ToString().Trim().Trim('"');
                 if (!string.Equals(token, Convert.ToBase64String(current.RowVersion), StringComparison.Ordinal))
                     return StatusCode(StatusCodes.Status412PreconditionFailed, new { code = "CASH_REGISTER_CHANGED" });
             }
-            await _service.CloseAsync(id, request.ActualAmount, request.BreakdownJson, _currentUser.UserId);
-            return Ok(new { closed = true });
+            var result = await _service.CloseAsync(id, request, _currentUser.UserId);
+            return Ok(result);
         }
 
         [HttpPut("{id}/pause")]
@@ -102,6 +117,8 @@ namespace Onion.Controllers
         }
 
         public sealed record PauseCashRegisterRequest(string Reason);
-        public sealed record CloseCashRegisterRequest(decimal ActualAmount, string? BreakdownJson);
+        public sealed class CloseCashRegisterRequest : CloseCashSessionRequest
+        {
+        }
     }
 }

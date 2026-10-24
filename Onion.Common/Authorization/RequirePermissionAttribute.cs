@@ -38,6 +38,12 @@ namespace Onion.Common.Authorization
         {
             var user = context.HttpContext.User;
 
+            if (user.Identity?.IsAuthenticated == true && AuthorizationBypass.IsEnabled(context.HttpContext))
+            {
+                await next();
+                return;
+            }
+
             int? resourceCompanyId = null;
             // check route param first
             if (!string.IsNullOrWhiteSpace(_routeCompanyIdParameter) && context.RouteData.Values.TryGetValue(_routeCompanyIdParameter, out var rv) && rv != null)

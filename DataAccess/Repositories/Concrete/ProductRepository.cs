@@ -196,14 +196,26 @@ namespace Onion.DataAccess.Repositories.Concrete
             }
         }
 
-        public async Task<bool> TryReduceStockAsync(int productId, decimal quantity)
+        public async Task<bool> TryReduceStockAsync(int productId, decimal quantity, bool allowNegativeStock = false)
         {
-            // Use EF Core ExecuteUpdateAsync to perform atomic check-and-decrement while preserving query filters
-            if (!_context.TenantCompanyId.HasValue) throw new InvalidOperationException("Tenant company id missing for multi-tenant operation.");
-            var companyId = _context.TenantCompanyId.Value;
+            // Keep the stock check and decrement atomic. Global administrators may operate
+            // on the company selected by the product, while regular users remain tenant-scoped.
+            var query = _context.Products.Where(p => p.Id == productId);
+            if (!allowNegativeStock)
+            {
+                query = query.Where(p => p.Stock >= quantity);
+            }
 
-            var affected = await _context.Products
-                .Where(p => p.Id == productId && EF.Property<int>(p, "CompanyId") == companyId && p.Stock >= quantity)
+            if (!_context.IsGlobalTenantAccess)
+            {
+                if (!_context.TenantCompanyId.HasValue)
+                    throw new InvalidOperationException("Tenant company id missing for multi-tenant operation.");
+
+                var companyId = _context.TenantCompanyId.Value;
+                query = query.Where(p => EF.Property<int>(p, "CompanyId") == companyId);
+            }
+
+            var affected = await query
                 .ExecuteUpdateAsync(s => s.SetProperty(p => p.Stock, p => p.Stock - quantity));
 
             return affected > 0;

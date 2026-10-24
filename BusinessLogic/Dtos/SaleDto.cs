@@ -18,6 +18,8 @@ namespace Onion.BussinesLogic.Dtos
         public string? Notes { get; set; }
         public string? CreateBy { get; set; }
         public int? CashRegisterId { get; set; }
+        public string? PaymentMethod { get; set; }
+        public string? PaymentReference { get; set; }
         public List<SaleItemDto> Items { get; set; } = new List<SaleItemDto>();
     }
 }

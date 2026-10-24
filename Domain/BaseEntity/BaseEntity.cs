@@ -7,7 +7,7 @@ namespace Onion.Domain
     {
         public BaseEntity()
         {
-            this.CreationDate = DateTime.Now;
+            this.CreationDate = DateTime.UtcNow;
             this.Active = true;
             this.CreateBy = string.Empty;
             this.ModifiedBy = string.Empty;

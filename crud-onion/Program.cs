@@ -36,6 +36,7 @@ builder.Services.AddControllers(options =>
         opts.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
         // Don't emit nulls to reduce payloads
         opts.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+        opts.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 builder.Services.AddSignalR();
 builder.Services.AddScoped<Onion.Common.Services.ISecurityAlertPublisher, SignalRSecurityAlertPublisher>();
@@ -109,7 +110,8 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddRepositories(builder.Configuration);
 // Register Caja module
 builder.Services.AddCajaModule();
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddCheck<crud_onion.Health.DatabaseHealthCheck>("database");
 builder.Services.AddServices();
 builder.Services.AddDomainServices();
 builder.Services.AddValidators();
@@ -126,10 +128,7 @@ builder.Services.AddHttpClient("Usm", client =>
 // IMemoryCache remains singleton, so entitlement data is still shared across requests.
 builder.Services.AddScoped<Onion.Common.Services.ICompanyEntitlementService, Onion.BussinesLogic.Services.Concrete.CompanyEntitlementService>();
 builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IAccountStatusService, Onion.BussinesLogic.Services.Concrete.AccountStatusService>();
-// Background queue and Caja (POS) registrations
-builder.Services.AddSingleton<Onion.BussinesLogic.Background.InMemoryBackgroundQueue>();
-builder.Services.AddSingleton<Onion.BussinesLogic.Background.IBackgroundQueue>(sp => sp.GetRequiredService<Onion.BussinesLogic.Background.InMemoryBackgroundQueue>());
-builder.Services.AddHostedService<Onion.BussinesLogic.Background.BackgroundWorker>();
+// Critical fiscal work is persisted in the FiscalDocuments outbox and processed by FiscalOutboxWorker.
 builder.Services.AddHostedService<Onion.BussinesLogic.Background.FiscalOutboxWorker>();
 builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.ICajaService, Onion.BussinesLogic.Services.Concrete.CajaService>();
 // Register HttpContextAccessor and local JWT tenant provider for CompanyId extraction
@@ -227,18 +226,26 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
+var corsOriginsSection = builder.Configuration.GetSection("Cors:AllowedOrigins");
+var configuredCorsOrigins = corsOriginsSection
+    .GetChildren()
+    .Select(section => section.Value)
+    .Where(value => !string.IsNullOrWhiteSpace(value))
+    .Cast<string>()
+    .ToArray();
+if (configuredCorsOrigins.Length == 0 && !string.IsNullOrWhiteSpace(corsOriginsSection.Value))
+    configuredCorsOrigins = corsOriginsSection.Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+var corsOrigins = configuredCorsOrigins.Length > 0
+    ? configuredCorsOrigins
+    : builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("IntegrationTesting")
+        ? new[] { "http://localhost:4200", "http://localhost:3000", "http://localhost:5173", "http://localhost:8080", "http://localhost:5160", "https://localhost:44324", "https://localhost:7060" }
+        : throw new InvalidOperationException("Cors:AllowedOrigins must be configured outside Development and IntegrationTesting.");
+
 builder.Services.AddCors(options =>
 {
 options.AddPolicy("DefaultCors", policy =>
     {
-        policy.WithOrigins(
-            "http://localhost:4200",
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "http://localhost:8080",
-            "http://localhost:5160",
-            "https://localhost:44324",
-            "https://localhost:7060")
+        policy.WithOrigins(corsOrigins)
               .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
               .WithHeaders("Authorization", "Content-Type", "X-Company-Id", "X-Idempotency-Key", "X-Requested-With", "X-Correlation-ID", "X-SignalR-User-Agent")
               .AllowCredentials();
@@ -247,6 +254,10 @@ options.AddPolicy("DefaultCors", policy =>
 
 
 var app = builder.Build();
+
+app.UseMiddleware<crud_onion.Middleware.CorrelationIdMiddleware>();
+// Capture exceptions from every downstream middleware and endpoint in one consistent format.
+app.UseMiddleware<ApiExceptionMiddleware>();
 
 // Production fails closed if USM cannot verify the license. A grace mode requires
 // a signed-cache contract and is intentionally not enabled by this application.
@@ -262,15 +273,18 @@ app.MapHealthChecks("/hc").AllowAnonymous();
 app.MapGet("/", () => Results.Ok(new { service = "Onion API", status = "ok" })).AllowAnonymous();
 app.MapGet("/v1", () => Results.Ok(new { service = "Onion API", version = "v1", status = "ok" })).AllowAnonymous();
 
-// Swagger is public in local development and must be available before the
-// global authentication/authorization middleware, which requires a JWT.
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+// Swagger is public only when explicitly enabled. In production it should be
+// protected or disabled through configuration.
+if (builder.Configuration.GetValue("Swagger:Enabled", app.Environment.IsDevelopment()))
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "CuadreEnv API v1");
-    c.RoutePrefix = "swagger";
-    c.EnablePersistAuthorization();
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "CuadreEnv API v1");
+        c.RoutePrefix = "swagger";
+        c.EnablePersistAuthorization();
+    });
+}
 
 app.MapHub<SecurityAlertsHub>("/hubs/security-alerts");
 
@@ -290,16 +304,30 @@ app.UseRateLimiter();
 app.UseMiddleware<InternalApiAuthMiddleware>();
 // Validate tenant claim presence for authenticated requests
 app.UseMiddleware<Onion.Controllers.Middleware.TenantMiddleware>();
+app.UseMiddleware<Onion.Middleware.SubscriptionEnforcementMiddleware>();
 app.UseAuthorization();
-// Global exception handler -> standardized API responses
-app.UseMiddleware<ApiExceptionMiddleware>();
 
 app.MapControllers();
 
 // Optionally apply EF migrations on startup when configured. This is disabled by default
 // to avoid accidental schema changes in production. Tests or dev may enable via configuration.
-if (builder.Configuration.GetValue<bool>("ApplyMigrationsOnStartup"))
+if ((app.Environment.IsEnvironment("IntegrationTesting") || app.Environment.IsDevelopment()) &&
+    builder.Configuration.GetValue<bool>("ApplyMigrationsOnStartup"))
 {
+    var migrationConnection = builder.Configuration.GetConnectionString("OnionCrud");
+    if (string.IsNullOrWhiteSpace(migrationConnection))
+    {
+        throw new InvalidOperationException("Integration migrations require a SQL Server connection string.");
+    }
+
+    var migrationDatabase = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(migrationConnection).InitialCatalog;
+    if (app.Environment.IsEnvironment("IntegrationTesting") &&
+        (string.IsNullOrWhiteSpace(migrationDatabase) ||
+         !migrationDatabase.StartsWith("OnionTest_", StringComparison.OrdinalIgnoreCase)))
+    {
+        throw new InvalidOperationException("Integration migrations require an isolated database named OnionTest_*.");
+    }
+
     try
     {
         using var scope = app.Services.CreateScope();
@@ -308,9 +336,12 @@ if (builder.Configuration.GetValue<bool>("ApplyMigrationsOnStartup"))
     }
     catch (Exception ex)
     {
-        // Log migration errors but do not stop the application startup so Swagger and routes can load.
         var logger = app.Services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "Failed to apply EF migrations on startup. Startup will continue without applying migrations.");
+        logger.LogError(ex, "Failed to apply EF migrations at startup for database {Database}.", migrationDatabase);
+        if (app.Environment.IsEnvironment("IntegrationTesting"))
+            throw;
+
+        logger.LogWarning("Startup continues without applying migrations because this is not the isolated integration environment.");
     }
 }
 

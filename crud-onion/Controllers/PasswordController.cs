@@ -5,7 +5,7 @@ using Onion.BussinesLogic.Services.Abstract;
 
 namespace Onion.Controllers
 {
-    [Route("v1/[controller]")]
+    [Route("[controller]")]
     [ApiController]
     public class PasswordController : ControllerBase
     {

@@ -6,8 +6,8 @@ namespace Onion.Controllers;
 
 [ApiController]
 [Route("roles")]
-[RequireRole("Admin", "SuperAdmin")]
-// Tenant isolation is enforced at the service layer; keep role endpoints protected by the RequireRole filter.
+[AuthorizeExactModule("admin-roles")]
+// Tenant isolation is enforced at the service layer; keep role endpoints protected by the module-based filter.
 public sealed class RoleController : ControllerBase
 {
     private readonly IRoleService _service;
@@ -20,7 +20,7 @@ public sealed class RoleController : ControllerBase
 
 [ApiController]
 [Route("permissions")]
-[RequireRole("Admin", "SuperAdmin")]
+[AuthorizeExactModule("admin-roles-matrix")]
 public sealed class PermissionController : ControllerBase
 {
     private readonly IPermissionService _service;

@@ -14,7 +14,7 @@ public sealed class ModuleAuthorizationConvention : IApplicationModelConvention
             ["CompanySettingsController"] = "company", ["CreditNoteController"] = "sales", ["CustomerController"] = "customers",
             ["DashboardController"] = "reports", ["DeletionApprovalController"] = "audit", ["InvitationsController"] = "company",
             ["InventoryController"] = "inventory", ["ManageRequestController"] = "company", ["MeController"] = "company",
-            ["PaymentController"] = "sales", ["ProductController"] = "sales", ["ProductTypeController"] = "sales",
+            ["PaymentController"] = "sales", ["ProductController"] = "sales", ["UnitOfMeasurementController"] = "sales", ["ProductTypeController"] = "sales",
             ["PurchaseController"] = "purchases", ["PurchaseOrderReceiptController"] = "purchases", ["ProyectosController"] = "company",
             ["RoleController"] = "company", ["PermissionController"] = "company", ["ReportsController"] = "reports",
             ["ReturnController"] = "sales", ["SubscriptionController"] = "billing", ["SupplierController"] = "purchases",

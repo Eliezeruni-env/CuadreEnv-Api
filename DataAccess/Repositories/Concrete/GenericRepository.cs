@@ -30,47 +30,31 @@ namespace Onion.DataAccess.Repositories.Concrete
 
         public async Task<T?> GetByIdAsync(int id)
         {
+            var query = _dbSet.AsQueryable();
             try
             {
-                var query = _dbSet.AsQueryable();
-                try
+                var entityType = _context.Model.FindEntityType(typeof(T));
+                if (entityType != null)
                 {
-                    var entityType = _context.Model.FindEntityType(typeof(T));
-                    if (entityType != null)
+                    var navigations = entityType.GetNavigations();
+                    foreach (var nav in navigations)
                     {
-                        var navigations = entityType.GetNavigations();
-                        foreach (var nav in navigations)
-                        {
-                            // include navigation by name
-                            query = query.Include(nav.Name);
-                        }
+                        // include navigation by name
+                        query = query.Include(nav.Name);
                     }
                 }
-                catch
-                {
-                    // If metadata inspection fails for any reason, fall back to returning the entity without includes.
-                }
-
-                return await query.FirstOrDefaultAsync(e => e.Id == id);
             }
-            catch (Microsoft.Data.SqlClient.SqlException sqlEx) when (sqlEx.Number == 208)
+            catch
             {
-                // Table does not exist in database (missing migration) -- return null so callers handle gracefully
-                return null;
+                // If metadata inspection fails, query the entity without inferred includes.
             }
+
+            return await query.FirstOrDefaultAsync(e => e.Id == id);
         }
 
         public async Task<IEnumerable<T>> ListAsync()
         {
-            try
-            {
-                return await _dbSet.ToListAsync();
-            }
-            catch (Microsoft.Data.SqlClient.SqlException sqlEx) when (sqlEx.Number == 208)
-            {
-                // Table missing - return empty list so UI can function until migration is applied
-                return new List<T>();
-            }
+            return await _dbSet.ToListAsync();
         }
 
         public IQueryable<T> Query() => _dbSet.AsQueryable();
@@ -79,20 +63,11 @@ namespace Onion.DataAccess.Repositories.Concrete
         {
             if (pageNumber < 1) pageNumber = 1;
             if (pageSize < 1) pageSize = 10;
-            try
-            {
-                var query = _dbSet.AsQueryable();
-                var total = await query.CountAsync();
-                var pageCount = (int)Math.Ceiling(total / (double)pageSize);
-                var items = await query.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToListAsync();
-                return new Onion.Common.Models.Pagination.PagedList<T>(items, pageSize, pageCount, total);
-            }
-            catch (Microsoft.Data.SqlClient.SqlException sqlEx) when (sqlEx.Number == 208)
-            {
-                // Table missing - return empty paged result so frontend can function
-                var items = new List<T>();
-                return new Onion.Common.Models.Pagination.PagedList<T>(items, pageSize, 0, 0);
-            }
+            var query = _dbSet.AsQueryable();
+            var total = await query.CountAsync();
+            var pageCount = (int)Math.Ceiling(total / (double)pageSize);
+            var items = await query.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToListAsync();
+            return new Onion.Common.Models.Pagination.PagedList<T>(items, pageSize, pageCount, total);
         }
 
         // Overload to produce paged result from an existing query (allows callers to apply filters before paging)
@@ -104,14 +79,7 @@ namespace Onion.DataAccess.Repositories.Concrete
 
         public async Task<IEnumerable<T>> FindAsync(Expression<Func<T, bool>> predicate)
         {
-            try
-            {
-                return await _dbSet.AsQueryable().Where(predicate).ToListAsync();
-            }
-            catch (Microsoft.Data.SqlClient.SqlException sqlEx) when (sqlEx.Number == 208)
-            {
-                return new List<T>();
-            }
+            return await _dbSet.AsQueryable().Where(predicate).ToListAsync();
         }
 
         public void Remove(T entity)

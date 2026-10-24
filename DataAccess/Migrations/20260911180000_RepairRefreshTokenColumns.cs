@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Onion.DataAccess;
 
 #nullable disable
 
@@ -8,6 +10,8 @@ namespace Onion.DataAccess.Migrations
     /// Repairs databases where refresh-token columns were present in the EF model
     /// but absent from the physical RefreshTokens table.
     /// </summary>
+    [Migration("20260911180000_RepairRefreshTokenColumns")]
+    [DbContext(typeof(OnionDbContext))]
     public partial class RepairRefreshTokenColumns : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

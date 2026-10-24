@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Onion.BussinesLogic.Services.Abstract;
+using Onion.Common.Exceptions;
+using Onion.DataAccess;
 using Onion.DataAccess.Repositories.Concrete;
 using Onion.Domain;
 
@@ -12,11 +14,15 @@ namespace Onion.BussinesLogic.Services.Concrete
     {
         private readonly IUnitOfWork _uow;
         private readonly Onion.BussinesLogic.Services.Abstract.IPaginationService _paginationService;
+        private readonly OnionDbContext _db;
+        private readonly ICashSessionService _cashSessionService;
 
-        public CashRegisterService(IUnitOfWork uow, Onion.BussinesLogic.Services.Abstract.IPaginationService paginationService)
+        public CashRegisterService(IUnitOfWork uow, Onion.BussinesLogic.Services.Abstract.IPaginationService paginationService, OnionDbContext db, ICashSessionService cashSessionService)
         {
             _uow = uow;
             _paginationService = paginationService;
+            _db = db;
+            _cashSessionService = cashSessionService;
         }
 
         public async Task<CashRegister?> GetByIdAsync(int id) => await _uow.CashRegisters.GetByIdAsync(id);
@@ -75,23 +81,66 @@ namespace Onion.BussinesLogic.Services.Concrete
             await _uow.SaveChangesAsync();
         }
 
-        public async Task CloseAsync(int id, decimal closingAmount, string? breakdownJson, int? userId)
+        public async Task<CashRegisterCloseResult> CloseAsync(int id, CloseCashSessionRequest request, int? userId)
         {
-            var existing = await _uow.CashRegisters.GetByIdAsync(id);
-            if (existing == null) throw new InvalidOperationException("Cash register not found");
-            if (existing.Status == CashRegisterStatus.CLOSED || existing.IsImmutable) throw new InvalidOperationException("Cash register is already closed");
-            if (closingAmount < 0) throw new ArgumentException("Closing amount cannot be negative", nameof(closingAmount));
-            var movements = (await _uow.CashMovements.FindAsync(m => m.CashRegisterId == id)).Sum(m => m.Amount);
-            var expected = existing.InitialAmount + movements;
-            existing.Close(Onion.Domain.Finance.CashDiscrepancy.Calculate(expected, closingAmount), userId, breakdownJson, DateTime.UtcNow);
+            if (request.ActualAmount < 0) throw new ArgumentException("Closing amount cannot be negative", nameof(request.ActualAmount));
+
+            var activeSession = await _db.CashSessions.SingleOrDefaultAsync(x => x.CashRegisterId == id && x.Status == Onion.Domain.Finance.CashSessionStatus.Open);
+            if (activeSession != null)
+            {
+                await _cashSessionService.CloseAsync(activeSession.CompanyId, activeSession.Id, request, userId ?? 0);
+                var closedSession = await _db.CashSessions.AsNoTracking().SingleAsync(x => x.Id == activeSession.Id);
+                var sessionDifference = closedSession.Difference ?? 0m;
+                return new CashRegisterCloseResult(
+                    closedSession.ExpectedAmount ?? 0m,
+                    closedSession.ActualAmount ?? 0m,
+                    sessionDifference,
+                    sessionDifference == 0m ? "EXACT" : sessionDifference < 0m ? "SHORTAGE" : "SURPLUS",
+                    sessionDifference == 0m,
+                    Math.Abs(sessionDifference) > 50m && string.IsNullOrWhiteSpace(request.SupervisorPin));
+            }
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
             try
             {
+                var existing = await _db.CashRegisters.SingleOrDefaultAsync(x => x.Id == id);
+                if (existing == null) throw new InvalidOperationException("Cash register not found");
+                if (existing.Status == CashRegisterStatus.CLOSED || existing.IsImmutable)
+                {
+                    return new CashRegisterCloseResult(existing.InitialAmount, request.ActualAmount, 0m, "EXACT", true, false);
+                }
+
+                var movements = await _db.CashMovements
+                    .Where(m => m.CashRegisterId == id)
+                    .SumAsync(m => (decimal?)m.Amount) ?? 0m;
+                var expected = existing.InitialAmount + movements;
+                var discrepancy = Onion.Domain.Finance.CashDiscrepancy.Calculate(expected, request.ActualAmount);
+                existing.Close(discrepancy, userId, request.BreakdownJson ?? "{}", DateTime.UtcNow);
+
+                if (Math.Abs(discrepancy.DifferenceAmount) > 0.01m &&
+                    (string.IsNullOrWhiteSpace(request.Notes) || request.Notes.Trim().Length < 10))
+                    throw new CashSessionException("CASH_CLOSE_JUSTIFICATION_REQUIRED", "Debe proporcionar una justificación detallada del descuadre (mínimo 10 caracteres).");
+
                 _uow.CashRegisters.Update(existing);
                 await _uow.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return new CashRegisterCloseResult(
+                    discrepancy.ExpectedAmount,
+                    discrepancy.ActualAmount,
+                    discrepancy.DifferenceAmount,
+                    discrepancy.DifferenceAmount == 0m ? "EXACT" : discrepancy.DifferenceAmount < 0m ? "SHORTAGE" : "SURPLUS",
+                    discrepancy.DifferenceAmount == 0m,
+                    Math.Abs(discrepancy.DifferenceAmount) > 50m && string.IsNullOrWhiteSpace(request.SupervisorPin));
             }
             catch (DbUpdateConcurrencyException)
             {
+                await transaction.RollbackAsync();
                 throw new InvalidOperationException("Cash register was changed by another process; reload it before closing.");
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
             }
         }
     }

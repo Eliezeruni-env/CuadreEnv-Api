@@ -7,6 +7,7 @@ using System.Linq;
 using System;
 using Microsoft.EntityFrameworkCore;
 using Onion.Common.Authorization;
+using System.Text.Json;
 
 namespace Onion.Controllers
 {
@@ -386,7 +387,8 @@ namespace Onion.Controllers
             string FirstName,
             string LastName,
             string? UserName,
-            string? Password
+            string? Password,
+            JsonElement AllowedModules = default
         );
 
         // 8. Update user details
@@ -428,6 +430,14 @@ namespace Onion.Controllers
                 if (!string.IsNullOrWhiteSpace(req.Password))
                 {
                     user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password); // Hash with BCrypt
+                }
+
+                if (req.AllowedModules.ValueKind is not JsonValueKind.Undefined and not JsonValueKind.Null)
+                {
+                    if (req.AllowedModules.ValueKind != JsonValueKind.Array)
+                        return BadRequest(new { error = "AllowedModules must be a JSON array" });
+
+                    user.AllowedModulesJson = req.AllowedModules.GetRawText();
                 }
 
                 _uow.Users.Update(user);

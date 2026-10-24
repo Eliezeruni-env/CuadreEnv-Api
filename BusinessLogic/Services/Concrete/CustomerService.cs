@@ -1,13 +1,12 @@
 using Onion.BussinesLogic.Services.Abstract;
 using Onion.DataAccess.Repositories.Abstract;
+using Onion.DataAccess.Repositories.Concrete;
 using Onion.Domain;
 using Onion.Common.Exceptions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Onion.DataAccess.Repositories.Concrete;
 using Onion.BussinesLogic.Models;
-using Onion.DataAccess.Repositories.Concrete;
 
 namespace Onion.BussinesLogic.Services.Concrete
 {
@@ -74,9 +73,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             existing.Address = customer.Address;
             existing.Identification = customer.Identification;
             existing.Notes = customer.Notes;
-            existing.Address = customer.Address;
-            existing.Identification = customer.Identification;
-            existing.Notes = customer.Notes;
+            existing.Active = customer.Active;
 
             _uow.Customers.Update(existing);
             await _uow.SaveChangesAsync();
@@ -86,7 +83,6 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             if (days <= 0) days = 30;
             var cutoff = DateTime.UtcNow.AddDays(-days);
-            // Use UnitOfWork sales repository to find customers with sales in timeframe.
             var sales = await _uow.Sales.FindAsync(s => s.Date >= cutoff);
             var ids = sales.Where(s => s.CustomerId.HasValue).Select(s => s.CustomerId!.Value).Distinct().ToList();
             if (ids.Count == 0) return new List<Customer>();

@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -66,6 +67,29 @@ namespace Onion.BussinesLogic.Services.Concrete
             _revokedRetention = TimeSpan.FromDays(revokeRetentionDays);
         }
 
+        public async Task<TokenResponseDto> SwitchCompanyAsync(int userId, int companyId, string? deviceId = null)
+        {
+            if (userId <= 0 || companyId <= 0)
+                throw new ArgumentException("A valid user and company are required.");
+
+            var user = await _uow.Users.GetByIdUnscopedAsync(userId)
+                ?? throw new CustomException(new Onion.Common.Models.Error { Code = "USER_NOT_FOUND", Message = "User not found.", Language = "EN" });
+
+            var membership = await _db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
+                .FirstOrDefaultAsync(x => x.UserId == userId && x.CompanyId == companyId && x.Active && !x.IsDeleted);
+            var ownsPrimaryCompany = user.CompanyId == companyId;
+            if (membership is null && !ownsPrimaryCompany && !user.IsSuperUser)
+                throw new CustomException(new Onion.Common.Models.Error { Code = "COMPANY_ACCESS_DENIED", Message = "The user does not have access to the selected company.", Language = "EN" });
+
+            user.CompanyId = companyId;
+            _uow.Users.Update(user);
+            await _uow.SaveChangesAsync();
+
+            var modules = await GetAllowedModulesAsync(user);
+            var (access, refresh) = await LoginWithTokensAsync(user, deviceId, modules);
+            return new TokenResponseDto(access, refresh, ToUserResponse(user, modules));
+        }
+
         public async Task<UserResponseDto> RegisterAsync(RegisterRequestDto request)
         {
             if (request is null) throw new ArgumentNullException(nameof(request));
@@ -76,14 +100,13 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (_uow == null) throw new InvalidOperationException("UnitOfWork is not available (DI configuration issue).");
             if (_uow.Users == null) throw new InvalidOperationException("Users repository is not available on UnitOfWork (DI or UnitOfWork initialization issue).");
 
-            var exists = await _uow.Users.ExistsByEmailAsync(request.Email);
+            var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+            var exists = await _uow.Users.ExistsByEmailAsync(normalizedEmail);
             if (exists)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "DUPLICATE_EMAIL", Message = "Email already registered", Language = "EN" });
 
             // Hash password using BCrypt
             string hash = BCrypt.Net.BCrypt.HashPassword(request.Password);
-
-            var normalizedEmail = request.Email.Trim().ToLowerInvariant();
 
             var user = new User
             {
@@ -100,29 +123,44 @@ namespace Onion.BussinesLogic.Services.Concrete
                 Role = "Employee"
             };
 
-            // Optionally create company during signup and assign the user to it
-            if (!string.IsNullOrWhiteSpace(request.CreateCompanyName))
+            var previousAmbientCompanyId = Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId;
+            await using var transaction = await _uow.BeginTransactionAsync();
+            try
             {
-                var createReq = new Onion.BussinesLogic.Dtos.CreateCompanyRequest
+                // Registration is an onboarding operation. The newly created company is
+                // the temporary tenant until the transaction is committed.
+                if (!string.IsNullOrWhiteSpace(request.CreateCompanyName))
                 {
-                    Name = request.CreateCompanyName,
-                    Address = null,
-                    Phone = null
-                };
+                    var createReq = new Onion.BussinesLogic.Dtos.CreateCompanyRequest
+                    {
+                        Name = request.CreateCompanyName.Trim(),
+                        Address = null,
+                        Phone = null
+                    };
 
-                var companyCreated = await _companyService.CreateAsync(createReq);
-                user.CompanyId = companyCreated.Id;
-                // When a user creates a company during registration, make them an Admin of that company.
-                user.Role = "Admin";
+                    var companyCreated = await _companyService.CreateAsync(createReq);
+                    user.CompanyId = companyCreated.Id;
+                    user.Role = "Admin";
+                    Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = companyCreated.Id;
+                }
+
+                // UserService remains the single authority for user validation and persistence.
+                var created = await _userService.CreateAsync(user);
+                await transaction.CommitAsync();
+
+                _logger?.LogInformation("Registered user {Email} (Id: {Id}, CompanyId: {CompanyId})", created.Email, created.Id, created.CompanyId);
+                created.PasswordHash = string.Empty;
+                return ToUserResponse(created, new[] { "*" });
             }
-
-            // Reuse UserService to centralize creation logic and validations
-            var created = await _userService.CreateAsync(user);
-            _logger?.LogInformation("Registered user {Email} (Id: {Id})", created.Email, created.Id);
-
-            // Do not return password hash to callers
-            created.PasswordHash = string.Empty;
-            return ToUserResponse(created, new[] { "*" });
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+            finally
+            {
+                Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = previousAmbientCompanyId;
+            }
         }
 
         public async Task<TokenResponseDto> LoginAsync(LoginRequestDto request)
@@ -305,6 +343,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             await CleanupExpiredRevokedTokensAsync();
 
             if (refresh.IsRevoked || refresh.Expires <= DateTime.UtcNow)
+                
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_TOKEN", Message = "Refresh token is invalid or expired", Language = "EN" });
 
             // Load user

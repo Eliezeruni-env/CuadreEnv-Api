@@ -6,5 +6,6 @@ namespace Onion.DataAccess.Repositories.Abstract
     public interface IInventoryRepository : IRepository<Inventory>
     {
         Task<Inventory?> GetByProductAndWarehouseAsync(int productId, int warehouseId);
+        Task<bool> TryReduceStockAsync(int productId, int warehouseId, decimal quantity, bool allowNegativeStock = false);
     }
 }

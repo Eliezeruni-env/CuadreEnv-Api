@@ -5,6 +5,7 @@ using Onion.Common.Exceptions;
 using Onion.Common.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore;
 
 namespace Onion.Controllers.Middleware
 {
@@ -59,7 +60,21 @@ namespace Onion.Controllers.Middleware
             }
             catch (Onion.Common.Exceptions.CashSessionException ex)
             {
-                await WriteBusinessErrorAsync(context, ex.Code == "CASH_SESSION_NOT_FOUND" ? StatusCodes.Status404NotFound : ex.Code == "OUT_OF_TOLERANCE_CLOSING" ? StatusCodes.Status422UnprocessableEntity : StatusCodes.Status409Conflict, ex.Code, ex.Message);
+                var status = ex.Code == "CASH_SESSION_NOT_FOUND" ? StatusCodes.Status404NotFound :
+                    ex.Code == "OUT_OF_TOLERANCE_CLOSING" ? StatusCodes.Status422UnprocessableEntity :
+                    ex.Code is "CASH_CLOSE_JUSTIFICATION_REQUIRED" or "CASH_DRAWER_EMPTY_CONFIRMATION_REQUIRED" or "OPEN_CASH_OPERATIONS" or "INVALID_CASH_DESTINATION" or "INVALID_DECLARED_AMOUNT"
+                        ? StatusCodes.Status400BadRequest : StatusCodes.Status409Conflict;
+                await WriteBusinessErrorAsync(context, status, ex.Code, ex.Message);
+                return;
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                _logger.LogWarning(ex, "Concurrency conflict while processing request {Path} RequestId={RequestId}", context.Request?.Path, context.TraceIdentifier);
+                await WriteBusinessErrorAsync(
+                    context,
+                    StatusCodes.Status409Conflict,
+                    "CONCURRENCY_CONFLICT",
+                    "The resource was changed by another operation. Reload it and try again.");
                 return;
             }
             catch (CustomException cex)
@@ -90,6 +105,9 @@ namespace Onion.Controllers.Middleware
                     path = context.Request?.Path,
                     method = context.Request?.Method,
                     timestamp = DateTime.UtcNow,
+                    productId = cex.Error.ProductId,
+                    availableStock = cex.Error.AvailableStock,
+                    requestedQuantity = cex.Error.RequestedQuantity,
                     // include structured details when present (e.g., field validation errors)
                     details = cex.Error.Details
                 };

@@ -32,7 +32,7 @@ namespace Onion.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] int? pageNumber = null, [FromQuery] int? pageSize = null, [FromQuery] string? search = null, [FromQuery] string? status = null)
         {
-            var list = (await _uow.AccountReceivables.ListAsync()).ToList();
+            var list = (await _uow.AccountReceivables.FindAsync(a => a.Active && !a.IsDeleted)).ToList();
 
             // Filter by status if provided
             if (!string.IsNullOrWhiteSpace(status))
@@ -100,6 +100,11 @@ namespace Onion.Controllers
         public async Task<IActionResult> GetById(int id)
         {
             var ar = await _uow.AccountReceivables.GetByIdAsync(id);
+            if (ar == null)
+            {
+                int? targetSaleId = id;
+            ar = (await _uow.AccountReceivables.FindAsync(a => a.SaleId == targetSaleId)).FirstOrDefault();
+            }
             if (ar == null) return NotFound(ApiResponse<object>.Fail("AccountReceivable not found"));
 
             // Load customer
@@ -111,7 +116,8 @@ namespace Onion.Controllers
             var payments = new System.Collections.Generic.List<object>();
             if (ar.SaleId.HasValue)
             {
-                var payList = (await _uow.Payments.FindAsync(p => p.SaleId == ar.SaleId.Value)).ToList();
+                int? targetPaySaleId = ar.SaleId;
+                var payList = (await _uow.Payments.FindAsync(p => p.SaleId == targetPaySaleId)).ToList();
                 payments = payList.Select(p => new { id = p.Id, amount = p.Amount, date = p.CreationDate, method = p.PaymentMethod.ToString(), reference = p.Reference }).ToList<object>();
             }
 
@@ -233,24 +239,66 @@ namespace Onion.Controllers
             // Validate amount
             if (req.Amount <= 0) return BadRequest(ApiResponse<object>.Fail("Amount must be greater than zero"));
 
-            // Fetch receivable to determine linked sale
-            var ar = await _uow.AccountReceivables.GetByIdAsync(id) ?? throw new CustomException(new Error { Code = "NOT_FOUND", Message = "AccountReceivable not found", Language = "EN" });
+            // Fetch receivable to determine linked sale (support by Id or SaleId)
+            var ar = await _uow.AccountReceivables.GetByIdAsync(id);
+            if (ar == null)
+            {
+                int? targetSaleId2 = id;
+                ar = (await _uow.AccountReceivables.FindAsync(a => a.SaleId == targetSaleId2)).FirstOrDefault();
+            }
+            if (ar == null)
+            {
+                var sale = await _uow.Sales.GetByIdAsync(id);
+                if (sale != null)
+                {
+                    ar = new Onion.Domain.Finance.AccountReceivable
+                    {
+                        CompanyId = sale.CompanyId,
+                        CustomerId = sale.CustomerId,
+                        SaleId = sale.Id,
+                        TotalAmount = sale.Total,
+                        PaidAmount = sale.PaidAmount,
+                        DueDate = sale.DueDate ?? sale.Date.AddDays(30),
+                        Status = sale.PaidAmount >= sale.Total ? ReceivableStatus.Paid : ReceivableStatus.Open
+                    };
+                    await _uow.AccountReceivables.AddAsync(ar);
+                    await _uow.SaveChangesAsync();
+                }
+                else
+                {
+                    throw new CustomException(new Error { Code = "NOT_FOUND", Message = "AccountReceivable not found", Language = "EN" });
+                }
+            }
 
             // Register payment record if there is an associated sale
             if (ar.SaleId.HasValue)
             {
+                var method = Onion.Domain.PaymentMethod.OTHER;
+                if (!string.IsNullOrWhiteSpace(req.Method))
+                {
+                    if (Enum.TryParse<Onion.Domain.PaymentMethod>(req.Method, true, out var parsedMethod))
+                        method = parsedMethod;
+                    else if (req.Method.Contains("CASH", StringComparison.OrdinalIgnoreCase) || req.Method.Contains("Efectivo", StringComparison.OrdinalIgnoreCase))
+                        method = Onion.Domain.PaymentMethod.CASH;
+                    else if (req.Method.Contains("TRANS", StringComparison.OrdinalIgnoreCase))
+                        method = Onion.Domain.PaymentMethod.TRANSFER;
+                    else if (req.Method.Contains("CARD", StringComparison.OrdinalIgnoreCase) || req.Method.Contains("Tarj", StringComparison.OrdinalIgnoreCase))
+                        method = Onion.Domain.PaymentMethod.CARD;
+                }
+
                 var payment = new Onion.Domain.Payment
                 {
                     SaleId = ar.SaleId.Value,
+                    CompanyId = ar.CompanyId,
                     Amount = req.Amount,
-                    PaymentMethod = Onion.Domain.PaymentMethod.OTHER,
+                    PaymentMethod = method,
                     Reference = req.Reference
                 };
                 await _uow.Payments.AddAsync(payment);
             }
 
-            // Update account receivable totals
-            await _service.RegisterPaymentAsync(id, req.Amount);
+            // Update account receivable totals and linked sale
+            await _service.RegisterPaymentAsync(ar.Id, req.Amount);
 
             // Record cash movement when cashRegister provided and method is CASH
             if (req.Method != null && req.Method.Equals("CASH", StringComparison.OrdinalIgnoreCase) && req.CashRegisterId.HasValue)
@@ -259,7 +307,9 @@ namespace Onion.Controllers
                 {
                     CashRegisterId = req.CashRegisterId.Value,
                     Amount = req.Amount,
-                    Description = $"Payment for AR #{ar.Id}",
+                    Description = $"Cobro Deuda AR #{ar.Id}",
+                    Reason = $"Cobro Deuda AR #{ar.Id}",
+                    Type = Onion.Domain.Finance.CashMovementType.ReceivablePayment,
                     CompanyId = ar.CompanyId,
                     CreateBy = "system"
                 };
@@ -271,10 +321,11 @@ namespace Onion.Controllers
         }
     }
 
-    public record PaymentRequest(decimal Amount, string? Method = null, string? Reference = null, string? Notes = null, DateTime? Date = null, int? CashRegisterId = null);
+    public record PaymentRequest(decimal Amount, string? Method = null, string? PaymentMethod = null, string? Reference = null, string? Notes = null, DateTime? Date = null, int? CashRegisterId = null);
 
     public record CreateReceivableRequest(int CompanyId, int? CustomerId, int? SaleId, decimal TotalAmount, decimal PaidAmount = 0m, DateTime? DueDate = null, PaymentPlanRequest? Plan = null,
         System.Collections.Generic.IEnumerable<Onion.BussinesLogic.Dtos.SaleDetailDto>? Details = null, PaymentRequest? Payment = null);
 
     public record PaymentPlanRequest(decimal InstallmentAmount, int TotalInstallments, string Frequency, DateTime? StartsAt = null);
 }
+

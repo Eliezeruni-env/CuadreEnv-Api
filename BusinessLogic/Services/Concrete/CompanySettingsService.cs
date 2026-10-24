@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using System;
 using System.Linq;
+using Microsoft.EntityFrameworkCore;
 using Onion.BussinesLogic.Services.Abstract;
 using Onion.BussinesLogic.Dtos;
 using Onion.DataAccess.Repositories.Abstract;
@@ -21,52 +22,81 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<Onion.BussinesLogic.Dtos.CompanySettingsEditableDto?> GetSettingsAsync(int companyId)
         {
-            var s = await _repo.FindAsync(x => x.CompanyId == companyId);
-            var settings = s.FirstOrDefault();
-            if (settings == null)
+            var settings = await _db.CompanySettings.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.CompanyId == companyId);
+            var company = await _db.Companies.IgnoreQueryFilters().FirstOrDefaultAsync(c => c.Id == companyId);
+
+            if (settings == null && company == null)
                 return null;
 
-            // Map using known concrete properties on Domain.CompanySettings (CommercialName -> CompanyName)
             return new CompanySettingsEditableDto
             {
-                CompanyName = settings.CommercialName ?? string.Empty,
-                Rnc = string.Empty,
-                Phone = string.Empty,
-                Email = string.Empty,
-                Address = string.Empty,
-                Website = settings.LogoUrl,
-                LogoUrl = settings.LogoUrl,
-                InvoiceFooterPhrase = string.Empty,
-                Currency = settings.Currency,
-                DefaultTaxPercentage = settings.DefaultTaxPercentage
+                CompanyName = company?.Name ?? settings?.CommercialName ?? string.Empty,
+                CommercialName = settings?.CommercialName ?? company?.Name ?? string.Empty,
+                Rnc = company?.Rnc ?? string.Empty,
+                Phone = company?.Phone ?? string.Empty,
+                Email = company?.Email ?? string.Empty,
+                Address = company?.Address ?? string.Empty,
+                Website = settings?.LogoUrl,
+                LogoUrl = settings?.LogoUrl,
+                InvoiceFooterPhrase = settings?.InvoiceFooterPhrase ?? string.Empty,
+                TicketPaperSize = settings?.TicketPaperSize ?? "80mm",
+                Currency = string.IsNullOrWhiteSpace(settings?.Currency) ? "DOP" : settings.Currency,
+                DefaultTaxPercentage = settings?.DefaultTaxPercentage ?? 18m,
+                AllowNegativeStock = settings?.AllowNegativeStock ?? false,
+                TicketInstagram = settings?.TicketInstagram ?? string.Empty,
+                TicketWhatsapp = settings?.TicketWhatsapp ?? string.Empty,
+                TicketShowQr = settings?.TicketShowQr ?? true
             };
         }
 
         public async Task UpdateSettingsAsync(int companyId, UpdateCompanySettingsDto dto)
         {
-            var s = (await _repo.FindAsync(x => x.CompanyId == companyId)).FirstOrDefault();
+            var s = await _db.CompanySettings.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.CompanyId == companyId);
+            var isNew = false;
             if (s == null)
             {
-                // Create a new CompanySettings entity using known concrete type
-                s = new CompanySettings { CompanyId = companyId };
-                await _repo.AddAsync(s);
+                isNew = true;
+                s = new CompanySettings
+                {
+                    CompanyId = companyId,
+                    CreationDate = DateTime.UtcNow,
+                    Active = true,
+                    IsDeleted = false
+                };
             }
 
-            // Set properties using reflection to avoid compile-time dependency on concrete shape
-            var t = s.GetType();
-            t.GetProperty("CompanyName")?.SetValue(s, dto.CompanyName);
-            t.GetProperty("Rnc")?.SetValue(s, dto.Rnc);
-            t.GetProperty("Phone")?.SetValue(s, dto.Phone);
-            t.GetProperty("Email")?.SetValue(s, dto.Email);
-            t.GetProperty("Address")?.SetValue(s, dto.Address);
-            t.GetProperty("Website")?.SetValue(s, dto.Website);
-            t.GetProperty("LogoUrl")?.SetValue(s, dto.LogoUrl);
-            t.GetProperty("InvoiceFooterPhrase")?.SetValue(s, dto.InvoiceFooterPhrase);
-            t.GetProperty("Currency")?.SetValue(s, dto.Currency);
-            t.GetProperty("DefaultTaxPercentage")?.SetValue(s, dto.DefaultTaxPercentage);
-            t.GetProperty("UpdatedAt")?.SetValue(s, System.DateTime.UtcNow);
+            s.CommercialName = !string.IsNullOrWhiteSpace(dto.CommercialName) ? dto.CommercialName : dto.CompanyName;
+            s.LogoUrl = dto.LogoUrl;
+            s.InvoiceFooterPhrase = dto.InvoiceFooterPhrase ?? string.Empty;
+            s.TicketPaperSize = !string.IsNullOrWhiteSpace(dto.TicketPaperSize) ? dto.TicketPaperSize : "80mm";
+            if (!string.IsNullOrWhiteSpace(dto.Currency)) s.Currency = dto.Currency;
+            if (dto.DefaultTaxPercentage >= 0) s.DefaultTaxPercentage = dto.DefaultTaxPercentage;
+            s.AllowNegativeStock = dto.AllowNegativeStock;
+            s.TicketInstagram = dto.TicketInstagram;
+            s.TicketWhatsapp = dto.TicketWhatsapp;
+            s.TicketShowQr = dto.TicketShowQr;
+            s.ModificationDate = DateTime.UtcNow;
 
-            _repo.Update(s);
+            if (isNew)
+            {
+                await _db.CompanySettings.AddAsync(s);
+            }
+            else
+            {
+                _db.CompanySettings.Update(s);
+            }
+
+            var company = await _db.Companies.IgnoreQueryFilters().FirstOrDefaultAsync(c => c.Id == companyId);
+            if (company != null)
+            {
+                if (!string.IsNullOrWhiteSpace(dto.CompanyName)) company.Name = dto.CompanyName;
+                if (!string.IsNullOrWhiteSpace(dto.Rnc)) company.Rnc = dto.Rnc;
+                if (!string.IsNullOrWhiteSpace(dto.Phone)) company.Phone = dto.Phone;
+                if (!string.IsNullOrWhiteSpace(dto.Email)) company.Email = dto.Email;
+                if (!string.IsNullOrWhiteSpace(dto.Address)) company.Address = dto.Address;
+                _db.Companies.Update(company);
+            }
+
             await _db.SaveChangesAsync();
         }
     }

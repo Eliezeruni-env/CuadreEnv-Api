@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Onion.Common.Authorization;
+using Onion.Common.Services;
 using Onion.Controllers;
 using Xunit;
 
@@ -21,11 +23,11 @@ public sealed class ProtectedAdminEndpointsTests
     public async Task Authenticated_Non_Admin_Receives_403(Type controllerType, string actionName)
     {
         var method = controllerType.GetMethod(actionName)!;
-        var attribute = method.GetCustomAttributes(typeof(RequireRoleAttribute), true)
-            .Cast<RequireRoleAttribute>()
+        var attribute = method.GetCustomAttributes(typeof(AuthorizeExactModuleAttribute), true)
+            .Cast<AuthorizeExactModuleAttribute>()
             .FirstOrDefault()
-            ?? controllerType.GetCustomAttributes(typeof(RequireRoleAttribute), true)
-                .Cast<RequireRoleAttribute>()
+            ?? controllerType.GetCustomAttributes(typeof(AuthorizeExactModuleAttribute), true)
+                .Cast<AuthorizeExactModuleAttribute>()
                 .First();
         var context = new ActionExecutingContext(
             new ActionContext
@@ -42,9 +44,19 @@ public sealed class ProtectedAdminEndpointsTests
             new Dictionary<string, object?>(),
             new object());
 
-        await attribute.OnActionExecutionAsync(context, () =>
-            throw new InvalidOperationException("A non-admin must not reach the action."));
+        var entitlement = new TestEntitlements();
+        var filter = new AuthorizeExactModuleFilter(entitlement, "users");
+        await filter.OnActionExecutionAsync(context, () =>
+            throw new InvalidOperationException("A user without the required module must not reach the action."));
 
-        Assert.IsType<ForbidResult>(context.Result);
+        Assert.IsType<ObjectResult>(context.Result);
+    }
+
+    private sealed class TestEntitlements : ICompanyEntitlementService
+    {
+        public Task<CompanyEntitlements> GetAsync(int companyId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new CompanyEntitlements(new HashSet<string> { "company", "audit" }, new HashSet<string>()));
+
+        public void Invalidate(int companyId) { }
     }
 }

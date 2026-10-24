@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Onion.BussinesLogic.Services.Abstract;
 using Onion.Common.Authorization;
 using Onion.Common.Models;
@@ -9,6 +9,7 @@ namespace Onion.Controllers;
 
 [ApiController]
 [Route("cash-sessions")]
+[Route("api/caja")]
 [AuthorizeModule("POS")]
 public sealed class CashSessionController : ControllerBase
 {
@@ -22,12 +23,11 @@ public sealed class CashSessionController : ControllerBase
     }
 
     [HttpGet("active-session")]
-    public async Task<ActionResult<ApiResponse<CashSessionDto>>> ActiveSession(CancellationToken cancellationToken)
+    [HttpGet("/api/caja/current")]
+    public async Task<ActionResult<ApiResponse<CashSessionDto?>>> ActiveSession(CancellationToken cancellationToken)
     {
         var result = await _service.GetActiveAsync(RequireCompany(), RequireUser(), cancellationToken);
-        return result is null
-            ? NotFound(ApiResponse<CashSessionDto>.Fail("No active cash session exists.", new[] { "CASH_SESSION_NOT_FOUND" }))
-            : Ok(ApiResponse<CashSessionDto>.Ok(result, "Active cash session retrieved."));
+        return Ok(ApiResponse<CashSessionDto?>.Ok(result, result is null ? "No active cash session exists." : "Active cash session retrieved."));
     }
 
     [HttpPost("open")]
@@ -40,6 +40,7 @@ public sealed class CashSessionController : ControllerBase
     }
 
     [HttpPost("{id:int}/movements")]
+    [HttpPost("/api/caja/{id:int}/movements")]
     public async Task<ActionResult<ApiResponse<CashMovementDto>>> AddMovement(int id, [FromBody] AddCashMovementRequest request, CancellationToken cancellationToken)
     {
         var result = await _service.AddMovementAsync(RequireCompany(), id, request, RequireUser(), cancellationToken);
@@ -47,10 +48,19 @@ public sealed class CashSessionController : ControllerBase
     }
 
     [HttpPost("{id:int}/close")]
+    [HttpPost("/api/caja/{id:int}/close")]
     public async Task<ActionResult<ApiResponse<CashSessionDto>>> Close(int id, [FromBody] CloseCashSessionRequest request, CancellationToken cancellationToken)
     {
         var result = await _service.CloseAsync(RequireCompany(), id, request, RequireUser(), cancellationToken);
-        return Ok(ApiResponse<CashSessionDto>.Ok(result, "Cash session closed."));
+        return Ok(ApiResponse<CashSessionDto>.Ok(result, "Cierre de caja registrado exitosamente."));
+    }
+
+    [HttpPost("sessions/{id:int}/close")]
+    [HttpPost("/api/caja/sessions/{id:int}/close")]
+    public async Task<ActionResult<ApiResponse<CashSessionDto>>> CloseCompatibility(int id, [FromBody] CloseCashSessionRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _service.CloseByRegisterOrSessionAsync(RequireCompany(), id, request, RequireUser(), cancellationToken);
+        return Ok(ApiResponse<CashSessionDto>.Ok(result, "Cierre de caja registrado exitosamente."));
     }
 
     private int RequireCompany()

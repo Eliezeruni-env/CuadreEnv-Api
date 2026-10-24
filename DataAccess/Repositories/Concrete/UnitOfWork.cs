@@ -25,6 +25,7 @@ namespace Onion.DataAccess.Repositories.Concrete
         IRepository<Onion.Domain.Return> Returns { get; }
         IRepository<Onion.Domain.CashRegister> CashRegisters { get; }
         IRepository<Onion.Domain.CashMovement> CashMovements { get; }
+        IRepository<Onion.Domain.Finance.CashSession> CashSessions { get; }
         IRepository<Onion.Domain.CashRegisterPause> CashRegisterPauses { get; }
         IRepository<Onion.Domain.CompanySettings> CompanySettingsRepo { get; }
         IRepository<Onion.Domain.Products.ProductType> ProductTypes { get; }
@@ -66,6 +67,7 @@ namespace Onion.DataAccess.Repositories.Concrete
         public IRepository<Onion.Domain.Return> Returns { get; }
         public IRepository<Onion.Domain.CashRegister> CashRegisters { get; }
         public IRepository<Onion.Domain.CashMovement> CashMovements { get; }
+        public IRepository<Onion.Domain.Finance.CashSession> CashSessions { get; }
         public IRepository<Onion.Domain.CashRegisterPause> CashRegisterPauses { get; }
         public IRepository<Onion.Domain.CompanySettings> CompanySettingsRepo { get; }
         public IRepository<Onion.Domain.Products.ProductType> ProductTypes { get; }
@@ -102,6 +104,7 @@ namespace Onion.DataAccess.Repositories.Concrete
             Returns = new GenericRepository<Onion.Domain.Return>(context);
             CashRegisters = new GenericRepository<Onion.Domain.CashRegister>(context);
             CashMovements = new GenericRepository<Onion.Domain.CashMovement>(context);
+            CashSessions = new GenericRepository<Onion.Domain.Finance.CashSession>(context);
             CashRegisterPauses = new GenericRepository<Onion.Domain.CashRegisterPause>(context);
             CompanySettingsRepo = new GenericRepository<Onion.Domain.CompanySettings>(context);
             ProductTypes = new GenericRepository<Onion.Domain.Products.ProductType>(context);
@@ -174,6 +177,16 @@ namespace Onion.DataAccess.Repositories.Concrete
             {
                 return await _context.SaveChangesAsync();
             }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException concurrencyEx)
+            {
+                _logger?.LogWarning(concurrencyEx, "Concurrency conflict during SaveChangesAsync");
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error
+                {
+                    Code = "CONCURRENCY_CONFLICT",
+                    Message = "The resource was changed by another operation. Reload it and try again.",
+                    Language = "EN"
+                });
+            }
             catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
             {
                 _logger?.LogError(dbEx, "DbUpdateException during SaveChangesAsync");
@@ -185,7 +198,17 @@ namespace Onion.DataAccess.Repositories.Concrete
                     {
                         case 2627: // Unique constraint error
                         case 2601:
-                            _logger?.LogWarning("Unique constraint violation: {Message}", sqlEx.Message);
+                            _logger?.LogWarning(sqlEx, "Unique constraint violation. SqlNumber={SqlNumber}; ConstraintDetails={Message}", sqlEx.Number, sqlEx.Message);
+                            if (sqlEx.Message.Contains("IX_CashSessions_CompanyId_CashierUserId", StringComparison.OrdinalIgnoreCase)
+                                || sqlEx.Message.Contains("IX_CashSessions_CompanyId_CashRegisterId", StringComparison.OrdinalIgnoreCase))
+                            {
+                                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error
+                                {
+                                    Code = "CASH_SESSION_ALREADY_OPEN",
+                                    Message = "The cashier or cash register already has an active cash session.",
+                                    Language = "EN"
+                                });
+                            }
                             throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "DUPLICATE_KEY", Message = "Duplicate value violates unique constraint.", Language = "EN" });
                         case 547: // Constraint check violation (FK)
                             _logger?.LogWarning("Foreign key constraint violation: {Message}", sqlEx.Message);
@@ -198,12 +221,13 @@ namespace Onion.DataAccess.Repositories.Concrete
                             throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "TABLE_MISSING", Message = "Database table missing or migration required.", Language = "EN" });
                         default:
                             _logger?.LogError(sqlEx, "SQL error during SaveChanges");
-                            throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "DB_ERROR", Message = sqlEx.Message, Language = "EN" });
+                            throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "DB_ERROR", Message = "A database error occurred while saving the operation.", Language = "EN" });
                     }
                 }
 
                 // Fallback for other providers or unknown inner exceptions
-                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "DB_ERROR", Message = dbEx.InnerException?.Message ?? dbEx.Message, Language = "EN" });
+                // Do not expose internal exception messages to callers; return a generic database error instead.
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "DB_ERROR", Message = "An unexpected database error occurred.", Language = "EN" });
             }
         }
 

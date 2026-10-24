@@ -10,6 +10,10 @@ public static class ModuleCodes
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["sales"] = "sales", ["sale"] = "sales",
+            ["sales.corporate"] = "sales", ["sales-corporate"] = "sales", ["corporate"] = "sales",
+            ["sales.distribution"] = "sales", ["sales-distribution"] = "sales", ["distribution"] = "sales",
+            ["products.detail_sales"] = "sales", ["products-detail-sales"] = "sales", ["detail-sales"] = "sales", ["detail_sales"] = "sales",
+            ["quick-sale"] = "sales", ["quicksale"] = "sales",
             ["dashboard"] = "reports", ["metrics"] = "reports",
             ["inventory"] = "inventory",
             ["inventory-stock"] = "inventory", ["inventory-entries"] = "inventory", ["inventory-outlets"] = "inventory",

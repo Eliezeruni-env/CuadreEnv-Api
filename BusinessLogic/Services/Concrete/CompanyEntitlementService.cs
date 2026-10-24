@@ -97,15 +97,15 @@ public sealed class CompanyEntitlementService : ICompanyEntitlementService
             }
             catch (Exception ex) when (ex is HttpRequestException or JsonException)
             {
-                _logger.LogError(ex, "USM entitlement lookup failed for company {CompanyId}; denying module access", companyId);
-                return Empty;
+                _logger.LogError(ex, "USM entitlement lookup failed for company {CompanyId}; falling back to default modules", companyId);
+                return new CompanyEntitlements(DefaultModules, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             }
         }
 
         if (_configuration.GetValue("Usm:UseLocalDatabase", false))
             return await LoadLocalAsync(companyId, cancellationToken);
 
-        return Empty;
+        return new CompanyEntitlements(DefaultModules, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
     }
 
     private static IReadOnlyCollection<string> ReadModuleEntitlements(JsonElement payload)

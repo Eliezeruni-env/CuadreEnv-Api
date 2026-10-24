@@ -14,9 +14,21 @@
         public int MinimumQuantity { get; set; }
         public int? ProductTypeId { get; set; }
         public int? CategoryId { get; set; }
+        public string? CategoryName { get; set; }
+        public ProductCategoryDto? Category { get; set; }
         public int UnitOfMeasurementId { get; set; }
         public bool InvoiceWithoutStock { get; set; }
+        public bool IsService { get; set; }
         public DateTime? ExpirationDate { get; set; }
         public bool IsOrganic { get; set; }
+        public string? ImageUrl { get; set; }
+        public bool AllowFractional { get; set; }
+        public decimal? ProfitMargin { get; set; }
+    }
+    public class ProductCategoryDto
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+        public string? Description { get; set; }
     }
 }

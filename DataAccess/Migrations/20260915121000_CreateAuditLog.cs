@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Onion.DataAccess;
 
 #nullable disable
 
 namespace Onion.DataAccess.Migrations
 {
     [Migration("20260915121000_CreateAuditLog")]
+    [DbContext(typeof(OnionDbContext))]
     public partial class CreateAuditLog : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
