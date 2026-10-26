@@ -29,7 +29,6 @@ namespace Onion.Controllers
         }
 
         [HttpPost]
-        [AuthorizeModule("inventory")]
         public async Task<IActionResult> Create([FromBody] CreateWarehouseDto dto)
         {
             // Extract company id from authenticated user claims
@@ -76,7 +75,7 @@ namespace Onion.Controllers
         [AuthorizeModule("inventory")]
         public async Task<IActionResult> AddStock([FromBody] MovementRequestDto req)
         {
-            var companyIdClaim = User?.FindFirst("CompanyId")?.Value;
+            var companyIdClaim = User?.FindFirst("companyId")?.Value ?? User?.FindFirst("CompanyId")?.Value;
             var performedBy = User?.Identity?.Name ?? "system";
             if (!int.TryParse(companyIdClaim, out var companyId))
                 return BadRequest(Onion.Common.Models.ApiResponse<string>.Fail("CompanyId claim missing or invalid"));
@@ -89,7 +88,7 @@ namespace Onion.Controllers
         [AuthorizeModule("inventory")]
         public async Task<IActionResult> RemoveStock([FromBody] MovementRequestDto req)
         {
-            var companyIdClaim = User?.FindFirst("CompanyId")?.Value;
+            var companyIdClaim = User?.FindFirst("companyId")?.Value ?? User?.FindFirst("CompanyId")?.Value;
             var performedBy = User?.Identity?.Name ?? "system";
             if (!int.TryParse(companyIdClaim, out var companyId))
                 return BadRequest(Onion.Common.Models.ApiResponse<string>.Fail("CompanyId claim missing or invalid"));
@@ -102,7 +101,7 @@ namespace Onion.Controllers
         [AuthorizeModule("inventory")]
         public async Task<IActionResult> TransferStock([FromBody] TransferRequestDto req)
         {
-            var companyIdClaim = User?.FindFirst("CompanyId")?.Value;
+            var companyIdClaim = User?.FindFirst("companyId")?.Value ?? User?.FindFirst("CompanyId")?.Value;
             var performedBy = User?.Identity?.Name ?? "system";
             if (!int.TryParse(companyIdClaim, out var companyId))
                 return BadRequest(Onion.Common.Models.ApiResponse<string>.Fail("CompanyId claim missing or invalid"));

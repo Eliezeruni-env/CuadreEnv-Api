@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace crud_onion.Hubs;
 
-[Authorize(Roles = "Admin,Manager,SuperAdmin,SysAdmin")]
+[Authorize]
 public sealed class SecurityAlertsHub : Hub
 {
     public override async Task OnConnectedAsync()

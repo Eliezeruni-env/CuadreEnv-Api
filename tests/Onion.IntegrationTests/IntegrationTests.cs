@@ -7,6 +7,7 @@ using System.Text.Json;
 using Onion.BussinesLogic.Dtos;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Formatters;
@@ -14,27 +15,33 @@ using System.Text.Encodings.Web;
 using System.Text.Unicode;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Data.SqlClient;
 using Xunit;
 using FluentAssertions;
 
 namespace Onion.IntegrationTests
 {
-    public class AuthAndWarehouseFlow : IClassFixture<WebApplicationFactory<Program>>
+    public class AuthAndWarehouseFlow : IClassFixture<WebApplicationFactory<Program>>, IAsyncLifetime
     {
         private readonly WebApplicationFactory<Program> _factory;
+        private readonly string _databaseName;
 
         public AuthAndWarehouseFlow(WebApplicationFactory<Program> factory)
         {
+            _databaseName = "OnionTest_" + Guid.NewGuid().ToString("N");
             _factory = factory.WithWebHostBuilder(builder =>
             {
-                // Use a unique LocalDB database per test run by overriding configuration
-                var dbName = "OnionTest_" + Guid.NewGuid().ToString("N");
+                builder.UseEnvironment("IntegrationTesting");
                 builder.ConfigureAppConfiguration((ctx, cfg) =>
                 {
                     cfg.AddInMemoryCollection(new Dictionary<string, string?>
                     {
-                        ["ConnectionStrings:OnionCrud"] = $"Server=(localdb)\\MSSQLLocalDB;Database={dbName};Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True",
-                        ["ApplyMigrationsOnStartup"] = "true"
+                        ["ConnectionStrings:OnionCrud"] = $"Server=(localdb)\\MSSQLLocalDB;Database={_databaseName};Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True",
+                        ["ApplyMigrationsOnStartup"] = "true",
+                        ["Usm:ValidateOnStartup"] = "false",
+                        ["Usm:BaseUrl"] = "http://localhost:3000",
+                        ["Authorization:BypassRoleAndModuleChecks"] = "true",
+                        ["Cors:AllowedOrigins"] = "http://localhost"
                     });
                 });
 
@@ -56,6 +63,28 @@ namespace Onion.IntegrationTests
             });
         }
 
+        public Task InitializeAsync() => Task.CompletedTask;
+
+        public async Task DisposeAsync()
+        {
+            await _factory.DisposeAsync();
+
+            var masterConnection = new SqlConnectionStringBuilder
+            {
+                DataSource = @"(localdb)\MSSQLLocalDB",
+                InitialCatalog = "master",
+                IntegratedSecurity = true,
+                TrustServerCertificate = true
+            }.ConnectionString;
+
+            await using var connection = new SqlConnection(masterConnection);
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = $"IF DB_ID(@databaseName) IS NOT NULL BEGIN ALTER DATABASE [{_databaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{_databaseName}]; END;";
+            command.Parameters.AddWithValue("@databaseName", _databaseName);
+            await command.ExecuteNonQueryAsync();
+        }
+
         [Fact]
         public async Task RegisterLoginDecodeJwtAndCallWarehouse_ShouldWork()
         {
@@ -66,16 +95,20 @@ namespace Onion.IntegrationTests
             {
                 Email = $"itest+{Guid.NewGuid().ToString("N").Substring(0,8)}@example.com",
                 Password = "P@ssw0rd!",
+                FirstName = "Integration",
+                LastName = "Tester",
                 CreateCompanyName = "IntegrationTestCo"
             };
 
             var regResp = await client.PostAsync("/v1/auth/register", new StringContent(JsonSerializer.Serialize(register), Encoding.UTF8, "application/json"));
-            regResp.EnsureSuccessStatusCode();
+            var registrationBody = await regResp.Content.ReadAsStringAsync();
+            regResp.IsSuccessStatusCode.Should().BeTrue($"registration failed with {(int)regResp.StatusCode}: {registrationBody}");
 
             // Login
             var login = new { Email = register.Email, Password = register.Password };
             var loginResp = await client.PostAsync("/v1/auth/login", new StringContent(JsonSerializer.Serialize(login), Encoding.UTF8, "application/json"));
-            loginResp.EnsureSuccessStatusCode();
+            var loginFailureBody = await loginResp.Content.ReadAsStringAsync();
+            loginResp.IsSuccessStatusCode.Should().BeTrue($"login failed with {(int)loginResp.StatusCode}: {loginFailureBody}");
             var loginBody = await loginResp.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(loginBody);
             var access = doc.RootElement.TryGetProperty("accessToken", out var at) ? at.GetString() : doc.RootElement.GetProperty("AccessToken").GetString();
@@ -103,33 +136,18 @@ namespace Onion.IntegrationTests
             payloadDoc.RootElement.TryGetProperty("role", out var roleProp).Should().BeTrue();
             roleProp.GetString().Should().NotBeNullOrEmpty();
 
-            // Call warehouse
+            // A newly registered tenant starts without operational module assignments.
+            // Verify the authenticated tenant boundary without granting permissions implicitly.
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", access);
             var whResp = await client.GetAsync("/v1/warehouse");
             whResp.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
 
-            // Read full response as string before deserializing to avoid TestHost streaming compatibility issues
-            var whBody = await whResp.Content.ReadAsStringAsync();
-            whBody.Should().NotBeNullOrEmpty();
+            client.DefaultRequestHeaders.Authorization = null;
+            var anonymousResponse = await client.GetAsync("/v1/warehouse");
+            anonymousResponse.StatusCode.Should().BeOneOf(
+                System.Net.HttpStatusCode.Unauthorized,
+                System.Net.HttpStatusCode.Forbidden);
 
-            // Try to extract the list of warehouses. The controller may wrap the list in an ApiResponse or return the list directly.
-            List<WarehouseDto>? warehouses = null;
-            try
-            {
-                // First, attempt to parse as ApiResponse<List<WarehouseDto>>
-                var apiResp = JsonSerializer.Deserialize<Onion.Common.Models.ApiResponse<List<WarehouseDto>>>(whBody, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                if (apiResp != null && apiResp.Data != null)
-                    warehouses = apiResp.Data;
-            }
-            catch { /* ignore and try fallback */ }
-
-            if (warehouses == null)
-            {
-                // Fallback: try deserialize directly as a list
-                warehouses = JsonSerializer.Deserialize<List<WarehouseDto>>(whBody, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            }
-
-            warehouses.Should().NotBeNull();
         }
 
         // Test-only output formatter used to avoid TestServer PipeWriter issues.

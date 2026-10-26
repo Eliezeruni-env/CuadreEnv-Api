@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace Onion.BussinesLogic.Dtos
@@ -26,6 +26,9 @@ namespace Onion.BussinesLogic.Dtos
 
     public class CreateCreditNoteRequest
     {
+        public int? BillingId { get; set; }
+        public int? SaleId { get; set; }
+        public string? BillingNumber { get; set; }
         public int CustomerId { get; set; }
         public string? Reason { get; set; }
         public List<CreateCreditNoteDetail> Details { get; set; } = new List<CreateCreditNoteDetail>();

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using System.Threading.Tasks;
 using Onion.Common.Models;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 
 namespace Onion.Controllers.Middleware
 {
@@ -28,6 +29,12 @@ namespace Onion.Controllers.Middleware
             // should be allowed to create a company and then be associated to it. Skip tenant validation
             // for that specific case.
             var normalizedPath = path.TrimEnd('/');
+            if (normalizedPath.EndsWith("/users/my-companies", StringComparison.OrdinalIgnoreCase) ||
+                normalizedPath.EndsWith("/auth/switch-company", StringComparison.OrdinalIgnoreCase))
+            {
+                await _next(context);
+                return;
+            }
             var pathSegments = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
             var resource = pathSegments.Length > 0 ? pathSegments[^1] : string.Empty;
             var parentResource = pathSegments.Length > 1 ? pathSegments[^2] : string.Empty;
@@ -59,19 +66,55 @@ namespace Onion.Controllers.Middleware
                     return;
                 }
 
-                var claim = user.FindFirst("companyId") ?? user.FindFirst("CompanyId");
-                if (claim == null || string.IsNullOrWhiteSpace(claim.Value))
+                var userIdClaim = user.FindFirst("sub") ?? user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+                _ = int.TryParse(userIdClaim?.Value, out var userId);
+                var headerValue = context.Request.Headers["X-Company-Id"].FirstOrDefault();
+                var claimValue = (user.FindFirst("companyId") ?? user.FindFirst("CompanyId"))?.Value;
+
+                int? requestedCompanyId = null;
+                if (int.TryParse(headerValue, out var headerCompanyId) && headerCompanyId > 0)
+                    requestedCompanyId = headerCompanyId;
+                else if (int.TryParse(claimValue, out var claimCompanyId) && claimCompanyId > 0)
+                    requestedCompanyId = claimCompanyId;
+
+                if (requestedCompanyId is not > 0 && userId <= 0)
                 {
                     await WriteCompanyRequiredAsync(context);
                     return;
                 }
 
-                // Reject non-positive company ids (0 or negative) as invalid tenant context
-                if (!int.TryParse(claim.Value, out var cid) || cid <= 0)
+                var db = context.RequestServices.GetRequiredService<Onion.DataAccess.OnionDbContext>();
+                var userRecord = userId > 0
+                    ? await db.Users.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId)
+                    : null;
+                var resolvedCompanyId = requestedCompanyId ?? userRecord?.CompanyId;
+
+                if (resolvedCompanyId is not > 0)
                 {
                     await WriteCompanyRequiredAsync(context);
                     return;
                 }
+
+                var companyExists = await db.Companies.IgnoreQueryFilters().AsNoTracking()
+                    .AnyAsync(x => x.Id == resolvedCompanyId.Value && x.Active && !x.IsDeleted);
+                if (!companyExists)
+                {
+                    await WriteCompanyRequiredAsync(context);
+                    return;
+                }
+
+                var hasCompanyAccess = userRecord?.CompanyId == resolvedCompanyId.Value ||
+                    (userId > 0 && await db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
+                        .AnyAsync(x => x.UserId == userId && x.CompanyId == resolvedCompanyId.Value && x.Active && !x.IsDeleted));
+                if (!hasCompanyAccess && !isGlobalAdministrator)
+                {
+                    await WriteCompanyRequiredAsync(context);
+                    return;
+                }
+
+                // The request tenant is now authoritative for CurrentUserService,
+                // JwtTenantProvider and the EF global filters.
+                context.Items["TenantCompanyId"] = resolvedCompanyId.Value;
             }
 
             await _next(context);
@@ -94,12 +137,12 @@ namespace Onion.Controllers.Middleware
 
         private static async Task WriteCompanyRequiredAsync(HttpContext context)
         {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
             context.Response.ContentType = "application/json";
             var response = new
             {
-                errorCode = "COMPANY_REQUIRED",
-                message = "El usuario no tiene una empresa asignada.",
+                errorCode = "COMPANY_CONTEXT_REQUIRED",
+                message = "Contexto de empresa no establecido. Seleccione una empresa o envíe un CompanyId válido.",
             };
             await context.Response.WriteAsync(JsonSerializer.Serialize(response));
         }

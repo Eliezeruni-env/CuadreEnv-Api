@@ -58,7 +58,26 @@ namespace Onion.Domain
 
     public enum SaleStatus { PENDING, PARTIAL, PAID, OVERDUE, CANCELLED }
     public enum PaymentType { CASH, CREDIT }
-    public enum PaymentMethod { CASH, TRANSFER, CARD, OTHER }
+    public enum PaymentMethod
+    {
+        CASH = 0,
+        EFECTIVO = CASH,
+        TRANSFER = 1,
+        TRANSFERENCIA = TRANSFER,
+        CARD = 2,
+        TARJETA = CARD,
+        MULTIPLE = 3,
+        CREDIT = 4,
+        OTHER = 5
+    }
+    public enum SaleOriginChannel
+    {
+        ADMINISTRATIVO = 0,
+        POS_PRESENCIAL = 1,
+        CREDITO = 2,
+        SERVICIO = 3,
+        ONLINE = 4
+    }
 
     public class Sale : BaseEntity
     {
@@ -68,6 +87,7 @@ namespace Onion.Domain
         public decimal PaidAmount { get; set; }
         public SaleStatus Status { get; set; }
         public PaymentType PaymentType { get; set; }
+        public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.CASH;
         public DateTime? DueDate { get; set; }
         public int? CashRegisterId { get; set; }
         public int CompanyId { get; set; }
@@ -78,12 +98,20 @@ namespace Onion.Domain
         public string? ExternalReference { get; set; }
         public int? CashSessionId { get; set; }
         public decimal SubTotal { get; set; }
+        public decimal Discount { get; set; }
         public decimal Tax { get; set; }
         public decimal TaxRate { get; set; }
         public decimal TaxWithheld { get; set; }
         public decimal LegalTip { get; set; }
-        public Onion.Domain.Invoices.VoucherType VoucherType { get; set; } = Onion.Domain.Invoices.VoucherType.B02;
+        public Onion.Domain.Invoices.VoucherType VoucherType { get; set; }
+        public SaleOriginChannel OriginChannel { get; set; } = SaleOriginChannel.ADMINISTRATIVO;
+        public string? FiscalRnc { get; set; }
+        public string? FiscalBusinessName { get; set; }
         public string? Notes { get; set; }
+        public string? CancellationReason { get; set; }
+        public DateTime? CancelledAt { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        public bool IsCancelled => Status == SaleStatus.CANCELLED;
         // Concurrency token
         public byte[]? RowVersion { get; set; }
     }
@@ -94,6 +122,8 @@ namespace Onion.Domain
         public int ProductId { get; set; }
         public decimal Quantity { get; set; }
         public decimal UnitPrice { get; set; }
+        public decimal Discount { get; set; }
+        public decimal Tax { get; set; }
         // Optional warehouse where the product will be taken from
         public int? WarehouseId { get; set; }
     }
@@ -107,6 +137,9 @@ namespace Onion.Domain
         public decimal Amount { get; set; }
         public PaymentMethod PaymentMethod { get; set; }
         public string? Reference { get; set; }
+        public int? CashSessionId { get; set; }
+        public decimal? AmountReceived { get; set; }
+        public decimal? ChangeAmount { get; set; }
     }
 
     public class Return : BaseEntity
@@ -129,7 +162,7 @@ namespace Onion.Domain
     {
         public decimal OpeningAmount { get; set; }
         public decimal InitialAmount { get; set; }
-        public decimal? ClosingAmount { get; private set; }
+        public decimal? ClosingAmount { get; set; }
         public decimal? DifferenceAmount { get; set; }
         public DateTime OpenedAt { get; set; }
         public DateTime? ClosedAt { get; set; }
@@ -141,9 +174,9 @@ namespace Onion.Domain
         public int? PausedByUserId { get; set; }
         public DateTime? PausedAt { get; set; }
         public string? PauseReason { get; set; }
-        public decimal? ExpectedAmount { get; private set; }
-        public decimal? PhysicalCountAmount { get; private set; }
-        public string? PhysicalCountBreakdownJson { get; private set; }
+        public decimal? ExpectedAmount { get; set; }
+        public decimal? PhysicalCountAmount { get; set; }
+        public string? PhysicalCountBreakdownJson { get; set; }
         public bool IsImmutable { get; private set; }
         public byte[] RowVersion { get; set; } = Array.Empty<byte>();
 
@@ -195,17 +228,22 @@ namespace Onion.Domain
     {
         public int CompanyId { get; set; }
         public virtual Company? Company { get; set; }
-        public int CreditDaysLimit { get; set; } = 30;
+        public int CreditDaysLimit { get; set; }
         public bool BlockSalesIfOverdue { get; set; }
         // Module 10 settings
-        public string Currency { get; set; } = "USD";
-        public string TimeZone { get; set; } = "UTC";
-        public string InvoiceNumberFormat { get; set; } = "{company}-{sequential}";
+        public string Currency { get; set; } = string.Empty;
+        public string TimeZone { get; set; } = string.Empty;
+        public string InvoiceNumberFormat { get; set; } = string.Empty;
         public string? LogoUrl { get; set; }
         public string? CommercialName { get; set; }
-        public int DefaultStockAlertThreshold { get; set; } = 5;
-        public decimal DefaultTaxPercentage { get; set; } = 0m;
-        public decimal CashToleranceAmount { get; set; } = 50m;
+        public int DefaultStockAlertThreshold { get; set; }
+        public decimal DefaultTaxPercentage { get; set; }
+        public decimal CashToleranceAmount { get; set; }
         public bool AllowNegativeStock { get; set; }
+        public string? InvoiceFooterPhrase { get; set; }
+        public string? TicketPaperSize { get; set; } = "80mm";
+        public string? TicketInstagram { get; set; }
+        public string? TicketWhatsapp { get; set; }
+        public bool TicketShowQr { get; set; } = true;
     }
 }

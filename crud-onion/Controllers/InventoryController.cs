@@ -21,6 +21,7 @@ namespace Onion.Controllers
         }
 
         [HttpPost("inbound")]
+        [AuthorizeExactModule("inventory-entries")]
         public async Task<IActionResult> Inbound([FromBody] MovementRequestDto req)
         {
             await _warehouseService.AddStockAsync(req, User?.Identity?.Name ?? "system");

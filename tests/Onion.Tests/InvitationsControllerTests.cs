@@ -59,6 +59,7 @@ namespace Onion.Tests
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Return> Returns => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.CashRegister> CashRegisters => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.CashMovement> CashMovements => throw new System.NotImplementedException();
+            public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Finance.CashSession> CashSessions => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.CashRegisterPause> CashRegisterPauses => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.CompanySettings> CompanySettingsRepo => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Products.ProductType> ProductTypes => throw new System.NotImplementedException();

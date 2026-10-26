@@ -21,7 +21,7 @@ namespace Onion.Controllers
         }
 
         [HttpGet]
-        [Onion.Common.Authorization.RequireRole("Admin")]
+        [Onion.Common.Authorization.AuthorizeExactModule("users")]
         public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? q = null, [FromQuery] string? role = null, [FromQuery] bool? active = null, [FromQuery] int? companyId = null)
         {
             page = Math.Max(1, page);
@@ -31,7 +31,7 @@ namespace Onion.Controllers
         }
 
         [HttpGet("exists")]
-        [Onion.Common.Authorization.RequireRole("Admin")]
+        [Onion.Common.Authorization.AuthorizeExactModule("users")]
         public async Task<IActionResult> Exists([FromQuery] string? email = null, [FromQuery] string? username = null, [FromQuery] int? excludeId = null)
         {
             var exists = (!string.IsNullOrWhiteSpace(email) && await _svc.ExistsEmailAsync(email, excludeId)) ||
@@ -40,7 +40,7 @@ namespace Onion.Controllers
         }
 
         [HttpGet("{id:int}")]
-        [Onion.Common.Authorization.RequireRole("Admin")]
+        [Onion.Common.Authorization.AuthorizeExactModule("users")]
         public async Task<IActionResult> Get(int id)
         {
             var dto = await _svc.GetByIdAsync(id);
@@ -49,7 +49,7 @@ namespace Onion.Controllers
         }
 
         [HttpPost]
-        [Onion.Common.Authorization.RequireRole("Admin")]
+        [Onion.Common.Authorization.AuthorizeExactModule("users")]
         public async Task<IActionResult> Post([FromBody] CreateUserRequest req)
         {
             var performedBy = _currentUserService.UserId?.ToString() ?? "system";
@@ -66,7 +66,7 @@ namespace Onion.Controllers
         }
 
         [HttpPut("{id:int}")]
-        [Onion.Common.Authorization.RequireRole("Admin")]
+        [Onion.Common.Authorization.AuthorizeExactModule("users")]
         public async Task<IActionResult> Put(int id, [FromBody] UpdateUserRequest req)
         {
             var performedBy = _currentUserService.UserId?.ToString() ?? "system";
@@ -84,7 +84,7 @@ namespace Onion.Controllers
         }
 
         [HttpPatch("{id:int}/status")]
-        [Onion.Common.Authorization.RequireRole("Admin")]
+        [Onion.Common.Authorization.AuthorizeExactModule("users")]
         public async Task<IActionResult> ToggleStatus(int id, [FromBody] Onion.BussinesLogic.Dtos.UserStatusToggleRequest req)
         {
             var performedBy = _currentUserService.UserId?.ToString() ?? "system";
@@ -102,7 +102,7 @@ namespace Onion.Controllers
         }
 
         [HttpPost("{id:int}/reset-password")]
-        [Onion.Common.Authorization.RequireRole("Admin")]
+        [Onion.Common.Authorization.AuthorizeExactModule("users")]
         public async Task<IActionResult> ResetPassword(int id, [FromBody] ResetPasswordRequest req)
         {
             var performedBy = _currentUserService.UserId?.ToString() ?? "system";
@@ -120,7 +120,7 @@ namespace Onion.Controllers
         }
 
         [HttpDelete("{id:int}")]
-        [Onion.Common.Authorization.RequireRole("Admin")]
+        [Onion.Common.Authorization.AuthorizeExactModule("users")]
         public async Task<IActionResult> Delete(int id)
         {
             var performedBy = _currentUserService.UserId?.ToString() ?? "system";

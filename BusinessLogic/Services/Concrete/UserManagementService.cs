@@ -163,9 +163,10 @@ namespace Onion.BussinesLogic.Services.Concrete
             if ((await _userRepo.FindAsync(u => u.Email == normalizedEmail)).Any()) throw new InvalidOperationException("Email already in use");
             if ((await _userRepo.FindAsync(u => u.UserName == userName)).Any()) throw new InvalidOperationException("UserName already in use");
 
-            // Determine company: use provided or current user's company
+            // Tenant users always inherit the authenticated tenant. The request cannot
+            // move a user to another company; only global administrators may select it.
             var companyId = _currentUserService.IsGlobalAdministrator
-                ? (req.CompanyId.HasValue && req.CompanyId.Value <= 0 ? null : req.CompanyId)
+                ? (req.CompanyId.HasValue && req.CompanyId.Value > 0 ? req.CompanyId : null)
                 : _currentUserService.CompanyId;
 
             if (!companyId.HasValue && !_currentUserService.IsGlobalAdministrator)
@@ -424,20 +425,20 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         private static string SerializeAllowedModules(IEnumerable<string>? moduleCodes)
         {
-            var normalized = new HashSet<string>(StringComparer.Ordinal);
+            var assigned = new HashSet<string>(StringComparer.Ordinal);
             foreach (var moduleCode in moduleCodes ?? Array.Empty<string>())
             {
-                if (string.Equals(moduleCode?.Trim(), ModuleCodes.All, StringComparison.Ordinal))
+                var literal = moduleCode?.Trim();
+                if (string.Equals(literal, ModuleCodes.All, StringComparison.Ordinal))
                     throw new InvalidOperationException("El comodín de acceso total no se puede asignar desde User Management.");
 
-                var module = ModuleCodes.Normalize(moduleCode);
-                if (module is null)
+                if (ModuleCodes.Normalize(literal) is null)
                     throw new InvalidOperationException($"El módulo '{moduleCode}' no es válido.");
 
-                normalized.Add(module);
+                assigned.Add(literal!);
             }
 
-            return JsonSerializer.Serialize(normalized);
+            return JsonSerializer.Serialize(assigned);
         }
 
         private List<string> ParseAllowedModules(string? allowedModulesJson, int userId)
@@ -447,8 +448,7 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             try
             {
-                var modules = JsonSerializer.Deserialize<List<string>>(allowedModulesJson);
-                return ModuleCodes.Normalize(modules).ToList();
+                return ModuleCodes.FromClaimPreservingIds(allowedModulesJson).ToList();
             }
             catch (JsonException ex)
             {

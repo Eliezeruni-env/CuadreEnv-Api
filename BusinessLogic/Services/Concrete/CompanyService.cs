@@ -41,9 +41,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             // create default settings and link
             var settings = new CompanySettings
             {
-                CompanyId = company.Id,
-                CreditDaysLimit = 30,
-                BlockSalesIfOverdue = false
+                CompanyId = company.Id
             };
             await _uow.CompanySettingsRepo.AddAsync(settings);
             await SaveCompanySettingsAsync(company.Id);
@@ -66,9 +64,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             {
                 var settings = new CompanySettings
                 {
-                    CompanyId = company.Id,
-                    CreditDaysLimit = 30,
-                    BlockSalesIfOverdue = false
+                    CompanyId = company.Id
                 };
                 await _uow.CompanySettingsRepo.AddAsync(settings);
                 await SaveCompanySettingsAsync(company.Id);

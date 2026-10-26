@@ -191,10 +191,36 @@ public sealed class UserTenantIsolationTests
         }, "admin");
 
         var stored = await ctx.Users.SingleAsync(user => user.Id == created.Id);
-        Assert.Equal(new[] { "sales", "cashregister", "customers" }, JsonModuleList(stored.AllowedModulesJson));
-        Assert.Equal(new[] { "sales", "cashregister", "customers" }, created.AllowedModules);
+        Assert.Equal(new[] { "sales", "cash-register", "customers" }, JsonModuleList(stored.AllowedModulesJson));
+        Assert.Equal(new[] { "sales", "cash-register", "customers" }, created.AllowedModules);
         var listed = await service.GetPagedAsync(1, 10, null, null, null, null);
-        Assert.Equal(new[] { "sales", "cashregister", "customers" }, listed.Items.Single().AllowedModules);
+        Assert.Equal(new[] { "sales", "cash-register", "customers" }, listed.Items.Single().AllowedModules);
+    }
+
+    [Fact]
+    public async Task Tenant_UserManagementService_Create_Ignores_Requested_Other_Company()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+        await using var ctx = CreateContext(databaseName, companyId: 10);
+        ctx.Companies.Add(new Onion.Domain.Company { Id = 10, Name = "Tenant A" });
+        await ctx.SaveChangesAsync();
+
+        var currentUser = new TestCurrentUserService(companyId: 10, isGlobalAdministrator: false);
+        var service = CreateUserManagementService(ctx, currentUser);
+
+        var created = await service.CreateAsync(new CreateUserRequest
+        {
+            FirstName = "Tenant",
+            LastName = "Employee",
+            Email = "cross-tenant-request@example.test",
+            UserName = "cross-tenant-request@example.test",
+            Role = "Employee",
+            CompanyId = 20,
+            TemporaryPassword = "SafeTemporaryPassword1!"
+        }, "admin");
+
+        Assert.Equal(10, created.CompanyId);
+        Assert.Equal(10, (await ctx.Users.SingleAsync(user => user.Id == created.Id)).CompanyId);
     }
 
     [Fact]
@@ -219,7 +245,7 @@ public sealed class UserTenantIsolationTests
         }, "admin");
 
         var updated = await service.GetByIdAsync(1);
-        Assert.Equal(new[] { "cashregister", "customers" }, updated?.AllowedModules);
+        Assert.Equal(new[] { "cash-register", "customers" }, updated?.AllowedModules);
 
         await service.UpdateAsync(1, new UpdateUserRequest
         {
@@ -231,7 +257,7 @@ public sealed class UserTenantIsolationTests
         }, "admin");
 
         var unchanged = await service.GetByIdAsync(1);
-        Assert.Equal(new[] { "cashregister", "customers" }, unchanged?.AllowedModules);
+        Assert.Equal(new[] { "cash-register", "customers" }, unchanged?.AllowedModules);
     }
 
     private static string[] JsonModuleList(string? json) =>

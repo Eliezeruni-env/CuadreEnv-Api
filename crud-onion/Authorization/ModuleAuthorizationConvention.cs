@@ -14,7 +14,7 @@ public sealed class ModuleAuthorizationConvention : IApplicationModelConvention
             ["CompanySettingsController"] = "company", ["CreditNoteController"] = "sales", ["CustomerController"] = "customers",
             ["DashboardController"] = "reports", ["DeletionApprovalController"] = "audit", ["InvitationsController"] = "company",
             ["InventoryController"] = "inventory", ["ManageRequestController"] = "company", ["MeController"] = "company",
-            ["PaymentController"] = "sales", ["ProductController"] = "sales", ["ProductTypeController"] = "sales",
+            ["PaymentController"] = "sales", ["ProductController"] = "sales", ["UnitOfMeasurementController"] = "sales", ["ProductTypeController"] = "sales",
             ["PurchaseController"] = "purchases", ["PurchaseOrderReceiptController"] = "purchases", ["ProyectosController"] = "company",
             ["RoleController"] = "company", ["PermissionController"] = "company", ["ReportsController"] = "reports",
             ["ReturnController"] = "sales", ["SubscriptionController"] = "billing", ["SupplierController"] = "purchases",
@@ -31,7 +31,9 @@ public sealed class ModuleAuthorizationConvention : IApplicationModelConvention
         {
             if (controller.Attributes.OfType<AllowAnonymousAttribute>().Any() ||
                 controller.Filters.OfType<AuthorizeModuleAttribute>().Any() ||
-                controller.Attributes.OfType<AuthorizeModuleAttribute>().Any())
+                controller.Attributes.OfType<AuthorizeModuleAttribute>().Any() ||
+                controller.Filters.OfType<AuthorizeExactModuleAttribute>().Any() ||
+                controller.Attributes.OfType<AuthorizeExactModuleAttribute>().Any())
                 continue;
 
             if (controller.ControllerType.GetCustomAttributes(typeof(AuthorizeModuleAttribute), inherit: true).Length > 0)

@@ -72,7 +72,7 @@ namespace Onion.DataAccess.Configurations.EntityConfigurations
 
             builder.Property(x => x.Address).HasMaxLength(255);
             builder.Property(x => x.City).HasMaxLength(100);
-            builder.Property(x => x.Country).HasMaxLength(100).HasDefaultValue("República Dominicana");
+             builder.Property(x => x.Country).HasMaxLength(100);
             builder.Property(x => x.OperatingLocation).HasMaxLength(150);
             builder.Property(x => x.IpAddress).HasMaxLength(50);
             builder.Property(x => x.LastLoginIp).HasMaxLength(50);

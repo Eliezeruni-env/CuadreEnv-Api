@@ -24,6 +24,24 @@ public sealed class SaleServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_PosSaleWithoutCashSessionRejectsSale()
+    {
+        var uow = new Mock<IUnitOfWork>(MockBehavior.Loose);
+        var service = CreateService(uow);
+
+        var exception = await Assert.ThrowsAsync<Onion.Common.Exceptions.CustomException>(() =>
+            service.CreateAsync(new Sale
+            {
+                CompanyId = 1,
+                OriginChannel = SaleOriginChannel.POS_PRESENCIAL,
+                Details = [new SaleDetail { ProductId = 20, Quantity = 1, UnitPrice = 10 }]
+            }));
+
+        Assert.Equal("CASH_SESSION_REQUIRED", exception.Error.Code);
+        uow.Verify(x => x.BeginTransactionAsync(), Times.Never);
+    }
+
+    [Fact]
     public async Task CreateAsync_WithClosedCashRegister_RejectsSaleBeforeTransaction()
     {
         var uow = new Mock<IUnitOfWork>(MockBehavior.Loose);

@@ -46,8 +46,20 @@ namespace Onion.DataAccess.Configurations.EntityConfigurations
             builder.Property(x => x.InvoiceWithoutStock)
                    .HasDefaultValue(false);
 
+            builder.Property(x => x.IsService)
+                   .HasDefaultValue(false);
+
             builder.Property(x => x.IsOrganic)
                    .HasDefaultValue(false);
+
+            builder.Property(x => x.AllowFractional)
+                   .HasDefaultValue(false);
+
+            builder.Property(x => x.ImageUrl)
+                   .HasMaxLength(1000);
+
+            builder.Property(x => x.ProfitMargin)
+                   .HasColumnType("decimal(18,2)");
 
             builder.HasIndex(x => x.Barcode)
                    .IsUnique();

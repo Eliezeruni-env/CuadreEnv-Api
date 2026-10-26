@@ -30,10 +30,12 @@ namespace Onion.Tests
         private class FakeWarehouseService : IWarehouseService
         {
             public int? RequestedCompanyId { get; private set; }
+            public int? CreatedCompanyId { get; private set; }
 
             public Task<WarehouseDto> CreateWarehouseAsync(CreateWarehouseDto dto, int companyId)
             {
-            return Task.FromResult(new WarehouseDto(123, dto.Name, companyId));
+                CreatedCompanyId = companyId;
+                return Task.FromResult(new WarehouseDto(123, dto.Name, companyId));
             }
 
             public Task AddStockAsync(MovementRequestDto req, string performedBy) => Task.CompletedTask;
@@ -76,6 +78,25 @@ namespace Onion.Tests
             var result = await ctrl.Create(new CreateWarehouseDto("MyW"));
             var created = Assert.IsType<CreatedAtActionResult>(result);
             Assert.NotNull(created.Value);
+        }
+
+        [Fact]
+        public async Task Create_Preserves_Lowercase_CompanyId_Claim()
+        {
+            var svc = new FakeWarehouseService();
+            var ctrl = new Onion.Controllers.WarehouseController(svc, null!, new AuthorizationService());
+            ctrl.ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim("companyId", "9") }, "test"))
+                }
+            };
+
+            var result = await ctrl.Create(new CreateWarehouseDto("MyW"));
+
+            Assert.IsType<CreatedAtActionResult>(result);
+            Assert.Equal(9, svc.CreatedCompanyId);
         }
 
         [Fact]

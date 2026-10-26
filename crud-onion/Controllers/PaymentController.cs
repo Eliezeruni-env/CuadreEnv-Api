@@ -31,6 +31,23 @@ namespace Onion.Controllers
 
             var method = Enum.TryParse<PaymentMethod>(request.Method, true, out var parsed) ? parsed : PaymentMethod.OTHER;
             if (!TryGetCompanyId(out var companyId)) return Forbid();
+            var sale = request.SaleId.HasValue
+                ? await _uow.Sales.GetByIdAsync(request.SaleId.Value)
+                : null;
+            if (request.SaleId.HasValue && (sale is null || sale.CompanyId != companyId))
+                return NotFound(new { code = "SALE_NOT_FOUND" });
+
+            var cashSessionId = request.CashSessionId ?? sale?.CashSessionId;
+            if (method == PaymentMethod.CASH && sale?.OriginChannel == SaleOriginChannel.POS_PRESENCIAL && !cashSessionId.HasValue)
+                return BadRequest(new { code = "CASH_SESSION_REQUIRED", message = "A POS payment requires an open cash session." });
+            if (cashSessionId.HasValue)
+            {
+                var session = await _uow.CashSessions.GetByIdAsync(cashSessionId.Value);
+                if (session is null || session.CompanyId != companyId || session.Status != Onion.Domain.Finance.CashSessionStatus.Open ||
+                    (request.CashRegisterId.HasValue && session.CashRegisterId != request.CashRegisterId.Value))
+                    return BadRequest(new { code = "CASH_SESSION_NOT_OPEN", message = "The selected cash session is not open." });
+            }
+
             var payment = new Payment
             {
                 SaleId = request.SaleId,
@@ -39,9 +56,19 @@ namespace Onion.Controllers
                 CompanyId = companyId,
                 Amount = request.Amount,
                 PaymentMethod = method,
-                Reference = request.Reference
+                Reference = request.Reference,
+                CashSessionId = cashSessionId
             };
             await _uow.Payments.AddAsync(payment);
+
+            if (sale is not null)
+            {
+                sale.PaidAmount += request.Amount;
+                sale.Status = sale.PaidAmount >= sale.Total
+                    ? SaleStatus.PAID
+                    : SaleStatus.PARTIAL;
+                _uow.Sales.Update(sale);
+            }
 
             if (request.AccountPayableId.HasValue)
             {
@@ -59,6 +86,9 @@ namespace Onion.Controllers
                     CashRegisterId = request.CashRegisterId.Value,
                     Amount = request.AccountPayableId.HasValue ? -request.Amount : request.Amount,
                     CompanyId = companyId,
+                    CashSessionId = cashSessionId,
+                    Type = request.AccountPayableId.HasValue ? Onion.Domain.Finance.CashMovementType.CashOut : Onion.Domain.Finance.CashMovementType.CashIn,
+                    Reason = request.AccountPayableId.HasValue ? "Supplier payment" : "Unified payment",
                     Description = request.AccountPayableId.HasValue ? "Supplier payment" : "Unified payment"
                 });
             }
@@ -67,7 +97,7 @@ namespace Onion.Controllers
             return CreatedAtAction(nameof(Get), new { id = payment.Id }, payment);
         }
 
-        public sealed record UnifiedPaymentRequest(decimal Amount, string Method, int CompanyId, int? SaleId = null, int? AccountReceivableId = null, int? AccountPayableId = null, int? CashRegisterId = null, string? Reference = null);
+        public sealed record UnifiedPaymentRequest(decimal Amount, string Method, int CompanyId, int? SaleId = null, int? AccountReceivableId = null, int? AccountPayableId = null, int? CashRegisterId = null, int? CashSessionId = null, string? Reference = null);
 
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] int? pageNumber = null, [FromQuery] int? pageSize = null)

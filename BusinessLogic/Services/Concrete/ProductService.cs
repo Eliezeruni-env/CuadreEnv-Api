@@ -148,6 +148,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             existing.UnitOfMeasurementId = product.UnitOfMeasurementId;
             existing.ExpirationDate = product.ExpirationDate;
             existing.InvoiceWithoutStock = product.InvoiceWithoutStock;
+            existing.IsService = product.IsService;
             existing.Cost = product.Cost;
 
             _uow.Products.Update(existing);
@@ -191,13 +192,37 @@ namespace Onion.BussinesLogic.Services.Concrete
         public async Task<ProductDto?> GetAsync(int id)
         {
             var entity = await _uow.Products.GetByIdSqlAsync(id);
-            return entity is null ? null : _mapper.Map<ProductDto>(entity);
+            if (entity is null) return null;
+
+            return await EnrichProductDtoAsync(_mapper.Map<ProductDto>(entity));
         }
 
         public async Task<IEnumerable<ProductDto>> SearchByDescriptionAsync(string description)
         {
             var entities = await _uow.Products.SearchByDescriptionAsync(description);
-            return _mapper.Map<IEnumerable<ProductDto>>(entities);
+            var products = _mapper.Map<List<ProductDto>>(entities);
+            foreach (var product in products)
+                await EnrichProductDtoAsync(product);
+            return products;
+        }
+
+        private async Task<ProductDto> EnrichProductDtoAsync(ProductDto product)
+        {
+            if (!product.CategoryId.HasValue || product.CategoryId.Value <= 0)
+                return product;
+
+            var category = await _uow.Categories.GetByIdAsync(product.CategoryId.Value);
+            if (category is null)
+                return product;
+
+            product.CategoryName = category.Description;
+            product.Category = new ProductCategoryDto
+            {
+                Id = category.Id,
+                Name = category.Description,
+                Description = category.Description
+            };
+            return product;
         }
 
         public Task<PagedList<ProductRow>> GetPagedListAsync(FilterPayload filterPayload, CancellationToken ct = default)

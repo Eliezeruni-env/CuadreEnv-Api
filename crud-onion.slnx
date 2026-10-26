@@ -10,4 +10,10 @@
   </Folder>
   <Project Path="crud-onion/crud-onion.csproj" />
   <Project Path="Onion.Common/Onion.Common.csproj" />
+  <Folder Name="/Tests/">
+    <Project Path="Domain.Tests/Domain.Tests.csproj" />
+    <Project Path="tests/Onion.BusinessLogic.Tests/Onion.BusinessLogic.Tests.csproj" />
+    <Project Path="tests/Onion.IntegrationTests/Onion.IntegrationTests.csproj" />
+    <Project Path="tests/Onion.Tests/Onion.Tests.csproj" />
+  </Folder>
 </Solution>

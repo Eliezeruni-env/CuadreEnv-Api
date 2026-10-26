@@ -29,15 +29,21 @@ public class Permission : BaseEntity
     public ICollection<RolePermission> RolePermissions { get; set; } = new List<RolePermission>();
 }
 
-public class RolePermission
+public class RolePermission : Onion.Common.Models.IAuditableEntity
 {
     public int RoleId { get; set; }
     public Role Role { get; set; } = null!;
     public int PermissionId { get; set; }
     public Permission Permission { get; set; } = null!;
+    public DateTime CreationDate { get; set; } = DateTime.UtcNow;
+    public bool Active { get; set; } = true;
+    public bool IsDeleted { get; set; }
+    public DateTime? ModificationDate { get; set; }
+    public string CreateBy { get; set; } = string.Empty;
+    public string ModifiedBy { get; set; } = string.Empty;
 }
 
-public class UserRole : ITenantEntity
+public class UserRole : ITenantEntity, Onion.Common.Models.IAuditableEntity
 {
     public int UserId { get; set; }
     public User User { get; set; } = null!;
@@ -46,6 +52,12 @@ public class UserRole : ITenantEntity
     public int CompanyId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public int? CreatedBy { get; set; }
+    public DateTime CreationDate { get; set; } = DateTime.UtcNow;
+    public bool Active { get; set; } = true;
+    public bool IsDeleted { get; set; }
+    public DateTime? ModificationDate { get; set; }
+    public string CreateBy { get; set; } = string.Empty;
+    public string ModifiedBy { get; set; } = string.Empty;
 }
 
 public class DeletionApprovalRequest : BaseEntity, ITenantEntity

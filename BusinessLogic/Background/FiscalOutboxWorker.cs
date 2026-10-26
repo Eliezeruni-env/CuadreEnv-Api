@@ -56,10 +56,14 @@ public sealed class FiscalOutboxWorker : BackgroundService
         await using var scope = _scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<OnionDbContext>();
         var now = DateTime.UtcNow;
+        var processingTimeout = TimeSpan.FromSeconds(Math.Clamp(
+            _configuration.GetValue("Fiscal:ProcessingTimeoutSeconds", 900), 60, 86400));
+        var staleProcessingAt = now - processingTimeout;
         var candidates = await db.FiscalDocuments
             .IgnoreQueryFilters()
             .Where(x => x.Status == FiscalDocumentStatus.Pending ||
-                        (x.Status == FiscalDocumentStatus.Retry && x.NextAttemptAt <= now))
+                        (x.Status == FiscalDocumentStatus.Retry && x.NextAttemptAt <= now) ||
+                        (x.Status == FiscalDocumentStatus.Processing && x.LastAttemptAt <= staleProcessingAt))
             .OrderBy(x => x.CreationDate)
             .Select(x => x.Id)
             .Take(20)
@@ -71,7 +75,8 @@ public sealed class FiscalOutboxWorker : BackgroundService
                 .IgnoreQueryFilters()
                 .Where(x => x.Id == id &&
                             (x.Status == FiscalDocumentStatus.Pending ||
-                             (x.Status == FiscalDocumentStatus.Retry && x.NextAttemptAt <= now)))
+                             (x.Status == FiscalDocumentStatus.Retry && x.NextAttemptAt <= now) ||
+                             (x.Status == FiscalDocumentStatus.Processing && x.LastAttemptAt <= staleProcessingAt)))
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(x => x.Status, FiscalDocumentStatus.Processing)
                     .SetProperty(x => x.LastAttemptAt, now)

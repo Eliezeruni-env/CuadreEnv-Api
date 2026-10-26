@@ -6,7 +6,7 @@ using Onion.BussinesLogic.Services.Abstract;
 namespace Onion.Controllers
 {
     [ApiController]
-    [Route("v1/[controller]")]
+    [Route("[controller]")]
     [Authorize]
     public class CreditNoteController : ControllerBase
     {
@@ -20,7 +20,9 @@ namespace Onion.Controllers
         private int GetCurrentCompanyId()
         {
             var claim = User.FindFirst("CompanyId") ?? User.FindFirst("companyId") ?? User.FindFirst("tenantId");
-            return claim != null ? int.Parse(claim.Value) : 1;
+            if (claim == null || !int.TryParse(claim.Value, out var companyId) || companyId <= 0)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "TENANT_REQUIRED", Message = "Company context is required", Language = "ES" });
+            return companyId;
         }
 
         [HttpPost]

@@ -17,7 +17,7 @@ namespace Onion.DataAccess.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.0")
+                .HasAnnotation("ProductVersion", "10.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -557,6 +557,28 @@ namespace Onion.DataAccess.Migrations
                     b.Property<int>("PermissionId")
                         .HasColumnType("int");
 
+                    b.Property<bool>("Active")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
                     b.HasKey("RoleId", "PermissionId");
 
                     b.HasIndex("PermissionId");
@@ -572,14 +594,36 @@ namespace Onion.DataAccess.Migrations
                     b.Property<int>("RoleId")
                         .HasColumnType("int");
 
+                    b.Property<bool>("Active")
+                        .HasColumnType("bit");
+
                     b.Property<int>("CompanyId")
                         .HasColumnType("int");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<int?>("CreatedBy")
                         .HasColumnType("int");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
 
                     b.HasKey("UserId", "RoleId");
 
@@ -873,7 +917,7 @@ namespace Onion.DataAccess.Migrations
 
                     b.HasIndex("CompanyId", "OpenedByUserId")
                         .IsUnique()
-                        .HasFilter("[Status] IN (1, 2)");
+                        .HasFilter("[Status] IN (0, 1)");
 
                     b.HasIndex("CompanyId", "Status");
 
@@ -998,17 +1042,13 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("bit");
 
                     b.Property<bool>("AllowNegativeStock")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
+                        .HasColumnType("bit");
 
                     b.Property<bool>("BlockSalesIfOverdue")
                         .HasColumnType("bit");
 
                     b.Property<decimal>("CashToleranceAmount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(18,2)")
-                        .HasDefaultValue(50m);
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("CommercialName")
                         .HasColumnType("nvarchar(max)");
@@ -1036,6 +1076,9 @@ namespace Onion.DataAccess.Migrations
                     b.Property<decimal>("DefaultTaxPercentage")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<string>("InvoiceFooterPhrase")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("InvoiceNumberFormat")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -1051,6 +1094,18 @@ namespace Onion.DataAccess.Migrations
 
                     b.Property<string>("ModifiedBy")
                         .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("TicketInstagram")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("TicketPaperSize")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("TicketShowQr")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("TicketWhatsapp")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("TimeZone")
@@ -1515,8 +1570,18 @@ namespace Onion.DataAccess.Migrations
                     b.Property<bool>("Active")
                         .HasColumnType("bit");
 
+                    b.Property<decimal?>("ActualAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("CardBatchNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<int>("CashRegisterId")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("CashToDeposit")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("CashierUserId")
                         .HasColumnType("int");
@@ -1525,6 +1590,9 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("ClosingDenominationsJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ClosingNotes")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<int?>("ClosingStatus")
@@ -1540,6 +1608,9 @@ namespace Onion.DataAccess.Migrations
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<decimal>("CurrentBalance")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal?>("DeclaredCards")
                         .HasColumnType("decimal(18,2)");
 
@@ -1549,7 +1620,17 @@ namespace Onion.DataAccess.Migrations
                     b.Property<decimal?>("DeclaredTransfers")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<string>("DenominationsJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DepositDestination")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
                     b.Property<decimal?>("Difference")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("ExpectedAmount")
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal?>("ExpectedCash")
@@ -1575,6 +1656,9 @@ namespace Onion.DataAccess.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<decimal>("RetainedFloat")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -1584,10 +1668,16 @@ namespace Onion.DataAccess.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
+                    b.Property<bool>("SupervisorAuthorized")
+                        .HasColumnType("bit");
+
                     b.Property<string>("SupervisorNotes")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<int?>("SupervisorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TransferVoucherCount")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
@@ -2277,6 +2367,15 @@ namespace Onion.DataAccess.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal?>("AmountReceived")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("CashSessionId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("ChangeAmount")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<int>("CompanyId")
                         .HasColumnType("int");
 
@@ -2307,6 +2406,8 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "CashSessionId");
 
                     b.ToTable("Payments");
                 });
@@ -2363,6 +2464,9 @@ namespace Onion.DataAccess.Migrations
                     b.Property<bool>("Active")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("AllowFractional")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Barcode")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -2392,6 +2496,9 @@ namespace Onion.DataAccess.Migrations
                     b.Property<DateTime?>("ExpirationDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("ImageUrl")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("InvoiceWithoutStock")
                         .HasColumnType("bit");
 
@@ -2399,6 +2506,9 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsOrganic")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsService")
                         .HasColumnType("bit");
 
                     b.Property<int>("MaximumQuantity")
@@ -2416,6 +2526,9 @@ namespace Onion.DataAccess.Migrations
 
                     b.Property<int>("ProductTypeId")
                         .HasColumnType("int");
+
+                    b.Property<decimal?>("ProfitMargin")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Reference")
                         .IsRequired()
@@ -2835,6 +2948,12 @@ namespace Onion.DataAccess.Migrations
                     b.Property<bool>("Active")
                         .HasColumnType("bit");
 
+                    b.Property<string>("CancellationReason")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<int?>("CashRegisterId")
                         .HasColumnType("int");
 
@@ -2857,10 +2976,19 @@ namespace Onion.DataAccess.Migrations
                     b.Property<DateTime>("Date")
                         .HasColumnType("datetime2");
 
+                    b.Property<decimal>("Discount")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("ExternalReference")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("FiscalBusinessName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("FiscalRnc")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("IdempotencyKey")
@@ -2886,8 +3014,14 @@ namespace Onion.DataAccess.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int>("OriginChannel")
+                        .HasColumnType("int");
+
                     b.Property<decimal>("PaidAmount")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("PaymentMethod")
+                        .HasColumnType("int");
 
                     b.Property<int>("PaymentType")
                         .HasColumnType("int");
@@ -2916,9 +3050,7 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("VoucherType")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(2);
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
@@ -2947,6 +3079,9 @@ namespace Onion.DataAccess.Migrations
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<decimal>("Discount")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
@@ -2965,6 +3100,9 @@ namespace Onion.DataAccess.Migrations
 
                     b.Property<int>("SaleId")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("Tax")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("UnitPrice")
                         .HasColumnType("decimal(18,2)");
@@ -3204,6 +3342,58 @@ namespace Onion.DataAccess.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Users.UserCompany", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "CompanyId")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "IsDefault");
+
+                    b.ToTable("UserCompanies", (string)null);
                 });
 
             modelBuilder.Entity("Onion.Domain.Warehouses.Inventory", b =>

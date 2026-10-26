@@ -42,12 +42,40 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task RegisterPaymentAsync(int receivableId, decimal amount)
         {
-            var ar = await _uow.AccountReceivables.GetByIdAsync(receivableId) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "AccountReceivable not found", Language = "EN" });
+            var ar = await _uow.AccountReceivables.GetByIdAsync(receivableId);
+            if (ar == null)
+            {
+                int? targetSaleId = receivableId;
+                ar = (await _uow.AccountReceivables.FindAsync(a => a.SaleId == targetSaleId)).FirstOrDefault()
+                    ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "AccountReceivable not found", Language = "EN" });
+            }
             if (amount <= 0) throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_AMOUNT", Message = "Amount must be greater than zero", Language = "EN" });
 
             ar.PaidAmount += amount;
-            if (ar.PaidAmount >= ar.TotalAmount) ar.Status = ReceivableStatus.Paid;
+            if (ar.PaidAmount >= ar.TotalAmount)
+            {
+                ar.Status = ReceivableStatus.Paid;
+            }
             _uow.AccountReceivables.Update(ar);
+
+            // Synchronize linked Sale PaidAmount and Status so debt finishes completely
+            if (ar.SaleId.HasValue)
+            {
+                var sale = await _uow.Sales.GetByIdAsync(ar.SaleId.Value);
+                if (sale != null)
+                {
+                    sale.PaidAmount = ar.PaidAmount;
+                    if (sale.PaidAmount >= sale.Total)
+                    {
+                        sale.Status = Onion.Domain.SaleStatus.PAID;
+                    }
+                    else if (sale.PaidAmount > 0)
+                    {
+                        sale.Status = Onion.Domain.SaleStatus.PARTIAL;
+                    }
+                    _uow.Sales.Update(sale);
+                }
+            }
             await _uow.SaveChangesAsync();
         }
 
@@ -55,7 +83,7 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var list = await _uow.AccountReceivables.ListAsync();
             var now = DateTime.UtcNow;
-            return list.Where(a => a.DueDate < now && a.Balance > 0m);
+            return list.Where(a => a.Active && !a.IsDeleted && a.DueDate < now && a.Balance > 0m);
         }
 
         public async Task<IEnumerable<AccountReceivable>> GetDueSoonAsync(int days)
@@ -64,12 +92,13 @@ namespace Onion.BussinesLogic.Services.Concrete
             var list = await _uow.AccountReceivables.ListAsync();
             var now = DateTime.UtcNow;
             var until = now.AddDays(days);
-            return list.Where(a => a.DueDate >= now && a.DueDate <= until && a.Balance > 0m);
+            return list.Where(a => a.Active && !a.IsDeleted && a.DueDate >= now && a.DueDate <= until && a.Balance > 0m);
         }
 
         public async Task<IEnumerable<AccountReceivable>> GetByCustomerAsync(int customerId)
         {
-            return await _uow.AccountReceivables.FindAsync(a => a.CustomerId == customerId);
+            int? targetCustId = customerId;
+        return await _uow.AccountReceivables.FindAsync(a => a.CustomerId == targetCustId);
         }
         // Create account receivable with optional payment plan
         public async Task<AccountReceivable> CreateWithPlanAsync(AccountReceivable ar, Onion.Domain.Finance.PaymentPlan? plan = null)

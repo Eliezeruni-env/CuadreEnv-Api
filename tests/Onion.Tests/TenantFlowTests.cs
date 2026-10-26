@@ -1,8 +1,14 @@
 using System.Security.Claims;
 using System.Threading.Tasks;
 using System.IO;
+using System;
+using System.Linq;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
+using Onion.DataAccess;
+using Onion.Domain;
 using Onion.Common.Services;
 using Onion.Controllers.Middleware;
 using Xunit;
@@ -14,7 +20,7 @@ public class TenantFlowTests
     [Fact]
     public async Task Middleware_AllowsAuthenticatedUserWithTenant()
     {
-        var context = CreateContext("/v1/sale", "GET", new Claim("companyId", "12"));
+        var context = CreateContext("/v1/sale", "GET", new Claim("companyId", "12"), new Claim("isSuperUser", "true"));
         var called = false;
         var middleware = new TenantMiddleware(_ =>
         {
@@ -36,8 +42,8 @@ public class TenantFlowTests
 
         await middleware.InvokeAsync(context);
 
-        Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
-        Assert.Contains("COMPANY_REQUIRED", await ReadBodyAsync(context));
+        Assert.Equal(StatusCodes.Status400BadRequest, context.Response.StatusCode);
+        Assert.Contains("COMPANY_CONTEXT_REQUIRED", await ReadBodyAsync(context));
     }
 
     [Fact]
@@ -98,6 +104,30 @@ public class TenantFlowTests
         context.Request.Path = path;
         context.Request.Method = method;
         context.User = new ClaimsPrincipal(new ClaimsIdentity(claims, "test"));
+        if (claims.Any(c => c.Type == "companyId" && c.Value == "12"))
+        {
+            var services = new ServiceCollection();
+            services.AddDbContext<OnionDbContext>(options => options.UseInMemoryDatabase(Guid.NewGuid().ToString("N")));
+            var provider = services.BuildServiceProvider();
+            using var scope = provider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<OnionDbContext>();
+            db.Companies.Add(new Company { Id = 12, Name = "Test Company", Active = true, IsDeleted = false });
+            db.Users.Add(new Onion.Domain.Users.User
+            {
+                Id = 1,
+                CompanyId = 12,
+                FirstName = "Test",
+                LastName = "User",
+                Gender = "M",
+                Email = "test@example.com",
+                PasswordHash = "test",
+                PhoneNumber = "0000000000",
+                UserName = "test-user",
+                CreateBy = "test"
+            });
+            db.SaveChanges();
+            context.RequestServices = provider;
+        }
         return context;
     }
 

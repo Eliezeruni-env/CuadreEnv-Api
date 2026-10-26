@@ -51,6 +51,7 @@ namespace Onion.Controllers
             return Ok(Onion.Common.Models.ApiResponse<object>.Ok(products));
         }
 
+        [HttpGet]
         [HttpGet("paged")]
         public async Task<IActionResult> GetPaged(
             [FromQuery] FilterPayload filterPayload,

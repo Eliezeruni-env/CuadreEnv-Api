@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Onion.Domain.Products
@@ -24,7 +24,12 @@ namespace Onion.Domain.Products
 
         public DateTime? ExpirationDate { get; set; }
         public bool InvoiceWithoutStock { get; set; }
-        public bool IsOrganic { get; set; }
+        public bool IsService { get; set; }
+                public bool IsOrganic { get; set; }
+
+        public string? ImageUrl { get; set; }
+        public bool AllowFractional { get; set; } = false;
+        public decimal? ProfitMargin { get; set; }
 
         #region Cost
         public decimal Cost { get; set; }

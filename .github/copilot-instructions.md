@@ -6,3 +6,5 @@
 - La invalidación de sesión debe permanecer desacoplada de AuthService.
 - El servicio de roles debe usar /roles, sin fallback /Role.
 - El acceso de sidebar/rutas debe cerrarse si falla la carga de licencias.
+- Para módulos SaaS, preservar literalmente los IDs granulares de AllowedModulesJson en la respuesta de sesión y claims JWT; usar aliases únicamente para autorización. Los endpoints críticos deben exigir el módulo granular correspondiente o wildcard, sin inyectar módulos adicionales para usuarios no SuperAdmin.
+- Posponer el control de permisos por roles/módulos y permitir temporalmente que todos los usuarios autenticados accedan a todas las operaciones del sistema, dejando la autorización para una etapa posterior.

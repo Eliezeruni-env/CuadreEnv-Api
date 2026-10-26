@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 using Onion.Common.Services;
 using System.Security.Claims;
 using Onion.Common.Authorization;
@@ -15,11 +16,99 @@ public sealed class AuthorizeModuleAttribute : TypeFilterAttribute
         : base(typeof(AuthorizeModuleFilter)) => Arguments = new object[] { moduleCode };
 }
 
+internal static class AuthorizationBypass
+{
+    public static bool IsEnabled(HttpContext context) =>
+        context.RequestServices?.GetService(typeof(IConfiguration)) is IConfiguration configuration &&
+        string.Equals(configuration["Authorization:BypassRoleAndModuleChecks"], "true", StringComparison.OrdinalIgnoreCase);
+}
+
+internal static class AuthorizationIdentity
+{
+    public static bool IsGlobalAdministrator(ClaimsPrincipal user) =>
+        user.Claims.Any(c => string.Equals(c.Type, "isSuperUser", StringComparison.OrdinalIgnoreCase) && string.Equals(c.Value, "true", StringComparison.OrdinalIgnoreCase)) ||
+        user.Claims.Any(c => (string.Equals(c.Type, "role", StringComparison.OrdinalIgnoreCase) || c.Type == ClaimTypes.Role) &&
+                             string.Equals(c.Value, "SuperAdmin", StringComparison.OrdinalIgnoreCase));
+}
+
  [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
 public sealed class AuthorizeAnyModuleAttribute : TypeFilterAttribute
 {
     public AuthorizeAnyModuleAttribute(params string[] moduleCodes)
         : base(typeof(AuthorizeAnyModuleFilter)) => Arguments = new object[] { moduleCodes };
+}
+
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
+public sealed class AuthorizeExactModuleAttribute : TypeFilterAttribute
+{
+    public AuthorizeExactModuleAttribute(string moduleCode)
+        : base(typeof(AuthorizeExactModuleFilter)) => Arguments = new object[] { moduleCode };
+}
+
+public sealed class AuthorizeExactModuleFilter : IAsyncActionFilter
+{
+    private readonly ICompanyEntitlementService _entitlements;
+    private readonly string _moduleCode;
+
+    public AuthorizeExactModuleFilter(ICompanyEntitlementService entitlements, string moduleCode)
+    {
+        _entitlements = entitlements;
+        _moduleCode = moduleCode;
+    }
+
+    public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
+    {
+        var user = context.HttpContext.User;
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            context.Result = new UnauthorizedResult();
+            return;
+        }
+
+        if (AuthorizationBypass.IsEnabled(context.HttpContext))
+        {
+            await next();
+            return;
+        }
+
+        var companyClaim = user.FindFirst("companyId") ?? user.FindFirst("CompanyId");
+        if (!int.TryParse(companyClaim?.Value, out var companyId) || companyId <= 0)
+        {
+            context.Result = new ObjectResult(new { success = false, errorCode = "COMPANY_REQUIRED", code = "COMPANY_REQUIRED" }) { StatusCode = StatusCodes.Status403Forbidden };
+            return;
+        }
+
+        if (AuthorizationBypass.IsEnabled(context.HttpContext))
+        {
+            await next();
+            return;
+        }
+
+        var assigned = user.FindClaims("module", "AllowedModulesJson", "allowedModulesJson", "allowedModules", "allowed_modules", "modules")
+            .SelectMany(ModuleCodes.FromClaimPreservingIds)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var requestedId = _moduleCode.Trim();
+        if (!assigned.Contains(ModuleCodes.All) && !assigned.Contains(requestedId))
+        {
+            context.Result = new ObjectResult(new { success = false, errorCode = "MODULE_NOT_ASSIGNED", code = "MODULE_NOT_ASSIGNED", requiredModule = requestedId, assignedModules = assigned }) { StatusCode = StatusCodes.Status403Forbidden };
+            return;
+        }
+
+        var licensed = ModuleCodes.Normalize((await _entitlements.GetAsync(companyId, context.HttpContext.RequestAborted)).Modules);
+        var licensedParent = ModuleCodes.Normalize(requestedId);
+        if (!licensed.Contains(ModuleCodes.All) && (licensedParent is null || !licensed.Contains(licensedParent)))
+        {
+            context.Result = new ObjectResult(new { success = false, errorCode = "MODULE_NOT_LICENSED", code = "MODULE_NOT_LICENSED", requiredModule = requestedId }) { StatusCode = StatusCodes.Status403Forbidden };
+            return;
+        }
+
+        await next();
+    }
+
+    private static bool IsGlobalAdministrator(ClaimsPrincipal user) =>
+        user.Claims.Any(c => string.Equals(c.Type, "isSuperUser", StringComparison.OrdinalIgnoreCase) && string.Equals(c.Value, "true", StringComparison.OrdinalIgnoreCase)) ||
+        user.Claims.Any(c => (string.Equals(c.Type, "role", StringComparison.OrdinalIgnoreCase) || c.Type == ClaimTypes.Role) &&
+                             string.Equals(c.Value, "SuperAdmin", StringComparison.OrdinalIgnoreCase));
 }
 
 public sealed class AuthorizeModuleFilter : IAsyncActionFilter
@@ -44,7 +133,13 @@ public sealed class AuthorizeModuleFilter : IAsyncActionFilter
             return;
         }
 
-        if (IsGlobalAdministrator(user))
+        if (AuthorizationBypass.IsEnabled(context.HttpContext))
+        {
+            await next();
+            return;
+        }
+
+        if (AuthorizationIdentity.IsGlobalAdministrator(user))
         {
             await next();
             return;
@@ -103,10 +198,6 @@ public sealed class AuthorizeModuleFilter : IAsyncActionFilter
         }) { StatusCode = StatusCodes.Status403Forbidden };
     }
 
-    private static bool IsGlobalAdministrator(ClaimsPrincipal user) =>
-        user.Claims.Any(c => string.Equals(c.Type, "isSuperUser", StringComparison.OrdinalIgnoreCase) && string.Equals(c.Value, "true", StringComparison.OrdinalIgnoreCase)) ||
-        user.Claims.Any(c => (string.Equals(c.Type, "role", StringComparison.OrdinalIgnoreCase) || c.Type == ClaimTypes.Role) &&
-                             string.Equals(c.Value, "SuperAdmin", StringComparison.OrdinalIgnoreCase));
 }
 
 public sealed class AuthorizeAnyModuleFilter : IAsyncActionFilter
@@ -122,12 +213,32 @@ public sealed class AuthorizeAnyModuleFilter : IAsyncActionFilter
         _logger = logger;
     }
 
+internal static class AuthorizationBypass
+{
+    public static bool IsEnabled(HttpContext context) =>
+        (context.RequestServices?.GetService(typeof(Microsoft.Extensions.Configuration.IConfiguration))
+            as Microsoft.Extensions.Configuration.IConfiguration)
+        ?.GetValue<bool>("Authorization:BypassRoleAndModuleChecks") == true;
+}
+
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
         var user = context.HttpContext.User;
         if (user.Identity?.IsAuthenticated != true)
         {
             context.Result = new UnauthorizedResult();
+            return;
+        }
+
+        if (AuthorizationBypass.IsEnabled(context.HttpContext))
+        {
+            await next();
+            return;
+        }
+
+        if (AuthorizationIdentity.IsGlobalAdministrator(user) || user.IsInRole("Admin") || user.HasClaim(ClaimTypes.Role, "Admin") || user.HasClaim("role", "Admin"))
+        {
+            await next();
             return;
         }
 

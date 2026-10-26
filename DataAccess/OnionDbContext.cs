@@ -45,13 +45,17 @@ namespace Onion.DataAccess
             }
         }
 
-        public bool IsGlobalTenantAccess => _currentUserService?.IsGlobalAdministrator == true;
+        public bool IsGlobalTenantAccess => _currentUserService?.IsGlobalAdministrator == true && (!TenantCompanyId.HasValue || TenantCompanyId.Value <= 0);
         // Projects currently reuse the legacy OrganizationId column. Local JWTs
         // scope it using CompanyId without requiring Clerk organization claims.
         public string TenantOrganizationIdForQuery => TenantCompanyId?.ToString() ?? "__no_company__";
 
         [NotMapped]
-        public int? TenantCompanyIdForQuery => IsGlobalTenantAccess ? null : TenantCompanyId ?? -1;
+        // Keep the comparison type stable for query filters. Several tenant-owned
+        // entities expose CompanyId as int, and comparing that value to int? causes
+        // EF expression construction to fail before the query reaches the database.
+        // The global-access branch already bypasses the tenant predicate.
+        public int TenantCompanyIdForQuery => IsGlobalTenantAccess ? -1 : TenantCompanyId ?? -1;
 
         public OnionDbContext(DbContextOptions<OnionDbContext> options, ITenantProvider? tenantProvider = null, Onion.Common.Services.ICurrentUserService? currentUserService = null, IOrganizationTenantProvider? organizationTenantProvider = null)
             : base(options)
@@ -80,6 +84,7 @@ namespace Onion.DataAccess
         public DbSet<CashMovement> CashMovements { get; set; } = null!;
         public DbSet<CashRegisterPause> CashRegisterPauses { get; set; } = null!;
         public DbSet<User> Users { get; set; } = null!;
+        public DbSet<UserCompany> UserCompanies { get; set; } = null!;
         public DbSet<Onion.Domain.Users.RefreshToken> RefreshTokens { get; set; } = null!;
         public DbSet<Onion.Domain.Invitations.Invitation> Invitations { get; set; } = null!;
         public DbSet<CompanySettings> CompanySettings { get; set; } = null!;
@@ -141,6 +146,17 @@ namespace Onion.DataAccess
                 entity.Property(e => e.ImageUrl).HasMaxLength(2048);
             });
 
+            modelBuilder.Entity<UserCompany>(entity =>
+            {
+                entity.ToTable("UserCompanies");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Role).HasMaxLength(50).IsRequired();
+                entity.HasIndex(e => new { e.UserId, e.CompanyId }).IsUnique();
+                entity.HasIndex(e => new { e.UserId, e.IsDefault });
+                entity.HasQueryFilter(e => !e.IsDeleted && e.Active &&
+                    (this.IsGlobalTenantAccess || e.CompanyId == this.TenantCompanyIdForQuery));
+            });
+
             modelBuilder.Entity<Onion.Domain.Requests.ProcessedRequest>(entity =>
             {
                 entity.HasKey(e => e.Id);
@@ -164,6 +180,7 @@ namespace Onion.DataAccess
             modelBuilder.Entity<Onion.Domain.Finance.CashSession>(entity =>
             {
                 entity.Property(e => e.OpeningAmount).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.CurrentBalance).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.ExpectedCash).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.DeclaredCash).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.DeclaredCards).HasColumnType("decimal(18,2)");
@@ -178,6 +195,8 @@ namespace Onion.DataAccess
                     .HasFilter("[Status] = 1");
                 entity.HasQueryFilter(e => this.IsGlobalTenantAccess || e.CompanyId == this.TenantCompanyIdForQuery);
             });
+            // CashSession model configuration located above. Additional CashSession-related configuration
+            // can be inserted here if needed (kept as a no-op placeholder for tooling that expects an insertion point).
 
             modelBuilder.Entity<Onion.Domain.Finance.Taxpayer>(entity =>
             {
@@ -225,6 +244,8 @@ namespace Onion.DataAccess
                 .HasOne(c => c.Settings)
                 .WithOne(s => s.Company)
                 .HasForeignKey<CompanySettings>(s => s.CompanyId);
+            modelBuilder.Entity<Company>()
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || !e.IsDeleted);
 
             modelBuilder.Entity<Product>(entity =>
             {
@@ -245,7 +266,7 @@ namespace Onion.DataAccess
                 entity.HasIndex(e => new { e.CompanyId, e.Status });
                 entity.HasIndex(e => new { e.CompanyId, e.OpenedByUserId })
                     .IsUnique()
-                    .HasFilter("[Status] IN (1, 2)");
+                    .HasFilter("[Status] IN (0, 1)");
             });
 
             modelBuilder.Entity<CashMovement>(entity =>
@@ -270,17 +291,49 @@ namespace Onion.DataAccess
                 entity.HasIndex(e => new { e.CompanyId, e.IdempotencyKey, e.IsDeleted })
                     .IsUnique()
                     .HasFilter("[IdempotencyKey] IS NOT NULL AND [IsDeleted] = 0");
-                entity.Property(e => e.VoucherType).HasDefaultValue(Onion.Domain.Invoices.VoucherType.B02);
                 entity.Property(e => e.TaxRate).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.SubTotal).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.Discount).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.Tax).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.TaxWithheld).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.LegalTip).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.RowVersion).IsRowVersion().IsConcurrencyToken();
             });
 
+            modelBuilder.Entity<SaleDetail>(entity =>
+            {
+                entity.Property(e => e.Discount).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.Tax).HasColumnType("decimal(18,2)");
+            });
+
+            modelBuilder.Entity<Payment>(entity =>
+            {
+                entity.Property(e => e.Amount).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.AmountReceived).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.ChangeAmount).HasColumnType("decimal(18,2)");
+                entity.HasIndex(e => new { e.CompanyId, e.CashSessionId });
+            });
+
+            modelBuilder.Entity<Onion.Domain.Finance.CashSession>(entity =>
+            {
+                entity.Property(e => e.ExpectedCash).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.DeclaredCash).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.ExpectedAmount).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.ActualAmount).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.DeclaredCards).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.DeclaredTransfers).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.ClosingDenominationsJson).HasColumnType("nvarchar(max)");
+                entity.Property(e => e.DenominationsJson).HasColumnType("nvarchar(max)");
+                entity.Property(e => e.ClosingNotes).HasColumnType("nvarchar(max)");
+                entity.Property(e => e.CardBatchNumber).HasMaxLength(100);
+                entity.Property(e => e.RetainedFloat).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.CashToDeposit).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.DepositDestination).HasMaxLength(250);
+            });
+
             modelBuilder.Entity<CompanySettings>(entity =>
             {
-                entity.Property(e => e.CashToleranceAmount).HasColumnType("decimal(18,2)").HasDefaultValue(50m);
-                entity.Property(e => e.AllowNegativeStock).HasDefaultValue(false);
+                entity.Property(e => e.CashToleranceAmount).HasColumnType("decimal(18,2)");
             });
 
             modelBuilder.Entity<Onion.Domain.Invoices.FiscalDocument>(entity =>
@@ -301,22 +354,22 @@ namespace Onion.DataAccess
 
             // Use the DbContext property 'TenantCompanyId' so the filter reads tenant from the provider at query time.
             // Use null-check comparison to avoid accessing .Value in EF translation; compare nullable CompanyId to TenantCompanyId directly
-            modelBuilder.Entity<Category>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
-            modelBuilder.Entity<Product>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
-            modelBuilder.Entity<Onion.Domain.Products.ProductType>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
-            modelBuilder.Entity<Onion.Domain.CreditNote>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
-            modelBuilder.Entity<Onion.Domain.CreditNoteDetail>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<Category>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<Product>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<Onion.Domain.Products.ProductType>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<Onion.Domain.CreditNote>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<Onion.Domain.CreditNoteDetail>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
-            modelBuilder.Entity<Customer>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
-            modelBuilder.Entity<Supplier>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
-            modelBuilder.Entity<Purchase>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
-            modelBuilder.Entity<Sale>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
-            modelBuilder.Entity<Return>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
-            modelBuilder.Entity<CashRegister>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
-            modelBuilder.Entity<CashMovement>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
-            modelBuilder.Entity<User>().HasQueryFilter(e => !e.IsDeleted && (this.IsGlobalTenantAccess || e.CompanyId == this.TenantCompanyIdForQuery));
-            modelBuilder.Entity<Onion.Domain.Audit.AuditLog>().HasQueryFilter(e => this.IsGlobalTenantAccess || e.CompanyId == this.TenantCompanyIdForQuery);
-            modelBuilder.Entity<CompanySettings>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<Customer>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<Supplier>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<Purchase>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<Sale>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<Return>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<CashRegister>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<CashMovement>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+            modelBuilder.Entity<User>().HasQueryFilter(e => !e.IsDeleted && (this.IsGlobalTenantAccess || e.CompanyId == (int?)this.TenantCompanyIdForQuery));
+            modelBuilder.Entity<Onion.Domain.Audit.AuditLog>().HasQueryFilter(e => this.IsGlobalTenantAccess || e.CompanyId == (int?)this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<CompanySettings>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             modelBuilder.Entity<Role>(entity =>
             {
@@ -337,6 +390,8 @@ namespace Onion.DataAccess
             modelBuilder.Entity<RolePermission>(entity =>
             {
                 entity.HasKey(e => new { e.RoleId, e.PermissionId });
+                entity.Property(e => e.CreateBy).HasMaxLength(450).IsRequired();
+                entity.Property(e => e.ModifiedBy).HasMaxLength(450).IsRequired();
                 entity.HasOne(e => e.Role).WithMany(e => e.RolePermissions).HasForeignKey(e => e.RoleId).OnDelete(DeleteBehavior.Cascade);
                 entity.HasOne(e => e.Permission).WithMany(e => e.RolePermissions).HasForeignKey(e => e.PermissionId).OnDelete(DeleteBehavior.Cascade);
             });
@@ -344,6 +399,8 @@ namespace Onion.DataAccess
             modelBuilder.Entity<UserRole>(entity =>
             {
                 entity.HasKey(e => new { e.UserId, e.RoleId });
+                entity.Property(e => e.CreateBy).HasMaxLength(450).IsRequired();
+                entity.Property(e => e.ModifiedBy).HasMaxLength(450).IsRequired();
                 entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
                 entity.HasOne(e => e.Role).WithMany(e => e.UserRoles).HasForeignKey(e => e.RoleId).OnDelete(DeleteBehavior.Cascade);
                 entity.HasQueryFilter(e => this.IsGlobalTenantAccess || e.CompanyId == this.TenantCompanyIdForQuery);
@@ -362,38 +419,38 @@ namespace Onion.DataAccess
 
             // Ensure tenant query filters are applied for warehouse-related and invitation entities
             modelBuilder.Entity<Onion.Domain.Warehouses.Warehouse>()
-                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             modelBuilder.Entity<Onion.Domain.Warehouses.Inventory>()
-                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             modelBuilder.Entity<Onion.Domain.Warehouses.Movement>()
-                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             modelBuilder.Entity<Onion.Domain.Inventory.InventoryMovement>()
-                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             modelBuilder.Entity<Onion.Domain.Invoices.InvoiceSequence>()
-                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             modelBuilder.Entity<Onion.Domain.Finance.AccountReceivable>()
-                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             modelBuilder.Entity<Onion.Domain.Finance.AccountPayable>()
-                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             modelBuilder.Entity<Onion.Domain.Billing.CompanySubscription>()
-                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             // Credits tenant filters
             modelBuilder.Entity<Onion.Domain.Credits.Credit>()
-                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             modelBuilder.Entity<Onion.Domain.Credits.CreditPayment>()
-                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             modelBuilder.Entity<Onion.Domain.Credits.CreditStatusHistory>()
-                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             // Configure relationships and indexes for Credits module
             modelBuilder.Entity<Onion.Domain.Credits.Credit>(eb =>
@@ -425,13 +482,13 @@ namespace Onion.DataAccess
 
             // Appointment module tenant filters
             modelBuilder.Entity<Onion.Domain.Appointments.Appointment>()
-                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             modelBuilder.Entity<Onion.Domain.Appointments.Resource>()
-                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             modelBuilder.Entity<Onion.Domain.Appointments.Availability>()
-                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             // Resource-Availability relationship
             modelBuilder.Entity<Onion.Domain.Appointments.Resource>(eb =>
@@ -464,7 +521,7 @@ namespace Onion.DataAccess
 
             // Invitation entity exists under Domain.Invitations and must be tenant-scoped
             modelBuilder.Entity<Onion.Domain.Invitations.Invitation>()
-                .HasQueryFilter(e => EF.Property<int?>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+                .HasQueryFilter(e => EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             // AccountReceivable relationships
             modelBuilder.Entity<Onion.Domain.Finance.PaymentPlan>()
@@ -488,14 +545,17 @@ namespace Onion.DataAccess
         {
             var now = DateTime.UtcNow;
             var auditEntries = ChangeTracker.Entries()
-                .Where(e => e.Entity is BaseEntity && e.Entity is not Onion.Domain.Audit.AuditLog &&
+                .Where(e => e.Entity is Onion.Common.Models.IAuditableEntity && e.Entity is not Onion.Domain.Audit.AuditLog &&
                     (e.State == EntityState.Added || e.State == EntityState.Modified || e.State == EntityState.Deleted))
                 .ToList();
             var currentUser = _currentUserService;
+            var actor = currentUser?.UserId?.ToString()
+                ?? currentUser?.UserEmail
+                ?? "system";
 
             foreach (var entry in auditEntries)
             {
-                var entity = (BaseEntity)entry.Entity;
+                var entity = (Onion.Common.Models.IAuditableEntity)entry.Entity;
                 var changes = new Dictionary<string, object?>();
                 foreach (var property in entry.Properties)
                 {
@@ -510,6 +570,9 @@ namespace Onion.DataAccess
                 if (entry.State == EntityState.Added)
                 {
                     entity.CreationDate = now;
+                    if (string.IsNullOrWhiteSpace(entity.CreateBy))
+                        entity.CreateBy = actor;
+                    entity.ModifiedBy = actor;
                     // Set CompanyId from the effective tenant source (ICurrentUserService or AmbientTenantProvider or ITenantProvider fallback)
                     var tenantId = this.TenantCompanyId;
                     if (tenantId.HasValue)
@@ -531,6 +594,7 @@ namespace Onion.DataAccess
                 else
                 {
                     entity.ModificationDate = now;
+                    entity.ModifiedBy = actor;
                 }
 
                 var companyProperty = entry.Properties.FirstOrDefault(p => string.Equals(p.Metadata.Name, "CompanyId", StringComparison.OrdinalIgnoreCase));
@@ -546,7 +610,7 @@ namespace Onion.DataAccess
                     Action = entry.State == EntityState.Added ? "Insert" : entry.State == EntityState.Deleted ? "Delete" : "Update",
                     Entity = entityName,
                     EntityName = entityName,
-                    EntityId = entity.Id == 0 ? null : entity.Id,
+                    EntityId = entry.Properties.FirstOrDefault(p => p.Metadata.Name == "Id")?.CurrentValue as int?,
                     PerformedBy = currentUser?.UserId?.ToString() ?? "system",
                     Timestamp = now,
                     AuditPayload = JsonSerializer.Serialize(changes),

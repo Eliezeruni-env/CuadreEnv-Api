@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Onion.BussinesLogic.Services.Abstract;
 using Onion.BussinesLogic.Dtos;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Onion.Common.Authorization;
 using System.Security.Claims;
 using Onion.BussinesLogic.Services.Abstract;
@@ -19,6 +20,62 @@ namespace Onion.Controllers
             _auth = auth;
         }
 
+        [Authorize]
+        [HttpPost("switch-company")]
+        public async Task<IActionResult> SwitchCompany([FromBody] SwitchCompanyRequest request)
+        {
+            var idValue = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(idValue, out var userId) || userId <= 0)
+                return Unauthorized();
+
+            return Ok(await _auth.SwitchCompanyAsync(userId, request.CompanyId, request.DeviceId));
+        }
+
+        [Authorize]
+        [HttpGet("/v1/users/my-companies")]
+        [HttpGet("/v1/auth/user-companies")]
+        [HttpGet("/v1/auth/my-companies")]
+        [HttpGet("user-companies")]
+        [HttpGet("my-companies")]
+        public async Task<IActionResult> MyCompanies([FromServices] Onion.DataAccess.OnionDbContext db)
+        {
+            var idValue = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(idValue, out var userId) || userId <= 0)
+                return Unauthorized();
+
+            var memberships = await db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
+                .Where(x => x.UserId == userId && x.Active && !x.IsDeleted)
+                .Join(db.Companies.IgnoreQueryFilters().AsNoTracking().Where(x => x.Active && !x.IsDeleted),
+                    membership => membership.CompanyId,
+                    company => company.Id,
+                    (membership, company) => new
+                    {
+                        company.Id,
+                        company.Name,
+                        company.Rnc,
+                        membership.Role,
+                        membership.IsDefault
+                    })
+                .ToListAsync();
+
+            var primaryCompanyId = await db.Users.IgnoreQueryFilters().AsNoTracking()
+                .Where(x => x.Id == userId)
+                .Select(x => x.CompanyId)
+                .FirstOrDefaultAsync();
+
+            if (primaryCompanyId is > 0 && !memberships.Any(x => x.Id == primaryCompanyId.Value))
+            {
+                var primary = await db.Companies.IgnoreQueryFilters().AsNoTracking()
+                    .Where(x => x.Id == primaryCompanyId.Value && x.Active && !x.IsDeleted)
+                    .Select(x => new { x.Id, x.Name, x.Rnc })
+                    .FirstOrDefaultAsync();
+                if (primary is not null)
+                    memberships.Add(new { primary.Id, primary.Name, primary.Rnc, Role = "Primary", IsDefault = true });
+            }
+
+            return Ok(memberships.OrderByDescending(x => x.IsDefault).ThenBy(x => x.Name));
+        }
+
         [HttpPost("register")]
         [AllowAnonymous]
         public async Task<IActionResult> Register([FromBody] RegisterRequestDto req)
@@ -29,6 +86,8 @@ namespace Onion.Controllers
             var json = System.Text.Json.JsonSerializer.Serialize(resp, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
             return Content(json, "application/json");
         }
+
+public sealed record SwitchCompanyRequest(int CompanyId, string? DeviceId = null);
 
         [HttpPost("login")]
         [AllowAnonymous]
@@ -122,21 +181,22 @@ namespace Onion.Controllers
             }
 
             var hasAllAssignedModules = assignedModules.Contains(ModuleCodes.All, StringComparer.Ordinal);
-            var hasAllLicensedModules = licensedModules.Contains(ModuleCodes.All, StringComparer.Ordinal);
+            var hasAllLicensedModules = licensedModules.Contains(ModuleCodes.All, StringComparer.Ordinal) || licensedModules.Count == 0;
             var effectiveModules = hasAllAssignedModules && hasAllLicensedModules
                 ? new[] { ModuleCodes.All }
                 : hasAllAssignedModules
-                    ? licensedModules.ToArray()
+                    ? (licensedModules.Count > 0 ? licensedModules.ToArray() : assignedModules)
                     : hasAllLicensedModules
                         ? assignedModules
                         : assignedModules
                             .Where(assigned => licensedModules.Contains(ModuleCodes.Normalize(assigned), StringComparer.Ordinal))
                             .ToArray();
 
+            var responseLicensed = licensedModules.Count == 0 ? new[] { ModuleCodes.All } : licensedModules.ToArray();
             return Ok(new
             {
                 assignedModules,
-                licensedModules,
+                licensedModules = responseLicensed,
                 modules = effectiveModules,
                 hasAllModules = effectiveModules.Contains(ModuleCodes.All, StringComparer.Ordinal)
             });

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Onion.BussinesLogic.Services.Abstract;
 using Onion.Domain;
@@ -14,12 +15,12 @@ namespace Onion.BussinesLogic.Services.Concrete
             _saleService = saleService;
         }
 
-        public async Task<Sale> CreateSaleAsync(Sale sale, string idempotencyKey, int? cashRegisterId = null)
+        public async Task<Sale> CreateSaleAsync(Sale sale, string idempotencyKey, int? cashRegisterId = null, IReadOnlyCollection<Payment>? payments = null)
         {
             if (string.IsNullOrWhiteSpace(idempotencyKey)) throw new ArgumentException("IdempotencyKey required", nameof(idempotencyKey));
             sale.IdempotencyKey = idempotencyKey.Trim();
             sale.CashRegisterId = cashRegisterId;
-            return await _saleService.CreateAsync(sale);
+            return await _saleService.CreateAsync(sale, payments);
         }
     }
 }

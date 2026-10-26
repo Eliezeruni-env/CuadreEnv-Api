@@ -6,6 +6,23 @@ namespace Onion.Tests
 {
     public class AuthorizationServiceTests
     {
+    [Fact]
+    public void TryGetCompanyId_Accepts_Lowercase_And_Uppercase_Claims()
+    {
+        var service = new AuthorizationService();
+
+        Assert.True(service.TryGetCompanyId(new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim("companyId", "11")
+        }, "test")), out var lowercase));
+        Assert.Equal(11, lowercase);
+
+        Assert.True(service.TryGetCompanyId(new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim("CompanyId", "12")
+        }, "test")), out var uppercase));
+        Assert.Equal(12, uppercase);
+    }
         private ClaimsPrincipal CreateUser(string? role = null, int? companyId = null)
         {
             var claims = new System.Collections.Generic.List<Claim>();

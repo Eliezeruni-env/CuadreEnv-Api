@@ -40,14 +40,22 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (string.IsNullOrWhiteSpace(user.Email)) throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_EMAIL", Message = "Email required", Language = "EN" });
             if (await _uow.Users.ExistsByEmailAsync(user.Email)) throw new CustomException(new Onion.Common.Models.Error { Code = "DUPLICATE_EMAIL", Message = "Email already exists", Language = "EN" });
 
-            // Check subscription limits before creating
-            var companyId = user.CompanyId;
-            try
+            // A user can only be created without a company during public onboarding.
+            // Once a tenant is active, the tenant context is authoritative.
+            var tenantCompanyId = _currentUserService.CompanyId ?? _tenantProvider.GetCompanyId();
+            if (tenantCompanyId.HasValue && tenantCompanyId.Value > 0 &&
+                user.CompanyId.HasValue && user.CompanyId.Value != tenantCompanyId.Value)
             {
-                var subscriptionService = (Onion.BussinesLogic.Services.Abstract.ISubscriptionService?)typeof(UserService).Assembly
-                    .CreateInstance("Onion.BussinesLogic.Services.Concrete.SubscriptionService");
+                throw new CustomException(new Onion.Common.Models.Error
+                {
+                    Code = "FORBIDDEN",
+                    Message = "Cannot create a user in another company.",
+                    Language = "EN"
+                });
             }
-            catch { }
+
+            if (!user.CompanyId.HasValue && tenantCompanyId.HasValue && tenantCompanyId.Value > 0)
+                user.CompanyId = tenantCompanyId.Value;
 
             // Enforce plan limits if company is provided
             if (user.CompanyId.HasValue && user.CompanyId.Value > 0)
@@ -65,25 +73,31 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task AssignCompanyAsync(int userId, int companyId)
         {
-            // Determine caller context
-            var callerCompany = _tenantProvider.GetCompanyId();
-            var callerUserId = _currentUserService?.UserId;
+            if (companyId <= 0)
+                throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_TENANT", Message = "A valid company is required", Language = "EN" });
 
-            if (!callerCompany.HasValue)
+            // Determine caller context
+            var callerCompany = _currentUserService.CompanyId ?? _tenantProvider.GetCompanyId();
+            var callerUserId = _currentUserService?.UserId;
+            var isGlobalAdministrator = _currentUserService.IsGlobalAdministrator;
+
+            if (!isGlobalAdministrator && !callerCompany.HasValue)
             {
                 // No tenant claim: allow only self-assignment (onboarding flow)
                 if (!callerUserId.HasValue || callerUserId.Value != userId)
                     throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Tenant context missing: CompanyId claim required or caller must be the same user for onboarding", Language = "EN" });
             }
-            else
+            else if (!isGlobalAdministrator)
             {
                 // Tenant-scoped caller may only assign within their own company
                 if (callerCompany.Value != companyId)
                     throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Cannot assign user to a different company", Language = "EN" });
             }
 
-            // Assignment is part of onboarding: the user does not have a
-            // company yet, so a tenant-scoped lookup cannot find it.
+            if (!isGlobalAdministrator && callerCompany.HasValue && callerCompany.Value != companyId)
+                throw new CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Cannot assign user to a different company", Language = "EN" });
+
+            // Assignment is only allowed for an unassigned user or by a global administrator.
             var user = await _uow.Users.GetByIdUnscopedAsync(userId);
             if (user == null)
                 throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
@@ -180,6 +194,9 @@ namespace Onion.BussinesLogic.Services.Concrete
             var existing = await _uow.Users.GetByIdAsync(user.Id);
             if (existing == null)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "User not found", Language = "EN" });
+
+            if (!_currentUserService.IsGlobalAdministrator && existing.CompanyId != (_currentUserService.CompanyId ?? _tenantProvider.GetCompanyId()))
+                throw new CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Cannot modify user from another company", Language = "EN" });
 
             existing.FirstName = user.FirstName;
             existing.LastName = user.LastName;

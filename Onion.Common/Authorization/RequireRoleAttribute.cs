@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 
 namespace Onion.Common.Authorization
@@ -53,6 +54,12 @@ namespace Onion.Common.Authorization
         public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
         {
             var user = context.HttpContext.User;
+            if (user.Identity?.IsAuthenticated == true && AuthorizationBypass.IsEnabled(context.HttpContext))
+            {
+                await next();
+                return;
+            }
+
             var passed = CheckAccess(user, context.RouteData.Values.ToDictionary(k => k.Key, v => v.Value), context.ActionArguments);
             if (!passed)
             {
@@ -66,6 +73,7 @@ namespace Onion.Common.Authorization
 
             await next();
         }
+
 
         // Allow unit tests to verify logic without ASP.NET types
         public bool CheckAccess(System.Security.Claims.ClaimsPrincipal? user, IDictionary<string, object?>? routeValues = null, IDictionary<string, object>? actionArguments = null)

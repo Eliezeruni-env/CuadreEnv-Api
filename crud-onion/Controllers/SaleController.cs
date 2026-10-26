@@ -40,10 +40,23 @@ namespace Onion.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll([FromQuery] int? pageNumber = null, [FromQuery] int? pageSize = null)
+        [HttpGet("/api/sales")]
+        public async Task<IActionResult> GetAll(
+            [FromQuery] int? pageNumber = null,
+            [FromQuery] int? pageSize = null,
+            [FromQuery] SaleOriginChannel? originChannel = null,
+            [FromQuery] DateTime? startDate = null,
+            [FromQuery] DateTime? endDate = null,
+            [FromQuery] int? customerId = null)
         {
             try
             {
+                if (originChannel.HasValue || startDate.HasValue || endDate.HasValue || customerId.HasValue)
+                {
+                    var filtered = await _service.GetFilteredAsync(originChannel, startDate, endDate, customerId);
+                    return Ok(filtered);
+                }
+
                 if (pageNumber.HasValue)
                 {
                     var paged = await _service.GetPagedAsync(pageNumber.Value, pageSize ?? 10);
@@ -178,18 +191,25 @@ namespace Onion.Controllers
         }
 
         [HttpPost]
+        [HttpPost("/api/sales")]
         public async Task<IActionResult> Post([FromBody] Onion.BussinesLogic.Dtos.SaleRequestDto dto)
         {
             var idempotencyKey = Request.Headers.TryGetValue("X-Idempotency-Key", out var ik) ? ik.ToString() : null;
             if (string.IsNullOrWhiteSpace(idempotencyKey) || !Guid.TryParse(idempotencyKey, out _))
-                return BadRequest(Onion.Common.Models.ApiResponse<object>.Fail("X-Idempotency-Key must be a valid UUID.", new[] { "IDEMPOTENCY_KEY_REQUIRED" }));
+            {
+                idempotencyKey = !string.IsNullOrWhiteSpace(dto.IdempotencyKey)
+                    ? dto.IdempotencyKey.Trim()
+                    : Guid.NewGuid().ToString();
+            }
 
             if (_dbContext != null)
             {
                 var now = DateTime.UtcNow;
+                var tenantCompanyId = _dbContext.TenantCompanyId ?? 0;
+                var reqPath = Request.Path.Value ?? string.Empty;
                 var existingRequest = await _dbContext.ProcessedRequests.AsNoTracking()
                     .IgnoreQueryFilters()
-                    .FirstOrDefaultAsync(x => x.CompanyId == (_dbContext.TenantCompanyId ?? 0) && x.IdempotencyKey == idempotencyKey && x.RequestPath == Request.Path && x.ExpiresAtUtc > now);
+                    .FirstOrDefaultAsync(x => x.CompanyId == tenantCompanyId && x.IdempotencyKey == idempotencyKey && x.RequestPath == reqPath && x.ExpiresAtUtc > now);
                 if (existingRequest != null)
                     return new ContentResult { StatusCode = existingRequest.StatusCode, ContentType = "application/json", Content = existingRequest.ResponseJson };
 
@@ -207,16 +227,58 @@ namespace Onion.Controllers
                 Total = dto.Total,
                 PaidAmount = dto.PaidAmount,
                 CashRegisterId = dto.CashRegisterId,
+                CashSessionId = dto.CashSessionId,
                 DueDate = dto.DueDate,
+                PaymentType = dto.PaymentType,
+                PaymentMethod = dto.PaymentMethod,
+                Notes = dto.Notes,
+                OriginChannel = dto.OriginChannel,
+                VoucherType = dto.VoucherType,
+                TaxRate = dto.TaxRate,
+                Tax = dto.TaxAmount,
+                Discount = dto.Discount,
+                TaxWithheld = dto.TaxWithheld,
+                LegalTip = dto.LegalTip,
+                FiscalRnc = dto.FiscalRnc,
+                FiscalBusinessName = dto.FiscalBusinessName,
                 IdempotencyKey = idempotencyKey,
             };
 
             foreach (var d in dto.Details)
             {
-                sale.Details.Add(new SaleDetail { ProductId = d.ProductId, Quantity = d.Quantity, UnitPrice = d.UnitPrice });
+                sale.Details.Add(new SaleDetail
+                {
+                    ProductId = d.ProductId,
+                    Quantity = d.Quantity,
+                    UnitPrice = d.UnitPrice,
+                    Discount = d.Discount,
+                    Tax = d.Tax,
+                    WarehouseId = d.WarehouseId
+                });
             }
 
-            var created = await _service.CreateAsync(sale);
+            var paymentLines = dto.Payments.Select(p => new Payment
+            {
+                Amount = p.Amount,
+                PaymentMethod = p.Method,
+                Reference = p.Reference,
+                AmountReceived = p.AmountReceived,
+                ChangeAmount = p.ChangeAmount
+            }).ToList();
+
+            if (paymentLines.Count == 0 && dto.Payment is not null)
+            {
+                paymentLines.Add(new Payment
+                {
+                    Amount = sale.Total > 0 ? sale.Total : sale.PaidAmount,
+                    PaymentMethod = dto.Payment.Method,
+                    Reference = dto.Payment.Reference,
+                    AmountReceived = dto.Payment.AmountReceived,
+                    ChangeAmount = dto.Payment.ChangeAmount
+                });
+            }
+
+            var created = await _service.CreateAsync(sale, paymentLines);
             var response = Onion.Common.Models.ApiResponse<object>.Ok(created, "Sale created successfully.");
             var responseJson = JsonSerializer.Serialize(response);
             if (_dbContext != null)
@@ -226,7 +288,7 @@ namespace Onion.Controllers
                     CompanyId = created.CompanyId,
                     UserId = null,
                     IdempotencyKey = idempotencyKey,
-                    RequestPath = Request.Path,
+                    RequestPath = Request.Path.Value ?? string.Empty,
                     StatusCode = StatusCodes.Status201Created,
                     ResponseJson = responseJson,
                     ExpiresAtUtc = DateTime.UtcNow.AddHours(72)
@@ -242,7 +304,9 @@ namespace Onion.Controllers
             var results = new List<object>();
             foreach (var request in requests ?? new())
             {
-                var key = Guid.NewGuid().ToString();
+                    var key = !string.IsNullOrWhiteSpace(request?.IdempotencyKey)
+                        ? request.IdempotencyKey.Trim()
+                        : Guid.NewGuid().ToString();
                 if (request is null)
                 {
                     results.Add(new { success = false, idempotencyKey = key, data = (object?)null, errors = new[] { "Sale request is required." } });
@@ -298,7 +362,10 @@ namespace Onion.Controllers
             {
                 SaleId = id,
                 Amount = dto.Amount,
-                Reference = dto.Reference
+                Reference = dto.Reference,
+                CashSessionId = dto.CashSessionId,
+                AmountReceived = dto.AmountReceived,
+                ChangeAmount = dto.ChangeAmount
             };
 
             await _service.AddPaymentAsync(id, payment, dto.Method, dto.CashRegisterId);
@@ -690,3 +757,4 @@ namespace Onion.Controllers
             .ToString();
     }
 }
+

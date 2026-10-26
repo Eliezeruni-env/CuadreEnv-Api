@@ -1,8 +1,12 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Onion.BussinesLogic.Services.Abstract;
 using Onion.BussinesLogic.Dtos;
 using Onion.Common.Authorization;
+using Onion.Domain;
 
 namespace Onion.Controllers
 {
@@ -38,14 +42,35 @@ namespace Onion.Controllers
                 CustomerId = dto.CustomerId,
                 Date = dto.Date,
                 Notes = dto.Notes,
-                CreateBy = dto.CreateBy
+                CreateBy = dto.CreateBy,
+                ExternalReference = dto.PaymentReference
             };
             foreach (var it in dto.Items)
             {
                 sale.Details.Add(new Onion.Domain.SaleDetail { ProductId = it.ProductId, Quantity = it.Quantity, UnitPrice = it.UnitPrice });
             }
 
-            var created = await _service.CreateSaleAsync(sale, key, dto.CashRegisterId);
+            var paymentLines = new List<Payment>();
+            if (!string.IsNullOrWhiteSpace(dto.PaymentMethod))
+            {
+                var method = PaymentMethod.CASH;
+                if (Enum.TryParse<PaymentMethod>(dto.PaymentMethod, true, out var parsed))
+                    method = parsed;
+                else if (dto.PaymentMethod.Contains("Transfer", StringComparison.OrdinalIgnoreCase))
+                    method = PaymentMethod.TRANSFER;
+                else if (dto.PaymentMethod.Contains("Tarj", StringComparison.OrdinalIgnoreCase) || dto.PaymentMethod.Contains("Card", StringComparison.OrdinalIgnoreCase))
+                    method = PaymentMethod.CARD;
+
+                var totalSale = sale.Details.Sum(d => d.Quantity * d.UnitPrice);
+                paymentLines.Add(new Payment
+                {
+                    Amount = totalSale,
+                    PaymentMethod = method,
+                    Reference = dto.PaymentReference ?? dto.PaymentMethod
+                });
+            }
+
+            var created = await _service.CreateSaleAsync(sale, key, dto.CashRegisterId, paymentLines);
             return CreatedAtAction(nameof(Get), new { id = created.Id }, Onion.Common.Models.ApiResponse<object>.Ok(created));
         }
 
