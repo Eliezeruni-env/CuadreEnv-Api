@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -537,9 +537,23 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             if (user.IsSuperUser || string.Equals(user.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
                 return new[] { "*" };
-
             if (string.IsNullOrWhiteSpace(user.AllowedModulesJson))
+            {
+                if (string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase))
+                    return new[] { "*" };
+
+                if (string.Equals(user.Role, "Supervisor", StringComparison.OrdinalIgnoreCase))
+                    return new[] { "dashboard", "sales", "cashregister", "inventory", "customers", "audit", "reports" };
+
+                if (string.Equals(user.Role, "Cajero", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(user.Role, "Cashier", StringComparison.OrdinalIgnoreCase))
+                    return new[] { "dashboard", "sales", "cashregister", "customers", "products.detail_sales" };
+
+                if (string.Equals(user.Role, "Vendedor", StringComparison.OrdinalIgnoreCase))
+                    return new[] { "dashboard", "sales", "inventory", "customers" };
+
                 return Array.Empty<string>();
+            }
 
             var modules = Onion.Common.Authorization.ModuleCodes.FromClaimPreservingIds(user.AllowedModulesJson);
             if (modules.Count == 0 && !string.Equals(user.AllowedModulesJson.Trim(), "[]", StringComparison.Ordinal))

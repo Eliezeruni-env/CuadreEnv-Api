@@ -181,21 +181,22 @@ public sealed record SwitchCompanyRequest(int CompanyId, string? DeviceId = null
             }
 
             var hasAllAssignedModules = assignedModules.Contains(ModuleCodes.All, StringComparer.Ordinal);
-            var hasAllLicensedModules = licensedModules.Contains(ModuleCodes.All, StringComparer.Ordinal);
+            var hasAllLicensedModules = licensedModules.Contains(ModuleCodes.All, StringComparer.Ordinal) || licensedModules.Count == 0;
             var effectiveModules = hasAllAssignedModules && hasAllLicensedModules
                 ? new[] { ModuleCodes.All }
                 : hasAllAssignedModules
-                    ? licensedModules.ToArray()
+                    ? (licensedModules.Count > 0 ? licensedModules.ToArray() : assignedModules)
                     : hasAllLicensedModules
                         ? assignedModules
                         : assignedModules
                             .Where(assigned => licensedModules.Contains(ModuleCodes.Normalize(assigned), StringComparer.Ordinal))
                             .ToArray();
 
+            var responseLicensed = licensedModules.Count == 0 ? new[] { ModuleCodes.All } : licensedModules.ToArray();
             return Ok(new
             {
                 assignedModules,
-                licensedModules,
+                licensedModules = responseLicensed,
                 modules = effectiveModules,
                 hasAllModules = effectiveModules.Contains(ModuleCodes.All, StringComparer.Ordinal)
             });
