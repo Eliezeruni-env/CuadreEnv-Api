@@ -36,6 +36,8 @@ namespace Onion.Tests
         {
             public System.Threading.Tasks.Task<int> SaveChangesAsync() => System.Threading.Tasks.Task.FromResult(0);
             public System.Threading.Tasks.Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTransactionAsync() => throw new System.NotImplementedException();
+            public System.Threading.Tasks.Task<TResult> ExecuteStrategyAsync<TResult>(System.Func<System.Threading.Tasks.Task<TResult>> operation) => operation();
+            public System.Threading.Tasks.Task ExecuteStrategyAsync(System.Func<System.Threading.Tasks.Task> operation) => operation();
             public void Dispose() { }
 
             // Only the Invitations repository is used by controller in this test

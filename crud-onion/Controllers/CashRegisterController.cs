@@ -54,8 +54,8 @@ namespace Onion.Controllers
         {
             var item = await _service.GetByIdAsync(id);
             if (item == null) return NotFound();
-            if (item.RowVersion.Length > 0)
-                Response.Headers.ETag = $"\"{Convert.ToBase64String(item.RowVersion)}\"";
+            if (item.RowVersion > 0)
+                Response.Headers.ETag = $"\"{item.RowVersion}\"";
             return Ok(item);
         }
 
@@ -92,10 +92,10 @@ namespace Onion.Controllers
             {
                 return Ok(new CashRegisterCloseResult(current.InitialAmount, request.ActualAmount, 0m, "EXACT", true, false));
             }
-            if (current.RowVersion.Length > 0 && Request.Headers.TryGetValue("If-Match", out var ifMatch))
+            if (current.RowVersion > 0 && Request.Headers.TryGetValue("If-Match", out var ifMatch))
             {
                 var token = ifMatch.ToString().Trim().Trim('"');
-                if (!string.Equals(token, Convert.ToBase64String(current.RowVersion), StringComparison.Ordinal))
+                if (!string.Equals(token, current.RowVersion.ToString(), StringComparison.Ordinal))
                     return StatusCode(StatusCodes.Status412PreconditionFailed, new { code = "CASH_REGISTER_CHANGED" });
             }
             var result = await _service.CloseAsync(id, request, _currentUser.UserId);

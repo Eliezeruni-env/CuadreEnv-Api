@@ -192,7 +192,7 @@ public sealed record SwitchCompanyRequest(int CompanyId, string? DeviceId = null
                             .Where(assigned => licensedModules.Contains(ModuleCodes.Normalize(assigned), StringComparer.Ordinal))
                             .ToArray();
 
-            var responseLicensed = licensedModules.Count == 0 ? new[] { ModuleCodes.All } : licensedModules.ToArray();
+            var responseLicensed = licensedModules.ToArray();
             return Ok(new
             {
                 assignedModules,

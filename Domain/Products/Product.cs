@@ -37,7 +37,7 @@ namespace Onion.Domain.Products
         public decimal Stock { get; set; }
         // Quantity reserved (not yet deducted from stock until sale is confirmed)
         public decimal ReservedStock { get; set; }
-        public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+        public uint RowVersion { get; set; }
         #endregion
     }
 }

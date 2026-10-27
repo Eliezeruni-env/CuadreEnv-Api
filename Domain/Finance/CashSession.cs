@@ -55,7 +55,7 @@ public class CashSession : BaseEntity
     public string? ClosingDenominationsJson { get; private set; }
     public int? SupervisorUserId { get; private set; }
     public string? SupervisorNotes { get; private set; }
-    public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+    public uint RowVersion { get; set; }
 
     public void Close(decimal expectedCash, decimal declaredCash, decimal declaredCards, decimal declaredTransfers,
         string denominationsJson, CashClosingStatus status, int? supervisorUserId, string? supervisorNotes,

@@ -13,7 +13,7 @@ public class FiscalSequence : BaseEntity
     public DateTime ExpirationDate { get; set; }
     public int WarningThreshold { get; set; } = 50;
     public bool IsActive { get; set; } = true;
-    public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+    public uint RowVersion { get; set; }
 
     public long Remaining => Math.Max(0, ToNumber - CurrentNumber + 1);
     public bool IsElectronic => Prefix.StartsWith("E", StringComparison.OrdinalIgnoreCase);

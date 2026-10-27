@@ -21,50 +21,60 @@ public sealed class FiscalSequenceService : Onion.BussinesLogic.Services.Abstrac
     {
         if (companyId <= 0) throw new ArgumentOutOfRangeException(nameof(companyId));
 
-        var ownsTransaction = _db.Database.CurrentTransaction is null;
-        await using var transaction = ownsTransaction
-            ? await _db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken)
-            : null;
-        try
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            var sequence = await _db.FiscalSequences
-                .FromSqlInterpolated<FiscalSequence>($"SELECT * FROM [FiscalSequences] WITH (UPDLOCK, ROWLOCK) WHERE [CompanyId] = {companyId} AND [VoucherType] = {(int)voucherType} AND [IsActive] = 1")
-                .IgnoreQueryFilters()
-                .SingleOrDefaultAsync(cancellationToken);
+            var ownsTransaction = _db.Database.CurrentTransaction is null;
+            await using var transaction = ownsTransaction
+                ? await _db.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, cancellationToken)
+                : null;
+            try
+            {
+                var targetId = await _db.Database
+                    .SqlQueryRaw<int>(@"SELECT ""Id"" FROM ""FiscalSequences"" WHERE ""CompanyId"" = {0} AND ""VoucherType"" = {1} AND ""IsActive"" = true FOR UPDATE", companyId, (int)voucherType)
+                    .SingleOrDefaultAsync(cancellationToken);
 
-            if (sequence is null)
-                throw new FiscalSequenceExhaustedException($"Secuencia fiscal {voucherType} agotada o vencida ante la DGII. Solicite nueva autorización.");
-            if (sequence.ExpirationDate.ToUniversalTime() < DateTime.UtcNow)
-                throw new FiscalSequenceExpiredException($"Secuencia fiscal {sequence.Prefix} agotada o vencida ante la DGII. Solicite nueva autorización.");
-            if (sequence.CurrentNumber > sequence.ToNumber)
-                throw new FiscalSequenceExhaustedException($"Secuencia fiscal {sequence.Prefix} agotada o vencida ante la DGII. Solicite nueva autorización.");
+                if (targetId <= 0)
+                    throw new FiscalSequenceExhaustedException($"Secuencia fiscal {voucherType} agotada o vencida ante la DGII. Solicite nueva autorización.");
 
-            var value = sequence.CurrentNumber;
-            sequence.CurrentNumber = checked(value + 1);
-            if (sequence.CurrentNumber > sequence.ToNumber)
-                sequence.IsActive = false;
+                var sequence = await _db.FiscalSequences
+                    .IgnoreQueryFilters()
+                    .SingleOrDefaultAsync(x => x.Id == targetId, cancellationToken);
 
-            _db.FiscalSequences.Update(sequence);
-            await _db.SaveChangesAsync(cancellationToken);
-            if (ownsTransaction)
-                await transaction!.CommitAsync(cancellationToken);
+                if (sequence is null)
+                    throw new FiscalSequenceExhaustedException($"Secuencia fiscal {voucherType} agotada o vencida ante la DGII. Solicite nueva autorización.");
+                if (sequence.ExpirationDate.ToUniversalTime() < DateTime.UtcNow)
+                    throw new FiscalSequenceExpiredException($"Secuencia fiscal {sequence.Prefix} agotada o vencida ante la DGII. Solicite nueva autorización.");
+                if (sequence.CurrentNumber > sequence.ToNumber)
+                    throw new FiscalSequenceExhaustedException($"Secuencia fiscal {sequence.Prefix} agotada o vencida ante la DGII. Solicite nueva autorización.");
 
-            var digits = sequence.IsElectronic ? 10 : 8;
-            return $"{sequence.Prefix.Trim().ToUpperInvariant()}{value.ToString($"D{digits}")}";
-        }
-        catch (DbUpdateConcurrencyException ex)
-        {
-            if (ownsTransaction)
-                await transaction!.RollbackAsync(cancellationToken);
-            _logger.LogWarning(ex, "Fiscal sequence concurrency conflict for company {CompanyId}, type {VoucherType}", companyId, voucherType);
-            throw new FiscalSequenceExhaustedException("The fiscal sequence was changed concurrently. Retry the operation.");
-        }
-        catch
-        {
-            if (ownsTransaction)
-                await transaction!.RollbackAsync(cancellationToken);
-            throw;
-        }
+                var value = sequence.CurrentNumber;
+                sequence.CurrentNumber = checked(value + 1);
+                if (sequence.CurrentNumber > sequence.ToNumber)
+                    sequence.IsActive = false;
+
+                _db.FiscalSequences.Update(sequence);
+                await _db.SaveChangesAsync(cancellationToken);
+                if (ownsTransaction)
+                    await transaction!.CommitAsync(cancellationToken);
+
+                var digits = sequence.IsElectronic ? 10 : 8;
+                return $"{sequence.Prefix.Trim().ToUpperInvariant()}{value.ToString($"D{digits}")}";
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                if (ownsTransaction)
+                    await transaction!.RollbackAsync(cancellationToken);
+                _logger.LogWarning(ex, "Fiscal sequence concurrency conflict for company {CompanyId}, type {VoucherType}", companyId, voucherType);
+                throw new FiscalSequenceExhaustedException("The fiscal sequence was changed concurrently. Retry the operation.");
+            }
+            catch
+            {
+                if (ownsTransaction)
+                    await transaction!.RollbackAsync(cancellationToken);
+                throw;
+            }
+        });
     }
 
     public async Task<IReadOnlyList<Onion.BussinesLogic.Services.Abstract.FiscalSequenceSummaryDto>> GetActiveAsync(int companyId, CancellationToken cancellationToken = default)

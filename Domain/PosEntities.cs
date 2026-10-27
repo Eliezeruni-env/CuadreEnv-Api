@@ -113,7 +113,7 @@ namespace Onion.Domain
         [System.ComponentModel.DataAnnotations.Schema.NotMapped]
         public bool IsCancelled => Status == SaleStatus.CANCELLED;
         // Concurrency token
-        public byte[]? RowVersion { get; set; }
+        public uint RowVersion { get; set; }
     }
 
     public class SaleDetail : BaseEntity
@@ -178,7 +178,7 @@ namespace Onion.Domain
         public decimal? PhysicalCountAmount { get; set; }
         public string? PhysicalCountBreakdownJson { get; set; }
         public bool IsImmutable { get; private set; }
-        public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+        public uint RowVersion { get; set; }
 
         public void Close(Onion.Domain.Finance.CashDiscrepancy discrepancy, int? userId, string? breakdownJson, DateTime closedAt)
         {
@@ -221,7 +221,7 @@ namespace Onion.Domain
         public int? ApprovedByUserId { get; set; }
         public Onion.Domain.Finance.CashMovementType Type { get; set; } = Onion.Domain.Finance.CashMovementType.CashIn;
         public DateTime RecordedAt { get; set; } = DateTime.UtcNow;
-        public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+        public uint RowVersion { get; set; }
     }
 
     public class CompanySettings : BaseEntity

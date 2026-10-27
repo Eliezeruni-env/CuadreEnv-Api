@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using System.Text.Json;
 using System.ComponentModel.DataAnnotations.Schema;
 using Onion.Domain;
@@ -171,7 +174,7 @@ namespace Onion.DataAccess
             modelBuilder.Entity<Onion.Domain.Invoices.FiscalSequence>(entity =>
             {
                 entity.Property(e => e.Prefix).HasMaxLength(3).IsRequired();
-                entity.Property(e => e.RowVersion).IsConcurrencyToken();
+                entity.Property(e => e.RowVersion).IsRowVersion();
                 entity.HasIndex(e => new { e.CompanyId, e.VoucherType }).IsUnique();
                 entity.HasIndex(e => new { e.CompanyId, e.IsActive, e.ExpirationDate });
                 entity.HasQueryFilter(e => this.IsGlobalTenantAccess || e.CompanyId == this.TenantCompanyIdForQuery);
@@ -186,7 +189,7 @@ namespace Onion.DataAccess
                 entity.Property(e => e.DeclaredCards).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.DeclaredTransfers).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.Difference).HasColumnType("decimal(18,2)");
-                entity.Property(e => e.RowVersion).IsConcurrencyToken();
+                entity.Property(e => e.RowVersion).IsRowVersion();
                 entity.HasIndex(e => new { e.CompanyId, e.CashierUserId })
                     .IsUnique()
                     .HasFilter(@"""Status"" = 1");
@@ -249,7 +252,7 @@ namespace Onion.DataAccess
 
             modelBuilder.Entity<Product>(entity =>
             {
-                entity.Property(e => e.RowVersion).IsConcurrencyToken();
+                entity.Property(e => e.RowVersion).IsRowVersion();
                 entity.HasIndex(e => new { e.CompanyId, e.Stock, e.MinimumQuantity });
             });
 
@@ -262,7 +265,7 @@ namespace Onion.DataAccess
                 entity.Property(e => e.PhysicalCountAmount).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.DifferenceAmount).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.PhysicalCountBreakdownJson).HasColumnType("text");
-                entity.Property(e => e.RowVersion).IsConcurrencyToken();
+                entity.Property(e => e.RowVersion).IsRowVersion();
                 entity.HasIndex(e => new { e.CompanyId, e.Status });
                 entity.HasIndex(e => new { e.CompanyId, e.OpenedByUserId })
                     .IsUnique()
@@ -275,7 +278,7 @@ namespace Onion.DataAccess
                 entity.Property(e => e.Amount).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.Reason).HasMaxLength(500).IsRequired();
                 entity.Property(e => e.RecordedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-                entity.Property(e => e.RowVersion).IsConcurrencyToken();
+                entity.Property(e => e.RowVersion).IsRowVersion();
                 entity.HasIndex(e => new { e.CompanyId, e.CashRegisterId, e.RecordedAt });
                 entity.HasIndex(e => new { e.CompanyId, e.CashSessionId, e.RecordedAt });
             });
@@ -283,7 +286,7 @@ namespace Onion.DataAccess
             modelBuilder.Entity<Onion.Domain.Invoices.InvoiceSequence>(entity =>
             {
                 entity.HasIndex(e => new { e.CompanyId }).IsUnique();
-                entity.Property(e => e.RowVersion).IsConcurrencyToken();
+                entity.Property(e => e.RowVersion).IsRowVersion();
             });
 
             modelBuilder.Entity<Sale>(entity =>
@@ -297,7 +300,7 @@ namespace Onion.DataAccess
                 entity.Property(e => e.Tax).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.TaxWithheld).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.LegalTip).HasColumnType("decimal(18,2)");
-                entity.Property(e => e.RowVersion).IsConcurrencyToken();
+                entity.Property(e => e.RowVersion).IsRowVersion();
             });
 
             modelBuilder.Entity<SaleDetail>(entity =>

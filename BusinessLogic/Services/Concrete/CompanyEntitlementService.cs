@@ -1,5 +1,5 @@
 using System.Net.Http.Json;
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
@@ -225,21 +225,21 @@ public sealed class CompanyEntitlementService : ICompanyEntitlementService
         if (string.IsNullOrWhiteSpace(connectionString)) return Empty;
         var modules = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var projects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        await using var connection = new SqlConnection(connectionString);
+        await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using (var command = connection.CreateCommand())
         {
-            command.CommandText = "SELECT CONVERT(nvarchar(200), ModuleId) FROM CompanyModules WHERE CompanyId=@companyId AND Enabled=1";
-            command.Parameters.Add(new SqlParameter("companyId", companyId));
+            command.CommandText = @"SELECT CAST(""ModuleId"" AS text) FROM ""CompanyModules"" WHERE ""CompanyId"" = @companyId AND ""Enabled"" = true";
+            command.Parameters.Add(new NpgsqlParameter("companyId", companyId));
             try { await using var reader = await command.ExecuteReaderAsync(cancellationToken); while (await reader.ReadAsync(cancellationToken)) modules.Add(reader.GetString(0)); }
-            catch (SqlException ex) when (ex.Number == 208) { }
+            catch (PostgresException ex) when (ex.SqlState == "42P01") { }
         }
         await using (var command = connection.CreateCommand())
         {
-            command.CommandText = "SELECT CONVERT(nvarchar(200), ProjectId) FROM CompanyProjects WHERE CompanyId=@companyId";
-            command.Parameters.Add(new SqlParameter("companyId", companyId));
+            command.CommandText = @"SELECT CAST(""ProjectId"" AS text) FROM ""CompanyProjects"" WHERE ""CompanyId"" = @companyId";
+            command.Parameters.Add(new NpgsqlParameter("companyId", companyId));
             try { await using var reader = await command.ExecuteReaderAsync(cancellationToken); while (await reader.ReadAsync(cancellationToken)) projects.Add(reader.GetString(0)); }
-            catch (SqlException ex) when (ex.Number == 208) { }
+            catch (PostgresException ex) when (ex.SqlState == "42P01") { }
         }
         return new CompanyEntitlements(modules, projects);
     }
