@@ -1,0 +1,7 @@
+﻿**/.git
+**/.vs
+**/bin
+**/obj
+**/.idea
+*.dump
+init_postgres.sql
