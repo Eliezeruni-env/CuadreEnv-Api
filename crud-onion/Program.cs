@@ -250,9 +250,9 @@ builder.Services.AddCors(options =>
 {
 options.AddPolicy("DefaultCors", policy =>
     {
-        policy.WithOrigins(corsOrigins)
-              .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
-              .WithHeaders("Authorization", "Content-Type", "X-Company-Id", "X-Idempotency-Key", "X-Requested-With", "X-Correlation-ID", "X-SignalR-User-Agent")
+        policy.SetIsOriginAllowed(origin => true)
+              .AllowAnyMethod()
+              .AllowAnyHeader()
               .WithExposedHeaders("ETag")
               .AllowCredentials();
     });
@@ -260,6 +260,7 @@ options.AddPolicy("DefaultCors", policy =>
 
 
 var app = builder.Build();
+app.UseCors("DefaultCors");
 
 app.UseMiddleware<crud_onion.Middleware.CorrelationIdMiddleware>();
 // Capture exceptions from every downstream middleware and endpoint in one consistent format.
@@ -300,7 +301,6 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
-app.UseCors("DefaultCors");
 // Global exception handler -> standardized API responses
 app.UseAuthentication();
 app.UseMiddleware<Onion.Middleware.ActiveAccountMiddleware>();
