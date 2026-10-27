@@ -29,6 +29,7 @@ namespace Onion.Controllers
     }
 
     [ApiController]
+    [AllowAnonymous]
     [Route("api/leads")]
     public class LeadsController : ControllerBase
     {
@@ -67,20 +68,6 @@ namespace Onion.Controllers
                 var modulesJson = dto.Modules != null ? JsonSerializer.Serialize(dto.Modules) : "[]";
                 var utmJson = dto.Utm != null ? JsonSerializer.Serialize(dto.Utm) : "null";
 
-                var sql = @"
-                    INSERT INTO ""Leads"" (
-                        ""FullName"", ""Email"", ""Phone"", ""JobRole"", ""CompanyName"",
-                        ""Rnc"", ""BusinessType"", ""Branches"", ""Registers"", ""City"",
-                        ""Modules"", ""CurrentSystem"", ""Timeline"", ""ContactPref"", ""Message"",
-                        ""Source"", ""Utm"", ""Ip"", ""UserAgent""
-                    ) VALUES (
-                        {0}, {1}, {2}, {3}, {4},
-                        {5}, {6}, {7}, {8}, {9},
-                        {10}::jsonb, {11}, {12}, {13}, {14},
-                        {15}, {16}::jsonb, {17}, {18}
-                    ) RETURNING ""Id"";";
-
-                // Direct insert into PostgreSQL Leads table
                 using var cmd = _context.Database.GetDbConnection().CreateCommand();
                 cmd.CommandText = @"
                     INSERT INTO ""Leads"" (
