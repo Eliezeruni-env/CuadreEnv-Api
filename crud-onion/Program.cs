@@ -15,6 +15,11 @@ using crud_onion.Hubs;
 using crud_onion.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+var herokuPort = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrEmpty(herokuPort))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{herokuPort}");
+}
 
 var connectionString = builder.Configuration.GetConnectionString("OnionCrud");
 if (string.IsNullOrWhiteSpace(connectionString) && builder.Environment.IsProduction())
@@ -71,7 +76,7 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-     Description = "Pegue un JWT local. Swagger agregará automáticamente el prefijo Bearer."
+     Description = "Pegue un JWT local. Swagger agregarÃ¡ automÃ¡ticamente el prefijo Bearer."
     });
 
     c.AddSecurityRequirement(new OpenApiSecurityRequirement

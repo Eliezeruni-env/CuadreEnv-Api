@@ -1,4 +1,4 @@
-﻿# 1. Base SDK para restaurar y compilar .NET 10
+# 1. Base SDK para restaurar y compilar .NET 10
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
@@ -11,7 +11,7 @@ COPY ["Onion.Common/Onion.Common.csproj", "Onion.Common/"]
 
 RUN dotnet restore "crud-onion/crud-onion.csproj"
 
-# Copiar código fuente completo y publicar
+# Copiar codigo fuente completo y publicar
 COPY . .
 WORKDIR "/src/crud-onion"
 RUN dotnet publish "crud-onion.csproj" -c Release -o /app/publish /p:UseAppHost=false
@@ -21,8 +21,4 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 
-# Heroku inyecta la variable $PORT dinámicamente. ASPNETCORE_URLS le indica a Kestrel el puerto exacto
-ENV ASPNETCORE_URLS=http://+:$PORT
-
-# Comando de arranque
 ENTRYPOINT ["dotnet", "crud-onion.dll"]
