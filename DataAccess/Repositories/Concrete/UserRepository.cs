@@ -1,3 +1,4 @@
+﻿using System;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Onion.DataAccess.Repositories.Abstract;
@@ -13,8 +14,10 @@ namespace Onion.DataAccess.Repositories.Concrete
         {
             if (string.IsNullOrWhiteSpace(email)) return null;
             var normalized = email.Trim().ToLowerInvariant();
-            // Use raw SQL to avoid translation issues with certain database collations/providers
-            return await _context.Set<User>().FromSqlInterpolated<User>($"SELECT * FROM [Users] WHERE [Email] = {normalized}").IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync();
+            return await _context.Set<User>()
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == normalized);
         }
 
         public async Task<User?> GetByIdUnscopedAsync(int id)
@@ -38,8 +41,10 @@ namespace Onion.DataAccess.Repositories.Concrete
         {
             if (string.IsNullOrWhiteSpace(email)) return false;
             var normalized = email.Trim().ToLowerInvariant();
-            var found = await _context.Set<User>().FromSqlInterpolated<User>($"SELECT * FROM [Users] WHERE [Email] = {normalized}").IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync();
-            return found != null;
+            return await _context.Set<User>()
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .AnyAsync(u => u.Email.ToLower() == normalized);
         }
 
         public async Task<User?> AuthenticateAsync(string email, string password)

@@ -248,6 +248,7 @@ options.AddPolicy("DefaultCors", policy =>
         policy.WithOrigins(corsOrigins)
               .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
               .WithHeaders("Authorization", "Content-Type", "X-Company-Id", "X-Idempotency-Key", "X-Requested-With", "X-Correlation-ID", "X-SignalR-User-Agent")
+              .WithExposedHeaders("ETag")
               .AllowCredentials();
     });
 });
@@ -317,10 +318,10 @@ if ((app.Environment.IsEnvironment("IntegrationTesting") || app.Environment.IsDe
     var migrationConnection = builder.Configuration.GetConnectionString("OnionCrud");
     if (string.IsNullOrWhiteSpace(migrationConnection))
     {
-        throw new InvalidOperationException("Integration migrations require a SQL Server connection string.");
+        throw new InvalidOperationException("Integration migrations require a database connection string.");
     }
 
-    var migrationDatabase = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(migrationConnection).InitialCatalog;
+    var migrationDatabase = new Npgsql.NpgsqlConnectionStringBuilder(migrationConnection).Database;
     if (app.Environment.IsEnvironment("IntegrationTesting") &&
         (string.IsNullOrWhiteSpace(migrationDatabase) ||
          !migrationDatabase.StartsWith("OnionTest_", StringComparison.OrdinalIgnoreCase)))
@@ -346,3 +347,4 @@ if ((app.Environment.IsEnvironment("IntegrationTesting") || app.Environment.IsDe
 }
 
 app.Run();
+

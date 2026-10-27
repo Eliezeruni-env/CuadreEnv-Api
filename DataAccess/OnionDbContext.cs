@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using System.ComponentModel.DataAnnotations.Schema;
 using Onion.Domain;
@@ -171,7 +171,7 @@ namespace Onion.DataAccess
             modelBuilder.Entity<Onion.Domain.Invoices.FiscalSequence>(entity =>
             {
                 entity.Property(e => e.Prefix).HasMaxLength(3).IsRequired();
-                entity.Property(e => e.RowVersion).IsRowVersion().IsConcurrencyToken();
+                entity.Property(e => e.RowVersion).IsConcurrencyToken();
                 entity.HasIndex(e => new { e.CompanyId, e.VoucherType }).IsUnique();
                 entity.HasIndex(e => new { e.CompanyId, e.IsActive, e.ExpirationDate });
                 entity.HasQueryFilter(e => this.IsGlobalTenantAccess || e.CompanyId == this.TenantCompanyIdForQuery);
@@ -186,13 +186,13 @@ namespace Onion.DataAccess
                 entity.Property(e => e.DeclaredCards).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.DeclaredTransfers).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.Difference).HasColumnType("decimal(18,2)");
-                entity.Property(e => e.RowVersion).IsRowVersion().IsConcurrencyToken();
+                entity.Property(e => e.RowVersion).IsConcurrencyToken();
                 entity.HasIndex(e => new { e.CompanyId, e.CashierUserId })
                     .IsUnique()
-                    .HasFilter("[Status] = 1");
+                    .HasFilter(@"""Status"" = 1");
                 entity.HasIndex(e => new { e.CompanyId, e.CashRegisterId })
                     .IsUnique()
-                    .HasFilter("[Status] = 1");
+                    .HasFilter(@"""Status"" = 1");
                 entity.HasQueryFilter(e => this.IsGlobalTenantAccess || e.CompanyId == this.TenantCompanyIdForQuery);
             });
             // CashSession model configuration located above. Additional CashSession-related configuration
@@ -249,7 +249,7 @@ namespace Onion.DataAccess
 
             modelBuilder.Entity<Product>(entity =>
             {
-                entity.Property(e => e.RowVersion).IsRowVersion().IsConcurrencyToken();
+                entity.Property(e => e.RowVersion).IsConcurrencyToken();
                 entity.HasIndex(e => new { e.CompanyId, e.Stock, e.MinimumQuantity });
             });
 
@@ -261,12 +261,12 @@ namespace Onion.DataAccess
                 entity.Property(e => e.ExpectedAmount).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.PhysicalCountAmount).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.DifferenceAmount).HasColumnType("decimal(18,2)");
-                entity.Property(e => e.PhysicalCountBreakdownJson).HasColumnType("nvarchar(max)");
-                entity.Property(e => e.RowVersion).IsRowVersion().IsConcurrencyToken();
+                entity.Property(e => e.PhysicalCountBreakdownJson).HasColumnType("text");
+                entity.Property(e => e.RowVersion).IsConcurrencyToken();
                 entity.HasIndex(e => new { e.CompanyId, e.Status });
                 entity.HasIndex(e => new { e.CompanyId, e.OpenedByUserId })
                     .IsUnique()
-                    .HasFilter("[Status] IN (0, 1)");
+                    .HasFilter(@"""Status"" IN (0, 1)");
             });
 
             modelBuilder.Entity<CashMovement>(entity =>
@@ -274,8 +274,8 @@ namespace Onion.DataAccess
                 entity.ToTable(tb => tb.HasTrigger("TR_CashMovements_AppendOnly"));
                 entity.Property(e => e.Amount).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.Reason).HasMaxLength(500).IsRequired();
-                entity.Property(e => e.RecordedAt).HasDefaultValueSql("SYSUTCDATETIME()");
-                entity.Property(e => e.RowVersion).IsRowVersion().IsConcurrencyToken();
+                entity.Property(e => e.RecordedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(e => e.RowVersion).IsConcurrencyToken();
                 entity.HasIndex(e => new { e.CompanyId, e.CashRegisterId, e.RecordedAt });
                 entity.HasIndex(e => new { e.CompanyId, e.CashSessionId, e.RecordedAt });
             });
@@ -283,21 +283,21 @@ namespace Onion.DataAccess
             modelBuilder.Entity<Onion.Domain.Invoices.InvoiceSequence>(entity =>
             {
                 entity.HasIndex(e => new { e.CompanyId }).IsUnique();
-                entity.Property(e => e.RowVersion).IsRowVersion().IsConcurrencyToken();
+                entity.Property(e => e.RowVersion).IsConcurrencyToken();
             });
 
             modelBuilder.Entity<Sale>(entity =>
             {
                 entity.HasIndex(e => new { e.CompanyId, e.IdempotencyKey, e.IsDeleted })
                     .IsUnique()
-                    .HasFilter("[IdempotencyKey] IS NOT NULL AND [IsDeleted] = 0");
+                    .HasFilter(@"""IdempotencyKey"" IS NOT NULL AND ""IsDeleted"" = false");
                 entity.Property(e => e.TaxRate).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.SubTotal).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.Discount).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.Tax).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.TaxWithheld).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.LegalTip).HasColumnType("decimal(18,2)");
-                entity.Property(e => e.RowVersion).IsRowVersion().IsConcurrencyToken();
+                entity.Property(e => e.RowVersion).IsConcurrencyToken();
             });
 
             modelBuilder.Entity<SaleDetail>(entity =>
@@ -322,9 +322,9 @@ namespace Onion.DataAccess
                 entity.Property(e => e.ActualAmount).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.DeclaredCards).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.DeclaredTransfers).HasColumnType("decimal(18,2)");
-                entity.Property(e => e.ClosingDenominationsJson).HasColumnType("nvarchar(max)");
-                entity.Property(e => e.DenominationsJson).HasColumnType("nvarchar(max)");
-                entity.Property(e => e.ClosingNotes).HasColumnType("nvarchar(max)");
+                entity.Property(e => e.ClosingDenominationsJson).HasColumnType("text");
+                entity.Property(e => e.DenominationsJson).HasColumnType("text");
+                entity.Property(e => e.ClosingNotes).HasColumnType("text");
                 entity.Property(e => e.CardBatchNumber).HasMaxLength(100);
                 entity.Property(e => e.RetainedFloat).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.CashToDeposit).HasColumnType("decimal(18,2)");
@@ -541,6 +541,15 @@ namespace Onion.DataAccess
                 .OnDelete(DeleteBehavior.Cascade);
         }
 
+        
+        protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+        {
+            base.ConfigureConventions(configurationBuilder);
+
+            configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
+            configurationBuilder.Properties<DateTime?>().HaveConversion<NullableUtcDateTimeConverter>();
+        }
+
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
             var now = DateTime.UtcNow;
@@ -620,6 +629,24 @@ namespace Onion.DataAccess
 
             return base.SaveChangesAsync(cancellationToken);
         }
+
+    
+
+    public sealed class UtcDateTimeConverter : Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DateTime, DateTime>
+    {
+        public UtcDateTimeConverter() : base(
+            v => v.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(v, DateTimeKind.Utc) : v.ToUniversalTime(),
+            v => DateTime.SpecifyKind(v, DateTimeKind.Utc))
+        { }
+    }
+
+    public sealed class NullableUtcDateTimeConverter : Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DateTime?, DateTime?>
+    {
+        public NullableUtcDateTimeConverter() : base(
+            v => !v.HasValue ? v : (v.Value.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v.Value.ToUniversalTime()),
+            v => !v.HasValue ? v : DateTime.SpecifyKind(v.Value, DateTimeKind.Utc))
+        { }
+    }
 
     }
 }

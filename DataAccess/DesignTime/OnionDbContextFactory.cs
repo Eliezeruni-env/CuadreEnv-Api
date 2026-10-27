@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -43,11 +43,14 @@ namespace Onion.DataAccess.DesignTime
                 }
             }
 
+            // Provide fallback connection string if not found in appsettings.json (e.g. design-time tools)
             if (string.IsNullOrWhiteSpace(conn))
-                throw new InvalidOperationException("ConnectionStrings:OnionCrud must be configured for EF Core operations.");
+            {
+                conn = "Host=localhost;Port=5432;Database=cuadreenv_staging;Username=postgres;Password=postgres";
+            }
 
             var builder = new DbContextOptionsBuilder<OnionDbContext>();
-            builder.UseSqlServer(conn, b => b.MigrationsAssembly("Onion.DataAccess"));
+            builder.UseNpgsql(conn, b => b.MigrationsAssembly("Onion.DataAccess"));
 
             return new OnionDbContext(builder.Options);
         }

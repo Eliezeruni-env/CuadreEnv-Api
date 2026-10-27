@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Storage;
 using Onion.DataAccess;
 using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
@@ -46,6 +46,8 @@ namespace Onion.DataAccess.Repositories.Concrete
 
         Task<int> SaveChangesAsync();
         Task<IDbContextTransaction> BeginTransactionAsync();
+        Task<TResult> ExecuteStrategyAsync<TResult>(Func<Task<TResult>> operation);
+        Task ExecuteStrategyAsync(Func<Task> operation);
     }
 
     public class UnitOfWork : IUnitOfWork
@@ -124,6 +126,26 @@ namespace Onion.DataAccess.Repositories.Concrete
             Movements = new MovementRepository(context);
         }
 
+                public Task<TResult> ExecuteStrategyAsync<TResult>(Func<Task<TResult>> operation)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return strategy.ExecuteAsync(
+                state: operation,
+                operation: (ctx, op, ct) => op(),
+                verifySucceeded: null,
+                cancellationToken: default);
+        }
+
+        public Task ExecuteStrategyAsync(Func<Task> operation)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return strategy.ExecuteAsync(
+                state: operation,
+                operation: async (ctx, op, ct) => { await op(); return true; },
+                verifySucceeded: null,
+                cancellationToken: default);
+        }
+
         public async Task<IDbContextTransaction> BeginTransactionAsync()
         {
             return await _context.Database.BeginTransactionAsync();
@@ -192,13 +214,12 @@ namespace Onion.DataAccess.Repositories.Concrete
                 _logger?.LogError(dbEx, "DbUpdateException during SaveChangesAsync");
                 // Map common SQL Server errors to friendly business error codes when possible
                 var inner = dbEx.InnerException;
-                if (inner is Microsoft.Data.SqlClient.SqlException sqlEx)
+                if (inner is Npgsql.PostgresException sqlEx)
                 {
-                    switch (sqlEx.Number)
+                    switch (sqlEx.SqlState)
                     {
-                        case 2627: // Unique constraint error
-                        case 2601:
-                            _logger?.LogWarning(sqlEx, "Unique constraint violation. SqlNumber={SqlNumber}; ConstraintDetails={Message}", sqlEx.Number, sqlEx.Message);
+                        case "23505":
+                            _logger?.LogWarning(sqlEx, "Unique constraint violation. SqlNumber={SqlNumber}; ConstraintDetails={Message}", sqlEx.SqlState, sqlEx.Message);
                             if (sqlEx.Message.Contains("IX_CashSessions_CompanyId_CashierUserId", StringComparison.OrdinalIgnoreCase)
                                 || sqlEx.Message.Contains("IX_CashSessions_CompanyId_CashRegisterId", StringComparison.OrdinalIgnoreCase))
                             {
@@ -210,13 +231,13 @@ namespace Onion.DataAccess.Repositories.Concrete
                                 });
                             }
                             throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "DUPLICATE_KEY", Message = "Duplicate value violates unique constraint.", Language = "EN" });
-                        case 547: // Constraint check violation (FK)
+                        case "23503": // Constraint check violation (FK)
                             _logger?.LogWarning("Foreign key constraint violation: {Message}", sqlEx.Message);
                             throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FK_VIOLATION", Message = "Related entity not found or foreign key constraint violated.", Language = "EN" });
-                        case 515: // Cannot insert the value NULL into column
+                        case "23502": // Cannot insert the value NULL into column
                             _logger?.LogWarning("Null value insertion attempted: {Message}", sqlEx.Message);
                             throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "NULL_VALUE", Message = "A required value was null. Check required fields.", Language = "EN" });
-                        case 208: // Invalid object name (table missing)
+                        case "42P01": // Invalid object name (table missing)
                             _logger?.LogError(sqlEx, "Database table missing or migration required");
                             throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "TABLE_MISSING", Message = "Database table missing or migration required.", Language = "EN" });
                         default:
@@ -237,3 +258,4 @@ namespace Onion.DataAccess.Repositories.Concrete
         }
     }
 }
+

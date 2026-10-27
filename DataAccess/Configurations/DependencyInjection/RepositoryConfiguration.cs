@@ -14,8 +14,16 @@ namespace Onion.DataAccess.Configurations.DependencyInjection
         {
             services.AddDbContext<OnionDbContext>(options =>
             {
-                options.UseSqlServer(
-                    configuration.GetConnectionString("OnionCrud"));
+                options.UseNpgsql(
+                    configuration.GetConnectionString("OnionCrud"),
+                    npgsqlOptions =>
+                    {
+                        npgsqlOptions.EnableRetryOnFailure(
+                            maxRetryCount: 5,
+                            maxRetryDelay: TimeSpan.FromSeconds(10),
+                            errorCodesToAdd: null);
+                        npgsqlOptions.CommandTimeout(30);
+                    });
                 // Backup: ignore pending model changes warning to avoid noisy exceptions during CI/dev while root cause is addressed
                 options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
             });
@@ -39,4 +47,4 @@ namespace Onion.DataAccess.Configurations.DependencyInjection
             return services;
         }
     }
-}   
+}
