@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -40,6 +40,9 @@ namespace Onion.Controllers
             var sale = new Onion.Domain.Sale
             {
                 CustomerId = dto.CustomerId,
+                CashRegisterId = dto.CashRegisterId,
+                CashSessionId = dto.CashSessionId,
+                OriginChannel = SaleOriginChannel.POS_PRESENCIAL,
                 Date = dto.Date,
                 Notes = dto.Notes,
                 CreateBy = dto.CreateBy,

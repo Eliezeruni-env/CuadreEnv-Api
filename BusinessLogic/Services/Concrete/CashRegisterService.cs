@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -51,6 +51,23 @@ namespace Onion.BussinesLogic.Services.Concrete
             register.Status = CashRegisterStatus.OPEN;
             await _uow.CashRegisters.AddAsync(register);
             await _uow.SaveChangesAsync();
+
+            // Synchronize: Ensure an active CashSession exists for this CashRegister
+            var existingSession = (await _uow.CashSessions.FindAsync(s => s.CashRegisterId == register.Id && s.Status == Onion.Domain.Finance.CashSessionStatus.Open && s.CompanyId == register.CompanyId)).FirstOrDefault();
+            if (existingSession == null)
+            {
+                var newSession = new Onion.Domain.Finance.CashSession
+                {
+                    CompanyId = register.CompanyId,
+                    CashRegisterId = register.Id,
+                    CashierUserId = register.OpenedByUserId ?? 1,
+                    OpeningAmount = register.OpeningAmount,
+                    OpenedAt = register.OpenedAt
+                };
+                await _uow.CashSessions.AddAsync(newSession);
+                await _uow.SaveChangesAsync();
+            }
+
             return register;
         }
 
