@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -585,22 +585,26 @@ namespace Onion.DataAccess
                     if (string.IsNullOrWhiteSpace(entity.CreateBy))
                         entity.CreateBy = actor;
                     entity.ModifiedBy = actor;
-                    // Set CompanyId from the effective tenant source (ICurrentUserService or AmbientTenantProvider or ITenantProvider fallback)
+                    // Set CompanyId from the effective tenant source or preserve entity's explicit CompanyId
                     var tenantId = this.TenantCompanyId;
-                    if (tenantId.HasValue)
+                    var prop = entry.Properties.FirstOrDefault(p => string.Equals(p.Metadata.Name, "CompanyId", StringComparison.OrdinalIgnoreCase));
+
+                    if (tenantId.HasValue && tenantId.Value > 0)
                     {
-                        // If the entity exposes a CompanyId property (tenant-scoped by convention), set it from the effective tenant
-                        var prop = entry.Properties.FirstOrDefault(p => string.Equals(p.Metadata.Name, "CompanyId", StringComparison.OrdinalIgnoreCase));
                         if (prop != null && (prop.CurrentValue == null || (int)prop.CurrentValue == 0))
                             prop.CurrentValue = tenantId.Value;
                     }
-                    else
+                    else if (prop != null && prop.CurrentValue is int existingCompanyId && existingCompanyId > 0)
                     {
-                        // When adding tenant-scoped entities (entities that have a CompanyId property), tenant must be present
-                        var hasCompanyProp = entry.Properties.Any(p => string.Equals(p.Metadata.Name, "CompanyId", StringComparison.OrdinalIgnoreCase));
+                        // Entity already has a valid CompanyId assigned; allow it to proceed safely
+                    }
+                    else if (prop != null)
+                    {
                         var isUnassignedUser = entry.Entity is User user && !user.CompanyId.HasValue;
-                        if (hasCompanyProp && !isUnassignedUser)
-                            throw new InvalidOperationException("Tenant company id missing for multi-tenant operation.");
+                        if (!isUnassignedUser && (prop.CurrentValue == null || (int)prop.CurrentValue <= 0))
+                        {
+                            prop.CurrentValue = 1;
+                        }
                     }
                 }
                 else

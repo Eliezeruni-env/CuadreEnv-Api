@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using System;
 using System.Linq;
@@ -41,11 +41,22 @@ namespace Onion.Common.Services
                         resolved is int resolvedId && resolvedId > 0)
                         return resolvedId;
 
-                    var header = ctx?.Request.Headers["X-Company-Id"].FirstOrDefault();
+                    var header = ctx?.Request.Headers["X-Company-Id"].FirstOrDefault()
+                        ?? ctx?.Request.Headers["x-company-id"].FirstOrDefault()
+                        ?? ctx?.Request.Headers["X-Tenant-Id"].FirstOrDefault()
+                        ?? ctx?.Request.Headers["x-tenant-id"].FirstOrDefault();
                     if (int.TryParse(header, out var headerId) && headerId > 0)
                         return headerId;
 
-                    var claim = ctx?.User?.FindFirst("companyId") ?? ctx?.User?.FindFirst("CompanyId");
+                    var claim = ctx?.User?.FindFirst("companyId") 
+                        ?? ctx?.User?.FindFirst("CompanyId")
+                        ?? ctx?.User?.FindFirst("company_id")
+                        ?? ctx?.User?.FindFirst("tenant_id")
+                        ?? ctx?.User?.FindFirst("tenantId")
+                        ?? ctx?.User?.FindFirst("org_id")
+                        ?? ctx?.User?.FindFirst("OrganizationId")
+                        ?? ctx?.User?.FindFirst("http://schemas.microsoft.com/ws/2008/06/identity/claims/groupsid")
+                        ?? ctx?.User?.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/sid");
                     if (claim != null && int.TryParse(claim.Value, out var id) && id > 0)
                         return id;
 

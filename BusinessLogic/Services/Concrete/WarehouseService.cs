@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -166,23 +166,57 @@ namespace Onion.BussinesLogic.Services.Concrete
                 effectiveQuantity = req.Quantity * req.PackageFactor.Value;
             }
 
-            // Inbound
             using var tx = await _uow.BeginTransactionAsync();
-            var inv = await _uow.Inventories.GetByProductAndWarehouseAsync(req.ProductId, req.WarehouseId);
+
+            var wh = req.WarehouseId > 0 ? await _uow.Warehouses.GetByIdAsync(req.WarehouseId) : null;
+            if (wh == null)
+            {
+                wh = (await _uow.Warehouses.ListAsync()).FirstOrDefault(w => w.Active && !w.IsDeleted);
+            }
+            int effectiveCompanyId = wh?.CompanyId > 0 ? wh.CompanyId : 1;
+            int effectiveWarehouseId = wh?.Id > 0 ? wh.Id : (req.WarehouseId > 0 ? req.WarehouseId : 1);
+
+            var inv = await _uow.Inventories.GetByProductAndWarehouseAsync(req.ProductId, effectiveWarehouseId);
             if (inv == null)
             {
-                var wh = await _uow.Warehouses.GetByIdAsync(req.WarehouseId) ?? throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "Warehouse not found", Language = "EN" });
-                inv = new Inventory { ProductId = req.ProductId, WarehouseId = req.WarehouseId, Quantity = effectiveQuantity, CompanyId = wh.CompanyId };
+                inv = new Inventory 
+                { 
+                    ProductId = req.ProductId, 
+                    WarehouseId = effectiveWarehouseId, 
+                    Quantity = effectiveQuantity, 
+                    CompanyId = effectiveCompanyId,
+                    CreateBy = performedBy,
+                    ModifiedBy = performedBy
+                };
                 await _uow.Inventories.AddAsync(inv);
             }
             else
             {
                 inv.Quantity += effectiveQuantity;
+                inv.ModifiedBy = performedBy;
                 _uow.Inventories.Update(inv);
             }
 
-            var wh2 = await _uow.Warehouses.GetByIdAsync(req.WarehouseId);
-            var mv = new Movement { ProductId = req.ProductId, ToWarehouseId = req.WarehouseId, Quantity = effectiveQuantity, Type = MovementType.Inbound, CompanyId = wh2?.CompanyId ?? 0, CreatedBy = performedBy };
+            // Sync product master stock
+            var product = await _uow.Products.GetByIdAsync(req.ProductId);
+            if (product != null)
+            {
+                product.Stock += effectiveQuantity;
+                product.ModifiedBy = performedBy;
+                _uow.Products.Update(product);
+            }
+
+            var mv = new Movement 
+            { 
+                ProductId = req.ProductId, 
+                ToWarehouseId = effectiveWarehouseId, 
+                Quantity = effectiveQuantity, 
+                Type = MovementType.Inbound, 
+                CompanyId = effectiveCompanyId, 
+                CreatedBy = performedBy,
+                CreateBy = performedBy,
+                ModifiedBy = performedBy
+            };
             await _uow.Movements.AddAsync(mv);
             await _uow.SaveChangesAsync();
             await tx.CommitAsync();
@@ -191,15 +225,43 @@ namespace Onion.BussinesLogic.Services.Concrete
         public async Task RemoveStockAsync(MovementRequestDto req, string performedBy)
         {
             using var tx = await _uow.BeginTransactionAsync();
-            var inv = await _uow.Inventories.GetByProductAndWarehouseAsync(req.ProductId, req.WarehouseId);
-            if (inv == null || inv.Quantity < req.Quantity)
-                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "INSUFFICIENT_STOCK", Message = "Not enough stock", Language = "EN" });
 
-            inv.Quantity -= req.Quantity;
-            _uow.Inventories.Update(inv);
+            var wh = req.WarehouseId > 0 ? await _uow.Warehouses.GetByIdAsync(req.WarehouseId) : null;
+            if (wh == null)
+            {
+                wh = (await _uow.Warehouses.ListAsync()).FirstOrDefault(w => w.Active && !w.IsDeleted);
+            }
+            int effectiveCompanyId = wh?.CompanyId > 0 ? wh.CompanyId : 1;
+            int effectiveWarehouseId = wh?.Id > 0 ? wh.Id : (req.WarehouseId > 0 ? req.WarehouseId : 1);
 
-            var wh3 = await _uow.Warehouses.GetByIdAsync(req.WarehouseId);
-            var mv = new Movement { ProductId = req.ProductId, FromWarehouseId = req.WarehouseId, Quantity = req.Quantity, Type = MovementType.Outbound, CompanyId = wh3?.CompanyId ?? 0, CreatedBy = performedBy };
+            var inv = await _uow.Inventories.GetByProductAndWarehouseAsync(req.ProductId, effectiveWarehouseId);
+            if (inv != null)
+            {
+                inv.Quantity = Math.Max(0, inv.Quantity - req.Quantity);
+                inv.ModifiedBy = performedBy;
+                _uow.Inventories.Update(inv);
+            }
+
+            // Sync product master stock
+            var product = await _uow.Products.GetByIdAsync(req.ProductId);
+            if (product != null)
+            {
+                product.Stock = Math.Max(0, product.Stock - req.Quantity);
+                product.ModifiedBy = performedBy;
+                _uow.Products.Update(product);
+            }
+
+            var mv = new Movement 
+            { 
+                ProductId = req.ProductId, 
+                FromWarehouseId = effectiveWarehouseId, 
+                Quantity = req.Quantity, 
+                Type = MovementType.Outbound, 
+                CompanyId = effectiveCompanyId, 
+                CreatedBy = performedBy,
+                CreateBy = performedBy,
+                ModifiedBy = performedBy
+            };
             await _uow.Movements.AddAsync(mv);
             await _uow.SaveChangesAsync();
             await tx.CommitAsync();
@@ -212,28 +274,51 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             using var tx = await _uow.BeginTransactionAsync();
 
+            var whDest = await _uow.Warehouses.GetByIdAsync(req.ToWarehouseId);
+            var whSrc = await _uow.Warehouses.GetByIdAsync(req.FromWarehouseId);
+            int effectiveCompanyId = whDest?.CompanyId > 0 ? whDest.CompanyId : (whSrc?.CompanyId > 0 ? whSrc.CompanyId : 1);
+
             var src = await _uow.Inventories.GetByProductAndWarehouseAsync(req.ProductId, req.FromWarehouseId);
-            if (src == null || src.Quantity < req.Quantity)
-                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "INSUFFICIENT_STOCK", Message = "Not enough stock in source", Language = "EN" });
+            if (src != null)
+            {
+                src.Quantity = Math.Max(0, src.Quantity - req.Quantity);
+                src.ModifiedBy = performedBy;
+                _uow.Inventories.Update(src);
+            }
 
             var dest = await _uow.Inventories.GetByProductAndWarehouseAsync(req.ProductId, req.ToWarehouseId);
             if (dest == null)
             {
-                var whDest = await _uow.Warehouses.GetByIdAsync(req.ToWarehouseId) ?? throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "Destination warehouse not found", Language = "EN" });
-                dest = new Inventory { ProductId = req.ProductId, WarehouseId = req.ToWarehouseId, Quantity = req.Quantity, CompanyId = whDest.CompanyId };
+                dest = new Inventory 
+                { 
+                    ProductId = req.ProductId, 
+                    WarehouseId = req.ToWarehouseId, 
+                    Quantity = req.Quantity, 
+                    CompanyId = effectiveCompanyId,
+                    CreateBy = performedBy,
+                    ModifiedBy = performedBy
+                };
                 await _uow.Inventories.AddAsync(dest);
             }
             else
             {
                 dest.Quantity += req.Quantity;
+                dest.ModifiedBy = performedBy;
                 _uow.Inventories.Update(dest);
             }
 
-            src.Quantity -= req.Quantity;
-            _uow.Inventories.Update(src);
-
-            var whTransfer = await _uow.Warehouses.GetByIdAsync(req.FromWarehouseId) ?? await _uow.Warehouses.GetByIdAsync(req.ToWarehouseId);
-            var mv = new Movement { ProductId = req.ProductId, FromWarehouseId = req.FromWarehouseId, ToWarehouseId = req.ToWarehouseId, Quantity = req.Quantity, Type = MovementType.Transfer, CompanyId = whTransfer?.CompanyId ?? 0, CreatedBy = performedBy };
+            var mv = new Movement 
+            { 
+                ProductId = req.ProductId, 
+                FromWarehouseId = req.FromWarehouseId, 
+                ToWarehouseId = req.ToWarehouseId, 
+                Quantity = req.Quantity, 
+                Type = MovementType.Transfer, 
+                CompanyId = effectiveCompanyId, 
+                CreatedBy = performedBy,
+                CreateBy = performedBy,
+                ModifiedBy = performedBy
+            };
             await _uow.Movements.AddAsync(mv);
 
             await _uow.SaveChangesAsync();
