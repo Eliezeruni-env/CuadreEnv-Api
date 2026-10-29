@@ -14,7 +14,7 @@ namespace Onion.BussinesLogic.HostedServices
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<CreditOverdueHostedService> _logger;
         // Temporary test interval; changed to 30 seconds for validation and will be reverted later.
-        private readonly TimeSpan _interval = TimeSpan.FromSeconds(30);
+        private readonly TimeSpan _interval = TimeSpan.FromHours(1);
 
         public CreditOverdueHostedService(IServiceScopeFactory scopeFactory, ILogger<CreditOverdueHostedService> logger)
         {

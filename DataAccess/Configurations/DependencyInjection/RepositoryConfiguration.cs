@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Onion.DataAccess.Repositories.Abstract;
@@ -18,10 +18,6 @@ namespace Onion.DataAccess.Configurations.DependencyInjection
                     configuration.GetConnectionString("OnionCrud"),
                     npgsqlOptions =>
                     {
-                        npgsqlOptions.EnableRetryOnFailure(
-                            maxRetryCount: 5,
-                            maxRetryDelay: TimeSpan.FromSeconds(10),
-                            errorCodesToAdd: null);
                         npgsqlOptions.CommandTimeout(30);
                     });
                 // Backup: ignore pending model changes warning to avoid noisy exceptions during CI/dev while root cause is addressed
