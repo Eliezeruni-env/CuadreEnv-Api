@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -459,6 +459,10 @@ namespace Onion.BussinesLogic.Services.Concrete
                         _logger.LogWarning(ex,
                             "Fiscal sequence {VoucherType} is expired for company {CompanyId}. The sale will be created without an NCF until a sequence is configured.",
                             sale.VoucherType, sale.CompanyId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Fiscal sequence {VoucherType} generation failed for company {CompanyId}. Continuing without NCF.", sale.VoucherType, sale.CompanyId);
                     }
                 }
 
