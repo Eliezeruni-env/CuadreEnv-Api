@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Microsoft.Extensions.Logging;
 using Onion.BussinesLogic.Dtos;
 using Onion.BussinesLogic.Services.Abstract;
@@ -246,15 +246,21 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             var entity = _mapper.Map<Product>(entityDto);
 
-            // Ensure CompanyId is set from the current authenticated user's tenant context
-            var companyId = _currentUserService.CompanyId;
+            // Ensure CompanyId is set from the current authenticated user's tenant context or payload fallback
+            var companyId = _currentUserService.CompanyId ?? (entityDto.CompanyId > 0 ? entityDto.CompanyId : (int?)null);
             if (!companyId.HasValue || companyId.Value <= 0)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "COMPANY_REQUIRED", Message = "Company context is required to create products.", Language = "ES" });
 
             entity.CompanyId = companyId.Value;
 
+            if (entity.ProductTypeId <= 0)
+                entity.ProductTypeId = 1;
+
             if (entity.ProductTypeId == 2)
                 entity.InvoiceWithoutStock = true;
+
+            if (entity.UnitOfMeasurementId <= 0)
+                entity.UnitOfMeasurementId = 1;
 
             if (entity.MinimumQuantity < 0)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_STOCK", Message = "MinimumQuantity must be >= 0", Language = "ES" });
@@ -262,17 +268,66 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (entity.Cost <= 0)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_COST", Message = "Cost must be greater than zero", Language = "ES" });
 
-            // Validate related entities to prevent FK violations (only if provided)
+            // Validate or fallback ProductType
             if (entity.ProductTypeId > 0)
             {
                 var pt = await _uow.ProductTypes.GetByIdAsync(entity.ProductTypeId);
-                if (pt == null) throw new CustomException(new Onion.Common.Models.Error { Code = "FK_NOT_FOUND", Message = "ProductType not found", Language = "ES" });
+                if (pt == null)
+                    entity.ProductTypeId = 1;
             }
 
+            // Validate or auto-resolve Category for this company
             if (entity.CategoryId > 0)
             {
                 var cat = await _uow.Categories.GetByIdAsync(entity.CategoryId);
-                if (cat == null) throw new CustomException(new Onion.Common.Models.Error { Code = "FK_NOT_FOUND", Message = "Category not found", Language = "ES" });
+                if (cat == null)
+                {
+                    var existingCat = (await _uow.Categories.FindAsync(c => c.CompanyId == entity.CompanyId && c.Active && !c.IsDeleted)).FirstOrDefault();
+                    if (existingCat != null)
+                    {
+                        entity.CategoryId = existingCat.Id;
+                    }
+                    else
+                    {
+                        var defaultCat = new Onion.Domain.Products.Category
+                        {
+                            Description = "General",
+                            CompanyId = entity.CompanyId,
+                            Active = true,
+                            IsDeleted = false,
+                            CreationDate = DateTime.UtcNow,
+                            CreateBy = "System",
+                            ModifiedBy = "System"
+                        };
+                        await _uow.Categories.AddAsync(defaultCat);
+                        await _uow.SaveChangesAsync();
+                        entity.CategoryId = defaultCat.Id;
+                    }
+                }
+            }
+            else
+            {
+                var existingCat = (await _uow.Categories.FindAsync(c => c.CompanyId == entity.CompanyId && c.Active && !c.IsDeleted)).FirstOrDefault();
+                if (existingCat != null)
+                {
+                    entity.CategoryId = existingCat.Id;
+                }
+                else
+                {
+                    var defaultCat = new Onion.Domain.Products.Category
+                    {
+                        Description = "General",
+                        CompanyId = entity.CompanyId,
+                        Active = true,
+                        IsDeleted = false,
+                        CreationDate = DateTime.UtcNow,
+                        CreateBy = "System",
+                        ModifiedBy = "System"
+                    };
+                    await _uow.Categories.AddAsync(defaultCat);
+                    await _uow.SaveChangesAsync();
+                    entity.CategoryId = defaultCat.Id;
+                }
             }
 
             var comp = await _uow.Companies.GetByIdAsync(entity.CompanyId);
@@ -282,6 +337,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             try
             {
                 await _uow.SaveChangesAsync();
+                entityDto.Id = entity.Id;
             }
             catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
             {
@@ -323,13 +379,19 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (existing.ProductTypeId > 0)
             {
                 var pt2 = await _uow.ProductTypes.GetByIdAsync(existing.ProductTypeId);
-                if (pt2 == null) throw new CustomException(new Onion.Common.Models.Error { Code = "FK_NOT_FOUND", Message = "ProductType not found", Language = "ES" });
+                if (pt2 == null)
+                    existing.ProductTypeId = 1;
             }
 
             if (existing.CategoryId > 0)
             {
                 var cat2 = await _uow.Categories.GetByIdAsync(existing.CategoryId);
-                if (cat2 == null) throw new CustomException(new Onion.Common.Models.Error { Code = "FK_NOT_FOUND", Message = "Category not found", Language = "ES" });
+                if (cat2 == null)
+                {
+                    var existingCat = (await _uow.Categories.FindAsync(c => c.CompanyId == existing.CompanyId && c.Active && !c.IsDeleted)).FirstOrDefault();
+                    if (existingCat != null)
+                        existing.CategoryId = existingCat.Id;
+                }
             }
 
             var comp2 = await _uow.Companies.GetByIdAsync(existing.CompanyId);

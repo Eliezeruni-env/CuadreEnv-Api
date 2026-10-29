@@ -242,9 +242,7 @@ if (configuredCorsOrigins.Length == 0 && !string.IsNullOrWhiteSpace(corsOriginsS
     configuredCorsOrigins = corsOriginsSection.Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 var corsOrigins = configuredCorsOrigins.Length > 0
     ? configuredCorsOrigins
-    : builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("IntegrationTesting")
-        ? new[] { "http://localhost:4200", "http://localhost:3000", "http://localhost:5173", "http://localhost:8080", "http://localhost:5160", "https://localhost:44324", "https://localhost:7060" }
-        : throw new InvalidOperationException("Cors:AllowedOrigins must be configured outside Development and IntegrationTesting.");
+    : new[] { "http://localhost:4200", "http://localhost:3000", "http://localhost:5173", "http://localhost:8080", "http://localhost:5160", "https://localhost:44324", "https://localhost:7060" };
 
 builder.Services.AddCors(options =>
 {

@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Onion.Domain.Products;
 
-
 namespace Onion.DataAccess.Configurations.EntityConfigurations
 {
     public class ProductConfiguration : IEntityTypeConfiguration<Product>
@@ -40,6 +39,8 @@ namespace Onion.DataAccess.Configurations.EntityConfigurations
                    .HasColumnType("decimal(18,2)")
                    .HasDefaultValue(0);
             builder.Property(x => x.RowVersion)
+                   .HasColumnName("xmin")
+                   .HasColumnType("xid")
                    .IsRowVersion()
                    .IsConcurrencyToken();
 
@@ -61,9 +62,7 @@ namespace Onion.DataAccess.Configurations.EntityConfigurations
             builder.Property(x => x.ProfitMargin)
                    .HasColumnType("decimal(18,2)");
 
-            builder.HasIndex(x => x.Barcode)
-                   .IsUnique();
-
+            builder.HasIndex(x => new { x.CompanyId, x.Barcode });
         }
     }
 }

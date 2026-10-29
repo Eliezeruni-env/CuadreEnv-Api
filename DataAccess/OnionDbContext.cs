@@ -174,7 +174,7 @@ namespace Onion.DataAccess
             modelBuilder.Entity<Onion.Domain.Invoices.FiscalSequence>(entity =>
             {
                 entity.Property(e => e.Prefix).HasMaxLength(3).IsRequired();
-                entity.Property(e => e.RowVersion).IsRowVersion();
+                entity.Property(e => e.RowVersion).HasColumnName("xmin").HasColumnType("xid").IsRowVersion();
                 entity.HasIndex(e => new { e.CompanyId, e.VoucherType }).IsUnique();
                 entity.HasIndex(e => new { e.CompanyId, e.IsActive, e.ExpirationDate });
                 entity.HasQueryFilter(e => this.IsGlobalTenantAccess || e.CompanyId == this.TenantCompanyIdForQuery);
@@ -189,7 +189,7 @@ namespace Onion.DataAccess
                 entity.Property(e => e.DeclaredCards).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.DeclaredTransfers).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.Difference).HasColumnType("decimal(18,2)");
-                entity.Property(e => e.RowVersion).IsRowVersion();
+                entity.Property(e => e.RowVersion).HasColumnName("xmin").HasColumnType("xid").IsRowVersion();
                 entity.HasIndex(e => new { e.CompanyId, e.CashierUserId })
                     .IsUnique()
                     .HasFilter(@"""Status"" = 1");
@@ -252,7 +252,7 @@ namespace Onion.DataAccess
 
             modelBuilder.Entity<Product>(entity =>
             {
-                entity.Property(e => e.RowVersion).IsRowVersion();
+                entity.Property(e => e.RowVersion).HasColumnName("xmin").HasColumnType("xid").IsRowVersion();
                 entity.HasIndex(e => new { e.CompanyId, e.Stock, e.MinimumQuantity });
             });
 
@@ -265,7 +265,7 @@ namespace Onion.DataAccess
                 entity.Property(e => e.PhysicalCountAmount).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.DifferenceAmount).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.PhysicalCountBreakdownJson).HasColumnType("text");
-                entity.Property(e => e.RowVersion).IsRowVersion();
+                entity.Property(e => e.RowVersion).HasColumnName("xmin").HasColumnType("xid").IsRowVersion();
                 entity.HasIndex(e => new { e.CompanyId, e.Status });
                 entity.HasIndex(e => new { e.CompanyId, e.OpenedByUserId })
                     .IsUnique()
@@ -278,7 +278,7 @@ namespace Onion.DataAccess
                 entity.Property(e => e.Amount).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.Reason).HasMaxLength(500).IsRequired();
                 entity.Property(e => e.RecordedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-                entity.Property(e => e.RowVersion).IsRowVersion();
+                entity.Property(e => e.RowVersion).HasColumnName("xmin").HasColumnType("xid").IsRowVersion();
                 entity.HasIndex(e => new { e.CompanyId, e.CashRegisterId, e.RecordedAt });
                 entity.HasIndex(e => new { e.CompanyId, e.CashSessionId, e.RecordedAt });
             });
@@ -286,7 +286,7 @@ namespace Onion.DataAccess
             modelBuilder.Entity<Onion.Domain.Invoices.InvoiceSequence>(entity =>
             {
                 entity.HasIndex(e => new { e.CompanyId }).IsUnique();
-                entity.Property(e => e.RowVersion).IsRowVersion();
+                entity.Property(e => e.RowVersion).HasColumnName("xmin").HasColumnType("xid").IsRowVersion();
             });
 
             modelBuilder.Entity<Sale>(entity =>
@@ -300,7 +300,7 @@ namespace Onion.DataAccess
                 entity.Property(e => e.Tax).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.TaxWithheld).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.LegalTip).HasColumnType("decimal(18,2)");
-                entity.Property(e => e.RowVersion).IsRowVersion();
+                entity.Property(e => e.RowVersion).HasColumnName("xmin").HasColumnType("xid").IsRowVersion();
             });
 
             modelBuilder.Entity<SaleDetail>(entity =>
@@ -359,7 +359,7 @@ namespace Onion.DataAccess
             // Use null-check comparison to avoid accessing .Value in EF translation; compare nullable CompanyId to TenantCompanyId directly
              modelBuilder.Entity<Category>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
              modelBuilder.Entity<Product>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
-             modelBuilder.Entity<Onion.Domain.Products.ProductType>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<Onion.Domain.Products.ProductType>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery || EF.Property<int>(e, "CompanyId") == 0);
              modelBuilder.Entity<Onion.Domain.CreditNote>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
              modelBuilder.Entity<Onion.Domain.CreditNoteDetail>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
