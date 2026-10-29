@@ -31,7 +31,7 @@ public sealed class FiscalSequenceService : Onion.BussinesLogic.Services.Abstrac
             try
             {
                 var targetId = await _db.Database
-                    .SqlQueryRaw<int>(@"SELECT ""Id"" FROM ""FiscalSequences"" WHERE ""CompanyId"" = {0} AND ""VoucherType"" = {1} AND ""IsActive"" = true FOR UPDATE", companyId, (int)voucherType)
+                    .SqlQueryRaw<int>(@"SELECT ""Id"" AS ""Value"" FROM ""FiscalSequences"" WHERE ""CompanyId"" = {0} AND ""VoucherType"" = {1} AND ""IsActive"" = true FOR UPDATE", companyId, (int)voucherType)
                     .SingleOrDefaultAsync(cancellationToken);
 
                 if (targetId <= 0)
