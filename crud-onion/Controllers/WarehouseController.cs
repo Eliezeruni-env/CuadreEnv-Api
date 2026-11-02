@@ -80,8 +80,8 @@ namespace Onion.Controllers
             if (!int.TryParse(companyIdClaim, out var companyId))
                 return BadRequest(Onion.Common.Models.ApiResponse<string>.Fail("CompanyId claim missing or invalid"));
 
-            await _warehouseService.AddStockAsync(req, performedBy);
-            return Ok(Onion.Common.Models.ApiResponse<object>.Ok(null, "Stock added"));
+            var movement = await _warehouseService.AddStockAsync(req, performedBy);
+            return Ok(Onion.Common.Models.ApiResponse<MovementDto>.Ok(movement, "Stock added"));
         }
 
         [HttpPost("stock/remove")]
@@ -93,8 +93,8 @@ namespace Onion.Controllers
             if (!int.TryParse(companyIdClaim, out var companyId))
                 return BadRequest(Onion.Common.Models.ApiResponse<string>.Fail("CompanyId claim missing or invalid"));
 
-            await _warehouseService.RemoveStockAsync(req, performedBy);
-            return Ok(Onion.Common.Models.ApiResponse<object>.Ok(null, "Stock removed"));
+            var movement = await _warehouseService.RemoveStockAsync(req, performedBy);
+            return Ok(Onion.Common.Models.ApiResponse<MovementDto>.Ok(movement, "Stock removed"));
         }
 
         [HttpPost("stock/transfer")]
@@ -106,8 +106,8 @@ namespace Onion.Controllers
             if (!int.TryParse(companyIdClaim, out var companyId))
                 return BadRequest(Onion.Common.Models.ApiResponse<string>.Fail("CompanyId claim missing or invalid"));
 
-            await _warehouseService.TransferStockAsync(req, performedBy);
-            return Ok(Onion.Common.Models.ApiResponse<object>.Ok(null, "Stock transferred"));
+            var movement = await _warehouseService.TransferStockAsync(req, performedBy);
+            return Ok(Onion.Common.Models.ApiResponse<MovementDto>.Ok(movement, "Stock transferred"));
         }
     }
 }

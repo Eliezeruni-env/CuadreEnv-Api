@@ -28,8 +28,8 @@ namespace Onion.Controllers
         public async Task<IActionResult> Create([FromBody] MovementRequestDto dto)
         {
             if (dto == null) return BadRequest();
-            await _warehouseService.AddStockAsync(dto, User?.Identity?.Name ?? "system");
-            return Ok(new { success = true, data = dto });
+            var movement = await _warehouseService.AddStockAsync(dto, User?.Identity?.Name ?? "system");
+            return Ok(new { success = true, data = movement });
         }
     }
 
@@ -56,8 +56,8 @@ namespace Onion.Controllers
         public async Task<IActionResult> Create([FromBody] MovementRequestDto dto)
         {
             if (dto == null) return BadRequest();
-            await _warehouseService.RemoveStockAsync(dto, User?.Identity?.Name ?? "system");
-            return Ok(new { success = true, data = dto });
+            var movement = await _warehouseService.RemoveStockAsync(dto, User?.Identity?.Name ?? "system");
+            return Ok(new { success = true, data = movement });
         }
     }
 
@@ -84,8 +84,8 @@ namespace Onion.Controllers
         public async Task<IActionResult> Create([FromBody] TransferRequestDto dto)
         {
             if (dto == null) return BadRequest();
-            await _warehouseService.TransferStockAsync(dto, User?.Identity?.Name ?? "system");
-            return Ok(new { success = true, data = dto });
+            var movement = await _warehouseService.TransferStockAsync(dto, User?.Identity?.Name ?? "system");
+            return Ok(new { success = true, data = movement });
         }
     }
 }

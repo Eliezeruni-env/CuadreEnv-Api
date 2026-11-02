@@ -159,6 +159,7 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var ins = await _uow.Installments.GetByIdAsync(installmentId) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "Installment not found", Language = "EN" });
             if (amount <= 0) throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_AMOUNT", Message = "Amount must be greater than zero", Language = "EN" });
+            if (amount > ins.Balance) throw new CustomException(new Onion.Common.Models.Error { Code = "PAYMENT_EXCEEDS_BALANCE", Message = "Payment cannot exceed the installment balance", Language = "EN" });
 
             ins.PaidAmount += amount;
             if (ins.PaidAmount >= ins.Amount) ins.Status = Onion.Domain.Finance.InstallmentStatus.Paid;

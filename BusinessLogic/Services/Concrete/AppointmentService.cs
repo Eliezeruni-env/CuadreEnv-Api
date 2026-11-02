@@ -7,6 +7,8 @@ using Onion.BussinesLogic.Services.Abstract;
 using Onion.DataAccess.Repositories.Abstract;
 using Onion.Domain.Appointments;
 using Onion.DataAccess;
+using Onion.Common.Exceptions;
+using Onion.Common.Models;
 
 namespace Onion.BussinesLogic.Services.Concrete
 {
@@ -14,11 +16,13 @@ namespace Onion.BussinesLogic.Services.Concrete
     {
         private readonly IRepository<Appointment> _repo;
         private readonly OnionDbContext _db;
+        private readonly ITenantProvider _tenantProvider;
 
-        public AppointmentService(IRepository<Appointment> repo, OnionDbContext db)
+        public AppointmentService(IRepository<Appointment> repo, OnionDbContext db, ITenantProvider tenantProvider)
         {
             _repo = repo;
             _db = db;
+            _tenantProvider = tenantProvider;
         }
 
         public async Task<AppointmentDto?> GetByIdAsync(int id)
@@ -36,6 +40,12 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<AppointmentDto> CreateAsync(CreateAppointmentDto dto)
         {
+            var companyId = _tenantProvider.GetCompanyId();
+            if (companyId is not > 0)
+                throw new TenantRequiredException("A company context is required to create an appointment.");
+            if (dto.EndAt <= dto.StartAt)
+                throw new CustomException(new Error { Code = "INVALID_APPOINTMENT_RANGE", Message = "End time must be after start time.", Language = "EN" });
+
             // Validate overlapping
             if (dto.ResourceId.HasValue)
             {
@@ -48,9 +58,10 @@ namespace Onion.BussinesLogic.Services.Concrete
             {
                 StartAt = dto.StartAt,
                 EndAt = dto.EndAt,
-                CustomerId = dto.CustomerId ?? 0,
-                ServiceId = dto.ServiceId ?? 0,
-                ResourceId = dto.ResourceId ?? 0,
+                CompanyId = companyId.Value,
+                CustomerId = dto.CustomerId,
+                ServiceId = dto.ServiceId,
+                ResourceId = dto.ResourceId,
                 Notes = dto.Notes
             };
 
@@ -61,6 +72,8 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<AppointmentDto> UpdateAsync(UpdateAppointmentDto dto)
         {
+            if (dto.EndAt <= dto.StartAt)
+                throw new CustomException(new Error { Code = "INVALID_APPOINTMENT_RANGE", Message = "End time must be after start time.", Language = "EN" });
             var existing = await _repo.GetByIdAsync(dto.Id);
             if (existing == null) throw new KeyNotFoundException("Appointment not found");
 
@@ -93,7 +106,7 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         private static AppointmentDto MapToDto(Appointment e)
         {
-            return new AppointmentDto(e.Id, e.StartAt, e.EndAt, e.CustomerId == 0 ? null : (int?)e.CustomerId, e.ServiceId == 0 ? null : (int?)e.ServiceId, e.ResourceId == 0 ? null : (int?)e.ResourceId, e.Notes, e.Status.ToString());
+            return new AppointmentDto(e.Id, e.StartAt, e.EndAt, e.CustomerId, e.ServiceId, e.ResourceId, e.Notes, e.Status.ToString());
         }
     }
 }

@@ -38,9 +38,9 @@ namespace Onion.Tests
                 return Task.FromResult(new WarehouseDto(123, dto.Name, companyId));
             }
 
-            public Task AddStockAsync(MovementRequestDto req, string performedBy) => Task.CompletedTask;
-            public Task RemoveStockAsync(MovementRequestDto req, string performedBy) => Task.CompletedTask;
-            public Task TransferStockAsync(TransferRequestDto req, string performedBy) => Task.CompletedTask;
+            public Task<MovementDto> AddStockAsync(MovementRequestDto req, string performedBy) => Task.FromResult(new MovementDto(1, req.ProductId, null, req.WarehouseId, req.Quantity, "Inbound"));
+            public Task<MovementDto> RemoveStockAsync(MovementRequestDto req, string performedBy) => Task.FromResult(new MovementDto(1, req.ProductId, req.WarehouseId, null, req.Quantity, "Outbound"));
+            public Task<MovementDto> TransferStockAsync(TransferRequestDto req, string performedBy) => Task.FromResult(new MovementDto(1, req.ProductId, req.FromWarehouseId, req.ToWarehouseId, req.Quantity, "Transfer"));
             public Task<System.Collections.Generic.IEnumerable<WarehouseDto>> GetAllAsync(int companyId)
             {
                 RequestedCompanyId = companyId;
@@ -114,6 +114,28 @@ namespace Onion.Tests
 
             Assert.IsType<OkObjectResult>(result);
             Assert.Equal(7, svc.RequestedCompanyId);
+        }
+
+        [Fact]
+        public async Task AddStock_Returns_Persisted_Movement_Id()
+        {
+            var svc = new FakeWarehouseService();
+            var ctrl = new Onion.Controllers.WarehouseController(svc, null!, new AuthorizationService());
+            ctrl.ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = CreateUser("Employee", 7)
+                }
+            };
+
+            var result = await ctrl.AddStock(new MovementRequestDto(4, 9, 2));
+
+            var response = Assert.IsType<OkObjectResult>(result);
+            var data = response.Value!.GetType().GetProperty("Data")?.GetValue(response.Value);
+            var movement = Assert.IsType<MovementDto>(data);
+            Assert.Equal(1, movement.Id);
+            Assert.Equal(4, movement.ProductId);
         }
 
         [Fact]

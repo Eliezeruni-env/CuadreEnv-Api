@@ -6,6 +6,19 @@ namespace Onion.Domain.Tests;
 public class CashDiscrepancyTests
 {
     [Fact]
+    public void Calculate_ZeroCount_ReturnsExactZero()
+    {
+        var result = CashDiscrepancy.Calculate(0m, 0m);
+
+        Assert.Equal(0m, result.ExpectedAmount);
+        Assert.Equal(0m, result.ActualAmount);
+        Assert.Equal(0m, result.DifferenceAmount);
+        Assert.True(result.IsExact);
+        Assert.False(result.IsSurplus);
+        Assert.False(result.IsShortage);
+    }
+
+    [Fact]
     public void Calculate_ExactCount_ReturnsZeroDifference()
     {
         var result = CashDiscrepancy.Calculate(100.005m, 100.004m);

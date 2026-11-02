@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Onion.BussinesLogic.Dtos;
 using Onion.BussinesLogic.Services.Abstract;
+using Onion.DataAccess;
 using Onion.DataAccess.Repositories.Abstract;
 using Onion.DataAccess.Repositories.Concrete;
 using Onion.DataAccess.Repositories.Concrete;
@@ -17,12 +18,14 @@ namespace Onion.BussinesLogic.Services.Concrete
         private readonly IUnitOfWork _uow;
         private readonly Onion.BussinesLogic.Services.Abstract.ISubscriptionService _subscriptionService;
         private readonly Onion.BussinesLogic.Services.Abstract.IPaginationService _paginationService;
+        private readonly ITenantProvider _tenantProvider;
 
-        public WarehouseService(IUnitOfWork uow, Onion.BussinesLogic.Services.Abstract.ISubscriptionService subscriptionService, Onion.BussinesLogic.Services.Abstract.IPaginationService paginationService)
+        public WarehouseService(IUnitOfWork uow, Onion.BussinesLogic.Services.Abstract.ISubscriptionService subscriptionService, Onion.BussinesLogic.Services.Abstract.IPaginationService paginationService, ITenantProvider tenantProvider)
         {
             _uow = uow ?? throw new ArgumentNullException(nameof(uow));
             _subscriptionService = subscriptionService;
             _paginationService = paginationService;
+            _tenantProvider = tenantProvider ?? throw new ArgumentNullException(nameof(tenantProvider));
         }
 
         public async Task<IEnumerable<Onion.Domain.Inventory.InventoryMovement>> GetInventoryMovementsAsync(int? productId = null, int? warehouseId = null, DateTime? from = null, DateTime? to = null, string? type = null)
@@ -156,8 +159,10 @@ namespace Onion.BussinesLogic.Services.Concrete
             return await _paginationService.ToPagedListAsync(q, pn, ps);
         }
 
-        public async Task AddStockAsync(MovementRequestDto req, string performedBy)
+        public async Task<MovementDto> AddStockAsync(MovementRequestDto req, string performedBy)
         {
+            if (req.WarehouseId <= 0) throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "WAREHOUSE_REQUIRED", Message = "A valid warehouse is required.", Language = "EN" });
+            if (req.Quantity <= 0) throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "INVALID_QUANTITY", Message = "Quantity must be greater than zero.", Language = "EN" });
             await EnsureNotServiceAsync(req.ProductId);
 
             decimal effectiveQuantity = req.Quantity;
@@ -168,13 +173,9 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             using var tx = await _uow.BeginTransactionAsync();
 
-            var wh = req.WarehouseId > 0 ? await _uow.Warehouses.GetByIdAsync(req.WarehouseId) : null;
-            if (wh == null)
-            {
-                wh = (await _uow.Warehouses.ListAsync()).FirstOrDefault(w => w.Active && !w.IsDeleted);
-            }
-            int effectiveCompanyId = wh?.CompanyId > 0 ? wh.CompanyId : 1;
-            int effectiveWarehouseId = wh?.Id > 0 ? wh.Id : (req.WarehouseId > 0 ? req.WarehouseId : 1);
+            var wh = await GetWarehouseAsync(req.WarehouseId);
+            var effectiveCompanyId = wh.CompanyId;
+            var effectiveWarehouseId = wh.Id;
 
             var inv = await _uow.Inventories.GetByProductAndWarehouseAsync(req.ProductId, effectiveWarehouseId);
             if (inv == null)
@@ -220,19 +221,19 @@ namespace Onion.BussinesLogic.Services.Concrete
             await _uow.Movements.AddAsync(mv);
             await _uow.SaveChangesAsync();
             await tx.CommitAsync();
+            return new MovementDto(mv.Id, mv.ProductId, mv.FromWarehouseId, mv.ToWarehouseId, mv.Quantity, mv.Type.ToString(), CreationDate: mv.CreationDate);
         }
 
-        public async Task RemoveStockAsync(MovementRequestDto req, string performedBy)
+        public async Task<MovementDto> RemoveStockAsync(MovementRequestDto req, string performedBy)
         {
+            if (req.WarehouseId <= 0) throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "WAREHOUSE_REQUIRED", Message = "A valid warehouse is required.", Language = "EN" });
+            if (req.Quantity <= 0) throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "INVALID_QUANTITY", Message = "Quantity must be greater than zero.", Language = "EN" });
+            await EnsureNotServiceAsync(req.ProductId);
             using var tx = await _uow.BeginTransactionAsync();
 
-            var wh = req.WarehouseId > 0 ? await _uow.Warehouses.GetByIdAsync(req.WarehouseId) : null;
-            if (wh == null)
-            {
-                wh = (await _uow.Warehouses.ListAsync()).FirstOrDefault(w => w.Active && !w.IsDeleted);
-            }
-            int effectiveCompanyId = wh?.CompanyId > 0 ? wh.CompanyId : 1;
-            int effectiveWarehouseId = wh?.Id > 0 ? wh.Id : (req.WarehouseId > 0 ? req.WarehouseId : 1);
+            var wh = await GetWarehouseAsync(req.WarehouseId);
+            var effectiveCompanyId = wh.CompanyId;
+            var effectiveWarehouseId = wh.Id;
 
             var inv = await _uow.Inventories.GetByProductAndWarehouseAsync(req.ProductId, effectiveWarehouseId);
             if (inv != null)
@@ -265,10 +266,15 @@ namespace Onion.BussinesLogic.Services.Concrete
             await _uow.Movements.AddAsync(mv);
             await _uow.SaveChangesAsync();
             await tx.CommitAsync();
+            return new MovementDto(mv.Id, mv.ProductId, mv.FromWarehouseId, mv.ToWarehouseId, mv.Quantity, mv.Type.ToString(), CreationDate: mv.CreationDate);
         }
 
-        public async Task TransferStockAsync(TransferRequestDto req, string performedBy)
+        public async Task<MovementDto> TransferStockAsync(TransferRequestDto req, string performedBy)
         {
+            if (req.FromWarehouseId <= 0 || req.ToWarehouseId <= 0)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "WAREHOUSE_REQUIRED", Message = "Valid source and destination warehouses are required.", Language = "EN" });
+            if (req.Quantity <= 0)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "INVALID_QUANTITY", Message = "Quantity must be greater than zero.", Language = "EN" });
             if (req.FromWarehouseId == req.ToWarehouseId)
                 throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "INVALID_TRANSFER", Message = "Source and destination must differ", Language = "EN" });
 
@@ -276,7 +282,11 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             var whDest = await _uow.Warehouses.GetByIdAsync(req.ToWarehouseId);
             var whSrc = await _uow.Warehouses.GetByIdAsync(req.FromWarehouseId);
-            int effectiveCompanyId = whDest?.CompanyId > 0 ? whDest.CompanyId : (whSrc?.CompanyId > 0 ? whSrc.CompanyId : 1);
+            if (whDest is null || whSrc is null)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "WAREHOUSE_NOT_FOUND", Message = "Source or destination warehouse was not found.", Language = "EN" });
+            if (whDest.CompanyId != whSrc.CompanyId)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "WAREHOUSE_COMPANY_MISMATCH", Message = "Source and destination warehouses must belong to the same company.", Language = "EN" });
+            var effectiveCompanyId = whDest.CompanyId;
 
             var src = await _uow.Inventories.GetByProductAndWarehouseAsync(req.ProductId, req.FromWarehouseId);
             if (src != null)
@@ -323,11 +333,14 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             await _uow.SaveChangesAsync();
             await tx.CommitAsync();
+            return new MovementDto(mv.Id, mv.ProductId, mv.FromWarehouseId, mv.ToWarehouseId, mv.Quantity, mv.Type.ToString(), CreationDate: mv.CreationDate);
         }
 
         private async Task EnsureNotServiceAsync(int productId)
         {
             var product = await _uow.Products.GetByIdAsync(productId);
+            if (product is null)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "PRODUCT_NOT_FOUND", Message = "Product was not found.", Language = "EN" });
             if (product != null)
             {
                 var productType = product.ProductTypeId > 0 ? await _uow.ProductTypes.GetByIdAsync(product.ProductTypeId) : null;
@@ -345,6 +358,19 @@ namespace Onion.BussinesLogic.Services.Concrete
                     });
                 }
             }
+        }
+
+        private async Task<Warehouse> GetWarehouseAsync(int warehouseId)
+        {
+            var warehouse = await _uow.Warehouses.GetByIdAsync(warehouseId);
+            if (warehouse is null || !warehouse.Active || warehouse.IsDeleted)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "WAREHOUSE_NOT_FOUND", Message = "Warehouse was not found.", Language = "EN" });
+
+            var tenantCompanyId = _tenantProvider.GetCompanyId();
+            if (tenantCompanyId.HasValue && tenantCompanyId.Value > 0 && warehouse.CompanyId != tenantCompanyId.Value)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Warehouse does not belong to the current company.", Language = "EN" });
+
+            return warehouse;
         }
 
 }

@@ -191,7 +191,7 @@ public sealed class CashSessionService : ICashSessionService
 
         var status = difference == 0 ? CashClosingStatus.Exact : difference < 0 ? CashClosingStatus.Shortage : CashClosingStatus.Surplus;
         var settings = await _db.CompanySettings.AsNoTracking().SingleOrDefaultAsync(x => x.CompanyId == companyId, cancellationToken);
-        var tolerance = settings?.CashToleranceAmount ?? 50m;
+        var tolerance = Math.Max(0m, decimal.Round(settings?.CashToleranceAmount ?? 50m, 2));
         int? authorizedSupervisorId = null;
         var requiresSupervisor = Math.Abs(difference) > tolerance ||
             (expected > 0m && request.ActualAmount == 0m && expected - request.ActualAmount > expected * 0.5m);

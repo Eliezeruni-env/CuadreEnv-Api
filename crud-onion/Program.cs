@@ -145,6 +145,11 @@ if (builder.Environment.IsProduction() && string.IsNullOrWhiteSpace(builder.Conf
 var jwtKey = builder.Configuration["Jwt:Key"];
 if (string.IsNullOrWhiteSpace(jwtKey) && builder.Environment.IsProduction())
     throw new InvalidOperationException("Jwt:Key must be configured in Production.");
+if (builder.Environment.IsProduction() && jwtKey!.Length < 32)
+    throw new InvalidOperationException("Jwt:Key must contain at least 32 characters in Production.");
+var internalApiKey = builder.Configuration["Internal:ApiKey"];
+if (builder.Environment.IsProduction() && internalApiKey!.Length < 32)
+    throw new InvalidOperationException("Internal:ApiKey must contain at least 32 characters in Production.");
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -175,7 +180,7 @@ builder.Services.AddAuthentication(options =>
          options.TokenValidationParameters = new TokenValidationParameters
          {
              ValidateIssuerSigningKey = true,
-              IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(string.IsNullOrWhiteSpace(jwtKey) ? "dev-local-key-please-change-in-production-32chars!" : jwtKey)),
+               IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtKey ?? "dev-local-key-please-change-in-production-32chars!")),
              ValidateIssuer = true, ValidIssuer = jwtIssuer,
              ValidateAudience = !string.IsNullOrWhiteSpace(jwtAudience), ValidAudience = jwtAudience,
              ValidateLifetime = true, ClockSkew = TimeSpan.FromMinutes(1),
@@ -240,15 +245,18 @@ var configuredCorsOrigins = corsOriginsSection
     .ToArray();
 if (configuredCorsOrigins.Length == 0 && !string.IsNullOrWhiteSpace(corsOriginsSection.Value))
     configuredCorsOrigins = corsOriginsSection.Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+if (builder.Environment.IsProduction() && configuredCorsOrigins.Length == 0)
+    throw new InvalidOperationException("Cors:AllowedOrigins must be configured in Production.");
+
 var corsOrigins = configuredCorsOrigins.Length > 0
     ? configuredCorsOrigins
     : new[] { "http://localhost:4200", "http://localhost:3000", "http://localhost:5173", "http://localhost:8080", "http://localhost:5160", "https://localhost:44324", "https://localhost:7060" };
 
 builder.Services.AddCors(options =>
 {
-options.AddPolicy("DefaultCors", policy =>
+    options.AddPolicy("DefaultCors", policy =>
     {
-        policy.SetIsOriginAllowed(origin => true)
+        policy.WithOrigins(corsOrigins)
               .AllowAnyMethod()
               .AllowAnyHeader()
               .WithExposedHeaders("ETag")

@@ -19,13 +19,15 @@ namespace Onion.Controllers
         private readonly IGlobalizationService _globalization;
         private readonly IUnitOfWork _uow;
         private readonly ISaleService _saleService;
+        private readonly ICurrentUserService _currentUser;
 
-        public AccountReceivableController(IAccountReceivableService service, IGlobalizationService globalization, IUnitOfWork uow, ISaleService saleService)
+        public AccountReceivableController(IAccountReceivableService service, IGlobalizationService globalization, IUnitOfWork uow, ISaleService saleService, ICurrentUserService currentUser)
         {
             _service = service;
             _globalization = globalization;
             _uow = uow;
             _saleService = saleService;
+            _currentUser = currentUser;
         }
 
         // GET /v1/AccountReceivable
@@ -143,6 +145,7 @@ namespace Onion.Controllers
         public async Task<IActionResult> CreateReceivable([FromBody] CreateReceivableRequest req)
         {
             if (req == null) return BadRequest(Onion.Common.Models.ApiResponse<object>.Fail("Body required"));
+            var companyId = ResolveCompanyId(req.CompanyId);
 
             // If client provided sale details in the receivable creation, create the sale first
             int? createdSaleId = req.SaleId;
@@ -150,7 +153,7 @@ namespace Onion.Controllers
             {
                 var sale = new Sale
                 {
-                    CompanyId = req.CompanyId,
+                    CompanyId = companyId,
                     CustomerId = req.CustomerId,
                     Total = req.TotalAmount,
                     PaidAmount = req.PaidAmount,
@@ -165,14 +168,14 @@ namespace Onion.Controllers
                 // If there is an initial payment, record it using sale payment flow (this will also create a cash movement if cashRegisterId provided)
                 if (req.PaidAmount > 0 && req.Payment != null)
                 {
-                    var pay = new Payment { CompanyId = req.CompanyId, Amount = req.PaidAmount, CreateBy = req.Payment.Reference };
+                    var pay = new Payment { CompanyId = companyId, Amount = req.PaidAmount, CreateBy = req.Payment.Reference };
                     await _saleService.AddPaymentAsync(createdSale.Id, pay, req.Payment.Method, req.Payment.CashRegisterId);
                 }
             }
 
             var ar = new Onion.Domain.Finance.AccountReceivable
             {
-                CompanyId = req.CompanyId,
+                CompanyId = companyId,
                 CustomerId = req.CustomerId,
                 SaleId = createdSaleId,
                 TotalAmount = req.TotalAmount,
@@ -220,16 +223,44 @@ namespace Onion.Controllers
         public async Task<IActionResult> PayInstallment(int id, int installmentId, [FromBody] PaymentRequest req)
         {
             if (req.Amount <= 0) return BadRequest(ApiResponse<object>.Fail("Amount must be greater than zero"));
+            var receivable = await _uow.AccountReceivables.GetByIdAsync(id);
+            if (receivable is null) return NotFound(ApiResponse<object>.Fail("Account receivable not found"));
+            var plan = (await _uow.PaymentPlans.FindAsync(p => p.AccountReceivableId == receivable.Id)).FirstOrDefault();
+            var installment = plan is null
+                ? null
+                : (await _service.GetInstallmentsAsync(plan.Id)).FirstOrDefault(i => i.Id == installmentId);
+            if (installment is null) return NotFound(ApiResponse<object>.Fail("Installment does not belong to the account receivable"));
+
+            await using var transaction = await _uow.BeginTransactionAsync();
             await _service.PayInstallmentAsync(installmentId, req.Amount);
 
             // Optionally record CashMovement if method is cash
             if (req.Method != null && req.Method.Equals("CASH", StringComparison.OrdinalIgnoreCase) && req.Amount > 0)
             {
-                var cm = new Onion.Domain.CashMovement { CompanyId = 0, Amount = req.Amount, Description = $"Installment payment {installmentId}", CreateBy = "system" };
+                if (req.CashRegisterId is not > 0)
+                    throw new CustomException(new Error { Code = "CASH_REGISTER_REQUIRED", Message = "A cash register is required for cash installment payments.", Language = "EN" });
+                var register = await _uow.CashRegisters.GetByIdAsync(req.CashRegisterId.Value);
+                if (register is null || register.CompanyId != receivable.CompanyId || !register.IsOpen)
+                    throw new CustomException(new Error { Code = "CASH_REGISTER_NOT_FOUND", Message = "The selected cash register is not open for this company.", Language = "EN" });
+                var session = (await _uow.CashSessions.FindAsync(s => s.CashRegisterId == register.Id && s.Status == CashSessionStatus.Open)).FirstOrDefault();
+                if (session is null)
+                    throw new CustomException(new Error { Code = "CASH_SESSION_REQUIRED", Message = "An open cash session is required for cash installment payments.", Language = "EN" });
+                var cm = new Onion.Domain.CashMovement
+                {
+                    CompanyId = receivable.CompanyId,
+                    CashRegisterId = register.Id,
+                    CashSessionId = session.Id,
+                    Type = CashMovementType.ReceivablePayment,
+                    Amount = req.Amount,
+                    Reason = $"Pago de cuota {installmentId}",
+                    Description = $"Installment payment {installmentId}",
+                    CreateBy = _currentUser.UserId?.ToString() ?? "system"
+                };
                 await _uow.CashMovements.AddAsync(cm);
                 await _uow.SaveChangesAsync();
             }
 
+            await transaction.CommitAsync();
             return NoContent();
         }
 
@@ -270,6 +301,8 @@ namespace Onion.Controllers
                 }
             }
 
+            await using var transaction = await _uow.BeginTransactionAsync();
+
             // Register payment record if there is an associated sale
             if (ar.SaleId.HasValue)
             {
@@ -300,24 +333,45 @@ namespace Onion.Controllers
             // Update account receivable totals and linked sale
             await _service.RegisterPaymentAsync(ar.Id, req.Amount);
 
-            // Record cash movement when cashRegister provided and method is CASH
-            if (req.Method != null && req.Method.Equals("CASH", StringComparison.OrdinalIgnoreCase) && req.CashRegisterId.HasValue)
+            // Record cash movement for cash payments only when a valid open session exists.
+            if (req.Method != null && req.Method.Equals("CASH", StringComparison.OrdinalIgnoreCase))
             {
+                if (req.CashRegisterId is not > 0)
+                    throw new CustomException(new Error { Code = "CASH_REGISTER_REQUIRED", Message = "A cash register is required for cash payments.", Language = "EN" });
+                var register = await _uow.CashRegisters.GetByIdAsync(req.CashRegisterId.Value);
+                if (register is null || register.CompanyId != ar.CompanyId || !register.IsOpen)
+                    throw new CustomException(new Error { Code = "CASH_REGISTER_NOT_FOUND", Message = "The selected cash register is not open for this company.", Language = "EN" });
+                var session = (await _uow.CashSessions.FindAsync(s => s.CashRegisterId == register.Id && s.Status == CashSessionStatus.Open)).FirstOrDefault();
+                if (session is null)
+                    throw new CustomException(new Error { Code = "CASH_SESSION_REQUIRED", Message = "An open cash session is required for cash payments.", Language = "EN" });
                 var cm = new Onion.Domain.CashMovement
                 {
-                    CashRegisterId = req.CashRegisterId.Value,
+                    CashRegisterId = register.Id,
+                    CashSessionId = session.Id,
                     Amount = req.Amount,
                     Description = $"Cobro Deuda AR #{ar.Id}",
                     Reason = $"Cobro Deuda AR #{ar.Id}",
                     Type = Onion.Domain.Finance.CashMovementType.ReceivablePayment,
                     CompanyId = ar.CompanyId,
-                    CreateBy = "system"
+                    CreateBy = _currentUser.UserId?.ToString() ?? "system"
                 };
                 await _uow.CashMovements.AddAsync(cm);
                 await _uow.SaveChangesAsync();
             }
 
+            await transaction.CommitAsync();
             return NoContent();
+        }
+
+        private int ResolveCompanyId(int requestedCompanyId)
+        {
+            if (_currentUser.IsGlobalAdministrator && requestedCompanyId > 0)
+                return requestedCompanyId;
+            if (_currentUser.CompanyId is not > 0)
+                throw new TenantRequiredException();
+            if (requestedCompanyId > 0 && requestedCompanyId != _currentUser.CompanyId.Value)
+                throw new CustomException(new Error { Code = "FORBIDDEN", Message = "The requested company does not match the authenticated tenant.", Language = "EN" });
+            return _currentUser.CompanyId.Value;
         }
     }
 

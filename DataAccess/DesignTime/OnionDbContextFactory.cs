@@ -2,7 +2,7 @@
 using System.IO;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 
 namespace Onion.DataAccess.DesignTime
 {
@@ -23,30 +23,17 @@ namespace Onion.DataAccess.DesignTime
                 basePath = Path.GetDirectoryName(basePath) ?? basePath;
             }
 
-            string? conn = null;
-            var settingsPath = Path.Combine(Directory.GetCurrentDirectory(), "appsettings.json");
-            if (File.Exists(settingsPath))
-            {
-                try
-                {
-                    using var fs = File.OpenRead(settingsPath);
-                    using var doc = JsonDocument.Parse(fs);
-                    if (doc.RootElement.TryGetProperty("ConnectionStrings", out var cs) &&
-                        cs.TryGetProperty("OnionCrud", out var onionCrud))
-                    {
-                        conn = onionCrud.GetString();
-                    }
-                }
-                catch
-                {
-                    // ignore and fallback
-                }
-            }
-
-            // Provide fallback connection string if not found in appsettings.json (e.g. design-time tools)
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(basePath)
+                .AddJsonFile("appsettings.json", optional: true)
+                .AddJsonFile("appsettings.Development.json", optional: true)
+                .AddEnvironmentVariables()
+                .Build();
+            var conn = configuration.GetConnectionString("OnionCrud");
             if (string.IsNullOrWhiteSpace(conn))
             {
-                conn = "Host=localhost;Port=5432;Database=cuadreenv_staging;Username=postgres;Password=postgres";
+                throw new InvalidOperationException(
+                    "EF design-time operations require ConnectionStrings:OnionCrud or ConnectionStrings__OnionCrud to be configured; no default database credentials are provided.");
             }
 
             var builder = new DbContextOptionsBuilder<OnionDbContext>();

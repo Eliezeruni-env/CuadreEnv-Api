@@ -24,22 +24,19 @@ namespace Onion.Controllers
         [AuthorizeExactModule("inventory-entries")]
         public async Task<IActionResult> Inbound([FromBody] MovementRequestDto req)
         {
-            await _warehouseService.AddStockAsync(req, User?.Identity?.Name ?? "system");
-            return Ok();
+            return Ok(await _warehouseService.AddStockAsync(req, User?.Identity?.Name ?? "system"));
         }
 
         [HttpPost("outbound")]
         public async Task<IActionResult> Outbound([FromBody] MovementRequestDto req)
         {
-            await _warehouseService.RemoveStockAsync(req, User?.Identity?.Name ?? "system");
-            return Ok();
+            return Ok(await _warehouseService.RemoveStockAsync(req, User?.Identity?.Name ?? "system"));
         }
 
         [HttpPost("transfer")]
         public async Task<IActionResult> Transfer([FromBody] TransferRequestDto req)
         {
-            await _warehouseService.TransferStockAsync(req, User?.Identity?.Name ?? "system");
-            return Ok();
+            return Ok(await _warehouseService.TransferStockAsync(req, User?.Identity?.Name ?? "system"));
         }
 
         [HttpGet("low-stock")]
