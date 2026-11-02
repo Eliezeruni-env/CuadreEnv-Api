@@ -6,5 +6,6 @@ namespace Onion.DataAccess.Repositories.Abstract
     public interface IPurchaseRepository : IRepository<Purchase>
     {
         Task<Purchase?> GetByIdWithDetailsAsync(int id);
+        Task<System.Collections.Generic.List<Purchase>> GetAllWithDetailsAsync();
     }
 }

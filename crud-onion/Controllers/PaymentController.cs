@@ -45,7 +45,17 @@ namespace Onion.Controllers
                 var session = await _uow.CashSessions.GetByIdAsync(cashSessionId.Value);
                 if (session is null || session.CompanyId != companyId || session.Status != Onion.Domain.Finance.CashSessionStatus.Open ||
                     (request.CashRegisterId.HasValue && session.CashRegisterId != request.CashRegisterId.Value))
-                    return BadRequest(new { code = "CASH_SESSION_NOT_OPEN", message = "The selected cash session is not open." });
+                {
+                    var fallbackSession = (await _uow.CashSessions.FindAsync(s => s.CompanyId == companyId && s.Status == Onion.Domain.Finance.CashSessionStatus.Open)).FirstOrDefault();
+                    if (fallbackSession != null)
+                    {
+                        cashSessionId = fallbackSession.Id;
+                    }
+                    else
+                    {
+                        return BadRequest(new { code = "CASH_SESSION_NOT_OPEN", message = "The selected cash session is not open." });
+                    }
+                }
             }
 
             var payment = new Payment

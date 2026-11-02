@@ -6,6 +6,8 @@ using Onion.Common.Services;
 using Onion.Common.Exceptions;
 using Onion.Common.Enums;
 using Onion.Common.Authorization;
+using System;
+using System.Threading.Tasks;
 
 namespace Onion.Controllers
 {
@@ -34,11 +36,10 @@ namespace Onion.Controllers
                     return Ok(paged);
                 }
 
-                var items = await _uow.Purchases.ListAsync();
-                // Return 200 with array (possibly empty) rather than treating empty as an error
+                var items = await _uow.Purchases.GetAllWithDetailsAsync();
                 return Ok(items);
             }
-            catch (System.Exception)
+            catch (Exception)
             {
                 throw new HttpResponseException
                 {
@@ -51,7 +52,7 @@ namespace Onion.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> Get(int id)
         {
-            var item = await _uow.Purchases.GetByIdAsync(id);
+            var item = await _uow.Purchases.GetByIdWithDetailsAsync(id);
             if (item == null) return NotFound();
             return Ok(item);
         }
@@ -59,6 +60,36 @@ namespace Onion.Controllers
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] Purchase purchase)
         {
+            if (purchase == null) return BadRequest(new { message = "Purchase payload is required" });
+
+            if (purchase.CompanyId <= 0)
+            {
+                var compId = User.FindFirst("companyId")?.Value ?? User.FindFirst("CompanyId")?.Value;
+                purchase.CompanyId = int.TryParse(compId, out var cid) && cid > 0 ? cid : 1;
+            }
+
+            purchase.CreationDate = DateTime.UtcNow;
+            purchase.Active = true;
+            if (string.IsNullOrEmpty(purchase.CreateBy))
+                purchase.CreateBy = User.Identity?.Name ?? "system";
+            if (string.IsNullOrEmpty(purchase.ModifiedBy))
+                purchase.ModifiedBy = purchase.CreateBy;
+
+            if (purchase.Details != null)
+            {
+                foreach (var detail in purchase.Details)
+                {
+                    detail.CreationDate = DateTime.UtcNow;
+                    detail.Active = true;
+                    if (string.IsNullOrEmpty(detail.CreateBy))
+                        detail.CreateBy = purchase.CreateBy;
+                    if (string.IsNullOrEmpty(detail.ModifiedBy))
+                        detail.ModifiedBy = purchase.ModifiedBy;
+                    if (detail.Cost == 0 && detail.CostPrice > 0)
+                        detail.Cost = detail.CostPrice;
+                }
+            }
+
             await _uow.Purchases.AddAsync(purchase);
             await _uow.SaveChangesAsync();
             return CreatedAtAction(nameof(Get), new { id = purchase.Id }, purchase);

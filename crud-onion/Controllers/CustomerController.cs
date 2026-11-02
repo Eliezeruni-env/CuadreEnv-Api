@@ -4,6 +4,7 @@ using Onion.Domain;
 using Onion.Common.Services;
 using Onion.Common.Exceptions;
 using Onion.Common.Enums;
+using Onion.Common.Services;
 
 namespace Onion.Controllers
 {
@@ -13,11 +14,13 @@ namespace Onion.Controllers
     {
         private readonly ICustomerService _service;
         private readonly IGlobalizationService _globalizationService;
+        private readonly ICurrentUserService _currentUser;
 
-        public CustomerController(ICustomerService service, IGlobalizationService globalizationService)
+        public CustomerController(ICustomerService service, IGlobalizationService globalizationService, ICurrentUserService currentUser)
         {
             _service = service;
             _globalizationService = globalizationService;
+            _currentUser = currentUser;
         }
 
         // POST /customer/minimal
@@ -26,12 +29,16 @@ namespace Onion.Controllers
         public async Task<IActionResult> CreateMinimal([FromBody] MinimalCustomerRequest req)
         {
             if (req == null) return BadRequest();
+            var companyId = _currentUser.CompanyId;
+            if (companyId is not > 0) return BadRequest(new { code = "COMPANY_REQUIRED", message = "Authenticated company is required." });
+            if (req.CompanyId is > 0 && req.CompanyId != companyId)
+                return Forbid();
             var c = new Customer
             {
                 Name = req.Name,
                 Identification = req.Identification,
                 Phone = req.Phone,
-                CompanyId = req.CompanyId
+                CompanyId = companyId.Value
             };
             var created = await _service.CreateAsync(c);
             return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
@@ -81,6 +88,6 @@ namespace Onion.Controllers
             return NoContent();
         }
 
-    public record MinimalCustomerRequest(string Name, string? Identification = null, string? Phone = null, int CompanyId = 0);
+    public record MinimalCustomerRequest(string Name, string? Identification = null, string? Phone = null, int? CompanyId = null);
     }
 }

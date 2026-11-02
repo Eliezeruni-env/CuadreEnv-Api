@@ -111,109 +111,80 @@ namespace Onion.BussinesLogic.Services.Concrete
                 throw new CustomException(new Onion.Common.Models.Error { Code = "FISCAL_RNC_REQUIRED", Message = "Fiscal RNC is required for B01 invoices.", Language = "ES" });
 
             // Auto-resolve or validate CashSession and CashRegister
-            if (sale.CashRegisterId.HasValue && !sale.CashSessionId.HasValue)
+            Onion.Domain.Finance.CashSession? session = null;
+
+            // 1. Try to fetch the requested CashSessionId if provided
+            if (sale.CashSessionId.HasValue && sale.CashSessionId.Value > 0)
             {
-                var activeSession = (await _uow.CashSessions.FindAsync(s => s.CashRegisterId == sale.CashRegisterId.Value && s.Status == CashSessionStatus.Open && s.CompanyId == sale.CompanyId)).FirstOrDefault();
-                if (activeSession != null)
+                var found = await _uow.CashSessions.GetByIdAsync(sale.CashSessionId.Value);
+                if (found != null && found.Status == CashSessionStatus.Open && (sale.CompanyId <= 0 || found.CompanyId == sale.CompanyId))
                 {
-                    sale.CashSessionId = activeSession.Id;
+                    session = found;
                 }
             }
 
-            if (sale.CashSessionId.HasValue)
+            // 2. If no open session found by CashSessionId, try by CashRegisterId
+            if (session == null && sale.CashRegisterId.HasValue && sale.CashRegisterId.Value > 0)
             {
-                var session = await _uow.CashSessions.GetByIdAsync(sale.CashSessionId.Value);
+                session = (await _uow.CashSessions.FindAsync(s => s.CashRegisterId == sale.CashRegisterId.Value && s.Status == CashSessionStatus.Open && (sale.CompanyId <= 0 || s.CompanyId == sale.CompanyId))).FirstOrDefault();
+            }
 
-                // If session is null, closed, or belongs to another register, attempt auto-recovery
-                if (session is null || session.Status != CashSessionStatus.Open || (sale.CashRegisterId.HasValue && session.CashRegisterId != sale.CashRegisterId.Value))
+            // 3. Fallback: find ANY active open session belonging to this company
+            if (session == null)
+            {
+                session = (await _uow.CashSessions.FindAsync(s => s.Status == CashSessionStatus.Open && (sale.CompanyId <= 0 || s.CompanyId == sale.CompanyId))).FirstOrDefault();
+            }
+
+            // 4. Auto-healing: If no open session exists, check if any CashRegister is marked OPEN and auto-create the session
+            if (session == null)
+            {
+                CashRegister? reg = null;
+                if (sale.CashRegisterId.HasValue && sale.CashRegisterId.Value > 0)
                 {
-                    Onion.Domain.Finance.CashSession? fallbackSession = null;
-                    if (sale.CashRegisterId.HasValue)
-                    {
-                        fallbackSession = (await _uow.CashSessions.FindAsync(s => s.CashRegisterId == sale.CashRegisterId.Value && s.Status == CashSessionStatus.Open && s.CompanyId == sale.CompanyId)).FirstOrDefault();
-                    }
-                    if (fallbackSession == null)
-                    {
-                        fallbackSession = (await _uow.CashSessions.FindAsync(s => s.Status == CashSessionStatus.Open && s.CompanyId == sale.CompanyId)).FirstOrDefault();
-                    }
-
-                    if (fallbackSession != null)
-                    {
-                        session = fallbackSession;
-                        sale.CashSessionId = session.Id;
-                        sale.CashRegisterId = session.CashRegisterId;
-                    }
+                    reg = await _uow.CashRegisters.GetByIdAsync(sale.CashRegisterId.Value);
+                    if (reg != null && (reg.Status != CashRegisterStatus.OPEN || reg.IsDeleted || (sale.CompanyId > 0 && reg.CompanyId != sale.CompanyId)))
+                        reg = null;
                 }
 
-                // If session is still null but register is open, auto-create the missing session
-                if (session is null && sale.CashRegisterId.HasValue)
+                if (reg == null)
                 {
-                    var reg = await _uow.CashRegisters.GetByIdAsync(sale.CashRegisterId.Value);
-                    if (reg != null && reg.Status == CashRegisterStatus.OPEN)
-                    {
-                        var newSession = new Onion.Domain.Finance.CashSession
-                        {
-                            CompanyId = sale.CompanyId,
-                            CashRegisterId = reg.Id,
-                            CashierUserId = reg.OpenedByUserId ?? 1,
-                            OpeningAmount = reg.OpeningAmount,
-                            OpenedAt = reg.OpenedAt
-                        };
-                        await _uow.CashSessions.AddAsync(newSession);
-                        await _uow.SaveChangesAsync();
-                        session = newSession;
-                        sale.CashSessionId = newSession.Id;
-                    }
+                    reg = (await _uow.CashRegisters.FindAsync(r => (sale.CompanyId <= 0 || r.CompanyId == sale.CompanyId) && r.Status == CashRegisterStatus.OPEN && !r.IsDeleted)).FirstOrDefault();
                 }
 
-                if (session is null || session.Status != CashSessionStatus.Open ||
-                    (sale.CashRegisterId.HasValue && session.CashRegisterId != sale.CashRegisterId.Value))
-                    throw new CustomException(new Onion.Common.Models.Error { Code = "CASH_SESSION_NOT_OPEN", Message = "The selected cash session is not open or does not belong to the selected cash register.", Language = "EN" });
-                sale.CashRegisterId ??= session.CashRegisterId;
+                if (reg != null)
+                {
+                    if (reg.OpenedByUserId is not > 0)
+                        throw new CustomException(new Onion.Common.Models.Error { Code = "CASHIER_REQUIRED", Message = "The open cash register has no valid cashier user.", Language = "EN" });
+                    var newSession = new Onion.Domain.Finance.CashSession
+                    {
+                        CompanyId = reg.CompanyId,
+                        CashRegisterId = reg.Id,
+                        CashierUserId = reg.OpenedByUserId.Value,
+                        OpeningAmount = reg.OpeningAmount,
+                        OpenedAt = reg.OpenedAt
+                    };
+                    await _uow.CashSessions.AddAsync(newSession);
+                    await _uow.SaveChangesAsync();
+                    session = newSession;
+                }
+            }
+
+            // 5. Final assignment or validation
+            if (session != null)
+            {
+                sale.CashSessionId = session.Id;
+                sale.CashRegisterId = session.CashRegisterId;
+                if (sale.CompanyId <= 0 && session.CompanyId > 0)
+                    sale.CompanyId = session.CompanyId;
             }
             else if (sale.OriginChannel == SaleOriginChannel.POS_PRESENCIAL)
             {
-                Onion.Domain.Finance.CashSession? activeSession = null;
-                if (sale.CashRegisterId.HasValue)
+                throw new CustomException(new Onion.Common.Models.Error
                 {
-                    activeSession = (await _uow.CashSessions.FindAsync(s => s.CashRegisterId == sale.CashRegisterId.Value && s.Status == CashSessionStatus.Open && s.CompanyId == sale.CompanyId)).FirstOrDefault();
-                }
-                if (activeSession == null)
-                {
-                    activeSession = (await _uow.CashSessions.FindAsync(s => s.Status == CashSessionStatus.Open && s.CompanyId == sale.CompanyId)).FirstOrDefault();
-                }
-
-                if (activeSession != null)
-                {
-                    sale.CashSessionId = activeSession.Id;
-                    sale.CashRegisterId ??= activeSession.CashRegisterId;
-                }
-                else if (sale.CashRegisterId.HasValue)
-                {
-                    var reg = await _uow.CashRegisters.GetByIdAsync(sale.CashRegisterId.Value);
-                    if (reg != null && reg.Status == CashRegisterStatus.OPEN)
-                    {
-                        var newSession = new Onion.Domain.Finance.CashSession
-                        {
-                            CompanyId = sale.CompanyId,
-                            CashRegisterId = reg.Id,
-                            CashierUserId = reg.OpenedByUserId ?? 1,
-                            OpeningAmount = reg.OpeningAmount,
-                            OpenedAt = reg.OpenedAt
-                        };
-                        await _uow.CashSessions.AddAsync(newSession);
-                        await _uow.SaveChangesAsync();
-                        sale.CashSessionId = newSession.Id;
-                    }
-                    else
-                    {
-                        throw new CustomException(new Onion.Common.Models.Error { Code = "CASH_SESSION_REQUIRED", Message = "A POS sale requires an open cash session.", Language = "EN" });
-                    }
-                }
-                else
-                {
-                    throw new CustomException(new Onion.Common.Models.Error { Code = "CASH_SESSION_REQUIRED", Message = "A POS sale requires an open cash session.", Language = "EN" });
-                }
+                    Code = "CASH_SESSION_REQUIRED",
+                    Message = "No hay ninguna caja o turno abierto para registrar ventas. Por favor abra la caja antes de continuar.",
+                    Language = "ES"
+                });
             }
 
             if (sale.Details == null || sale.Details.Count == 0)

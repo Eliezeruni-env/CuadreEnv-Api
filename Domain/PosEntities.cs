@@ -54,6 +54,13 @@ namespace Onion.Domain
         // Quantity physically received so far for this purchase detail
         public decimal QuantityReceived { get; set; }
         public decimal Cost { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        public decimal CostPrice
+        {
+            get => Cost;
+            set { if (value > 0 || Cost == 0) Cost = value; }
+        }
     }
 
     public enum SaleStatus { PENDING, PARTIAL, PAID, OVERDUE, CANCELLED }

@@ -56,11 +56,14 @@ namespace Onion.BussinesLogic.Services.Concrete
             var existingSession = (await _uow.CashSessions.FindAsync(s => s.CashRegisterId == register.Id && s.Status == Onion.Domain.Finance.CashSessionStatus.Open && s.CompanyId == register.CompanyId)).FirstOrDefault();
             if (existingSession == null)
             {
+                if (register.OpenedByUserId is not > 0)
+                    throw new InvalidOperationException("The user who opened the cash register is required to create its cash session.");
+
                 var newSession = new Onion.Domain.Finance.CashSession
                 {
                     CompanyId = register.CompanyId,
                     CashRegisterId = register.Id,
-                    CashierUserId = register.OpenedByUserId ?? 1,
+                    CashierUserId = register.OpenedByUserId.Value,
                     OpeningAmount = register.OpeningAmount,
                     OpenedAt = register.OpenedAt
                 };
@@ -81,7 +84,9 @@ namespace Onion.BussinesLogic.Services.Concrete
             register.PausedAt = DateTime.UtcNow;
             register.PausedByUserId = userId;
             register.PauseReason = reason.Trim();
-            await _uow.CashRegisterPauses.AddAsync(new CashRegisterPause { CashRegisterId = id, CompanyId = register.CompanyId, UserId = userId ?? 0, Reason = reason.Trim(), PausedAt = DateTime.UtcNow });
+            if (userId is not > 0)
+                throw new InvalidOperationException("The user who pauses the cash register is required.");
+            await _uow.CashRegisterPauses.AddAsync(new CashRegisterPause { CashRegisterId = id, CompanyId = register.CompanyId, UserId = userId.Value, Reason = reason.Trim(), PausedAt = DateTime.UtcNow });
             _uow.CashRegisters.Update(register);
             await _uow.SaveChangesAsync();
         }
@@ -105,7 +110,9 @@ namespace Onion.BussinesLogic.Services.Concrete
             var activeSession = await _db.CashSessions.SingleOrDefaultAsync(x => x.CashRegisterId == id && x.Status == Onion.Domain.Finance.CashSessionStatus.Open);
             if (activeSession != null)
             {
-                await _cashSessionService.CloseAsync(activeSession.CompanyId, activeSession.Id, request, userId ?? 0);
+                if (userId is not > 0)
+                    throw new InvalidOperationException("The user who closes the cash register is required.");
+                await _cashSessionService.CloseAsync(activeSession.CompanyId, activeSession.Id, request, userId.Value);
                 var closedSession = await _db.CashSessions.AsNoTracking().SingleAsync(x => x.Id == activeSession.Id);
                 var sessionDifference = closedSession.Difference ?? 0m;
                 return new CashRegisterCloseResult(

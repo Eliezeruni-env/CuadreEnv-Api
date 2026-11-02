@@ -13,5 +13,10 @@ namespace Onion.DataAccess.Repositories.Concrete
         {
             return await _context.Purchases.Include(p => p.Details).FirstOrDefaultAsync(p => p.Id == id);
         }
+
+        public async Task<System.Collections.Generic.List<Purchase>> GetAllWithDetailsAsync()
+        {
+            return await _context.Purchases.Include(p => p.Details).OrderByDescending(p => p.Id).ToListAsync();
+        }
     }
 }
