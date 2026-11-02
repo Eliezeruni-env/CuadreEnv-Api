@@ -1,5 +1,3 @@
-﻿
-
 namespace Onion.DataAccess.Models
 {
     public class ProductRow
@@ -11,5 +9,13 @@ namespace Onion.DataAccess.Models
         public decimal Stock { get; set; }
         public string? Reference { get; set; }
         public string? ShortDescription { get; set; }
+        public int CategoryId { get; set; }
+        public string? CategoryName { get; set; }
+        public int ProductTypeId { get; set; }
+        public int CompanyId { get; set; }
+        public string? ImageUrl { get; set; }
+        public bool IsService { get; set; }
+        public bool InvoiceWithoutStock { get; set; }
+        public int UnitOfMeasurementId { get; set; }
     }
 }

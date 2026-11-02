@@ -114,6 +114,8 @@ namespace Onion.DataAccess.Repositories.Concrete
             var pageNumber = Math.Max(1, filterPayload.PageNumber);
             var pageSize = Math.Clamp(filterPayload.PageSize, 1, 100);
             var query = from p in _context.Products
+                        join c in _context.Categories on p.CategoryId equals c.Id into catGroup
+                        from c in catGroup.DefaultIfEmpty()
                         select new ProductRow
                         {
                             Id = p.Id,
@@ -122,8 +124,21 @@ namespace Onion.DataAccess.Repositories.Concrete
                             Cost = p.Cost,
                             Stock = p.Stock,
                             Reference = p.Reference,
-                            ShortDescription = p.ShortDescription
+                            ShortDescription = p.ShortDescription,
+                            CategoryId = p.CategoryId,
+                            CategoryName = c != null ? c.Description : null,
+                            ProductTypeId = p.ProductTypeId,
+                            CompanyId = p.CompanyId,
+                            ImageUrl = p.ImageUrl,
+                            IsService = p.IsService,
+                            InvoiceWithoutStock = p.InvoiceWithoutStock,
+                            UnitOfMeasurementId = p.UnitOfMeasurementId
                         };
+
+            if (filterPayload.CategoryId.HasValue && filterPayload.CategoryId.Value > 0)
+            {
+                query = query.Where(p => p.CategoryId == filterPayload.CategoryId.Value);
+            }
 
             if (!string.IsNullOrWhiteSpace(filterPayload.Description))
             {
