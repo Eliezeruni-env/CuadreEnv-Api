@@ -15,7 +15,7 @@ using System.Text.Encodings.Web;
 using System.Text.Unicode;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Xunit;
 using FluentAssertions;
 
@@ -29,6 +29,14 @@ namespace Onion.IntegrationTests
         public AuthAndWarehouseFlow(WebApplicationFactory<Program> factory)
         {
             _databaseName = "OnionTest_" + Guid.NewGuid().ToString("N");
+            var baseConnection = Environment.GetEnvironmentVariable("ConnectionStrings__OnionCrud");
+            if (string.IsNullOrWhiteSpace(baseConnection))
+                throw new InvalidOperationException("Integration tests require ConnectionStrings__OnionCrud pointing to a PostgreSQL server.");
+
+            var connectionBuilder = new NpgsqlConnectionStringBuilder(baseConnection)
+            {
+                Database = _databaseName
+            };
             _factory = factory.WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("IntegrationTesting");
@@ -36,7 +44,7 @@ namespace Onion.IntegrationTests
                 {
                     cfg.AddInMemoryCollection(new Dictionary<string, string?>
                     {
-                        ["ConnectionStrings:OnionCrud"] = $"Server=(localdb)\\MSSQLLocalDB;Database={_databaseName};Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True",
+                        ["ConnectionStrings:OnionCrud"] = connectionBuilder.ConnectionString,
                         ["ApplyMigrationsOnStartup"] = "true",
                         ["Usm:ValidateOnStartup"] = "false",
                         ["Usm:BaseUrl"] = "http://localhost:3000",
@@ -69,19 +77,18 @@ namespace Onion.IntegrationTests
         {
             await _factory.DisposeAsync();
 
-            var masterConnection = new SqlConnectionStringBuilder
+            var baseConnection = Environment.GetEnvironmentVariable("ConnectionStrings__OnionCrud");
+            if (string.IsNullOrWhiteSpace(baseConnection)) return;
+            var connectionBuilder = new NpgsqlConnectionStringBuilder(baseConnection)
             {
-                DataSource = @"(localdb)\MSSQLLocalDB",
-                InitialCatalog = "master",
-                IntegratedSecurity = true,
-                TrustServerCertificate = true
-            }.ConnectionString;
+                Database = "postgres"
+            };
 
-            await using var connection = new SqlConnection(masterConnection);
+            await using var connection = new NpgsqlConnection(connectionBuilder.ConnectionString);
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
-            command.CommandText = $"IF DB_ID(@databaseName) IS NOT NULL BEGIN ALTER DATABASE [{_databaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{_databaseName}]; END;";
-            command.Parameters.AddWithValue("@databaseName", _databaseName);
+            command.CommandText = "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = @databaseName AND pid <> pg_backend_pid(); DROP DATABASE IF EXISTS \"" + _databaseName + "\";";
+            command.Parameters.AddWithValue("databaseName", _databaseName);
             await command.ExecuteNonQueryAsync();
         }
 
