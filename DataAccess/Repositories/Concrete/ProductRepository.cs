@@ -97,13 +97,16 @@ namespace Onion.DataAccess.Repositories.Concrete
 
             if (!string.IsNullOrWhiteSpace(description))
             {
+                var term = description.Trim();
                 query = query.Where(x =>
-                    EF.Functions.Like(x.Description, $"%{description}%"));
+                    (x.Description != null && EF.Functions.Like(x.Description, $"%{term}%")) ||
+                    (x.Barcode != null && EF.Functions.Like(x.Barcode, $"%{term}%")) ||
+                    (x.Reference != null && EF.Functions.Like(x.Reference, $"%{term}%")));
             }
 
             return await query
                 .OrderBy(x => x.Description)
-                .Take(5)
+                .Take(25)
                 .ToListAsync();
         }
 
@@ -143,7 +146,10 @@ namespace Onion.DataAccess.Repositories.Concrete
             if (!string.IsNullOrWhiteSpace(filterPayload.Description))
             {
                 var description = filterPayload.Description.Trim();
-                query = query.Where(p => p.Description != null && EF.Functions.Like(p.Description, $"%{description}%"));
+                query = query.Where(p =>
+                    (p.Description != null && EF.Functions.Like(p.Description, $"%{description}%")) ||
+                    (p.Barcode != null && EF.Functions.Like(p.Barcode, $"%{description}%")) ||
+                    (p.Reference != null && EF.Functions.Like(p.Reference, $"%{description}%")));
             }
 
             if (filterPayload.MinCost.HasValue)
