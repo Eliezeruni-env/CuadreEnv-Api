@@ -550,6 +550,20 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         private async Task<IReadOnlyCollection<string>> GetAllowedModulesAsync(User user)
         {
+            if (string.Equals(user.AllowedModulesJson?.Trim(), "[]", StringComparison.Ordinal))
+            {
+                return Array.Empty<string>();
+            }
+
+            if (!string.IsNullOrWhiteSpace(user.AllowedModulesJson))
+            {
+                var explicitModules = Onion.Common.Authorization.ModuleCodes.FromClaimPreservingIds(user.AllowedModulesJson);
+                if (explicitModules.Count > 0)
+                {
+                    return explicitModules;
+                }
+            }
+
             if (user.IsSuperUser ||
                 string.Equals(user.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase) ||
@@ -562,29 +576,18 @@ namespace Onion.BussinesLogic.Services.Concrete
                 return new[] { "*" };
             }
 
-            if (string.IsNullOrWhiteSpace(user.AllowedModulesJson))
-            {
-                if (string.Equals(user.Role, "Supervisor", StringComparison.OrdinalIgnoreCase))
-                    return new[] { "dashboard", "sales", "cashregister", "inventory", "customers", "audit", "reports", "users" };
+            if (string.Equals(user.Role, "Supervisor", StringComparison.OrdinalIgnoreCase))
+                return new[] { "dashboard", "sales", "cashregister", "inventory", "customers", "audit", "reports", "users" };
 
-                if (string.Equals(user.Role, "Cajero", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(user.Role, "Cashier", StringComparison.OrdinalIgnoreCase))
-                    return new[] { "dashboard", "sales", "cashregister", "customers", "products.detail_sales" };
+            if (string.Equals(user.Role, "Cajero", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(user.Role, "Cashier", StringComparison.OrdinalIgnoreCase))
+                return new[] { "dashboard", "sales", "cashregister", "customers", "products.detail_sales" };
 
-                if (string.Equals(user.Role, "Vendedor", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(user.Role, "Seller", StringComparison.OrdinalIgnoreCase))
-                    return new[] { "dashboard", "sales", "inventory", "customers" };
+            if (string.Equals(user.Role, "Vendedor", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(user.Role, "Seller", StringComparison.OrdinalIgnoreCase))
+                return new[] { "dashboard", "sales", "inventory", "customers" };
 
-                return new[] { "dashboard", "sales", "cashregister", "customers" };
-            }
-
-            var modules = Onion.Common.Authorization.ModuleCodes.FromClaimPreservingIds(user.AllowedModulesJson);
-            if (modules.Count == 0 && !string.Equals(user.AllowedModulesJson.Trim(), "[]", StringComparison.Ordinal))
-            {
-                _logger?.LogWarning("Invalid or unsupported AllowedModulesJson for user {UserId}", user.Id);
-                return new[] { "dashboard", "sales", "cashregister", "customers" };
-            }
-            return modules;
+            return new[] { "dashboard", "sales", "cashregister", "customers" };
         }
 
         private static UserResponseDto ToUserResponse(User user, IReadOnlyCollection<string> modules) =>
@@ -651,7 +654,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (isAdminUser)
             {
                 claims.Add(new Claim("permissions", "*"));
-                if (!claims.Any(c => c.Type == "module" && c.Value == "*"))
+                if (assignedModules.Contains("*") && !claims.Any(c => c.Type == "module" && c.Value == "*"))
                     claims.Add(new Claim("module", "*"));
             }
             if (!string.IsNullOrWhiteSpace(deviceId))

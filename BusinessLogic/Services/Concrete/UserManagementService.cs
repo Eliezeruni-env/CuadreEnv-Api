@@ -473,15 +473,9 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         private List<string> ParseAllowedModules(string? allowedModulesJson, int userId, string? role = null, bool isSuperUser = false)
         {
-            if (isSuperUser ||
-                string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(role, "Administrador", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(role, "Owner", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(role, "Dueño", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(role, "Dueno", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(allowedModulesJson?.Trim(), "[]", StringComparison.Ordinal))
             {
-                return new List<string> { ModuleCodes.All };
+                return new List<string>();
             }
 
             if (!string.IsNullOrWhiteSpace(allowedModulesJson))
@@ -495,6 +489,17 @@ namespace Onion.BussinesLogic.Services.Concrete
                 {
                     _logger?.LogWarning(ex, "Invalid AllowedModulesJson for user {UserId}", userId);
                 }
+            }
+
+            if (isSuperUser ||
+                string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(role, "Administrador", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(role, "Owner", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(role, "Dueño", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(role, "Dueno", StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<string> { ModuleCodes.All };
             }
 
             if (string.Equals(role, "Supervisor", StringComparison.OrdinalIgnoreCase))
