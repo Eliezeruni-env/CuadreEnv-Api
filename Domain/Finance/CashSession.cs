@@ -32,6 +32,8 @@ public class CashSession : BaseEntity
     public int CashRegisterId { get; set; }
     public decimal OpeningAmount { get; set; }
     public decimal CurrentBalance { get; private set; }
+    public decimal TotalIn { get; private set; }
+    public decimal TotalOut { get; private set; }
     public string OpeningDenominationsJson { get; set; } = "{}";
     public CashSessionStatus Status { get; private set; } = CashSessionStatus.Open;
     public DateTime OpenedAt { get; set; } = DateTime.UtcNow;
@@ -93,7 +95,20 @@ public class CashSession : BaseEntity
     public void ApplyMovement(CashMovementType type, decimal amount)
     {
         if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount));
-        CurrentBalance = decimal.Round(CurrentBalance + (type == CashMovementType.CashOut ? -amount : amount), 2);
+        if (type == CashMovementType.CashOut)
+        {
+            CurrentBalance = Math.Max(0m, CurrentBalance - amount);
+            TotalOut = decimal.Round(TotalOut + amount, 2);
+        }
+        else if (type == CashMovementType.CashIn)
+        {
+            CurrentBalance += amount;
+            TotalIn = decimal.Round(TotalIn + amount, 2);
+        }
+        else
+            throw new ArgumentOutOfRangeException(nameof(type));
+
+        CurrentBalance = decimal.Round(CurrentBalance, 2);
     }
 
     public static string NormalizeDenominations(object denominations) =>

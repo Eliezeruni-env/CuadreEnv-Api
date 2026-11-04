@@ -20,7 +20,7 @@ public class TenantFlowTests
     [Fact]
     public async Task Middleware_AllowsAuthenticatedUserWithTenant()
     {
-        var context = CreateContext("/v1/sale", "GET", new Claim("companyId", "12"), new Claim("isSuperUser", "true"));
+        var context = CreateContext("/v1/sale", "GET", new Claim("sub", "1"), new Claim("companyId", "12"), new Claim("isSuperUser", "true"));
         var called = false;
         var middleware = new TenantMiddleware(_ =>
         {
@@ -30,7 +30,7 @@ public class TenantFlowTests
 
         await middleware.InvokeAsync(context);
 
-        Assert.True(called);
+        Assert.True(called, await ReadBodyAsync(context));
         Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
     }
 
@@ -64,20 +64,18 @@ public class TenantFlowTests
     }
 
     [Fact]
-    public async Task Middleware_AllowsSuperUserWithoutTenant()
+    public async Task Middleware_RejectsSuperUserWithoutTenant()
     {
         var context = CreateContext("/v1/sale", "GET", new Claim("isSuperUser", "true"));
-        var called = false;
         var middleware = new TenantMiddleware(_ =>
         {
-            called = true;
             return Task.CompletedTask;
         });
 
         await middleware.InvokeAsync(context);
 
-        Assert.True(called);
-        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        Assert.Equal(StatusCodes.Status400BadRequest, context.Response.StatusCode);
+        Assert.Contains("COMPANY_CONTEXT_REQUIRED", await ReadBodyAsync(context));
     }
 
     [Fact]
@@ -107,11 +105,18 @@ public class TenantFlowTests
         if (claims.Any(c => c.Type == "companyId" && c.Value == "12"))
         {
             var services = new ServiceCollection();
-            services.AddDbContext<OnionDbContext>(options => options.UseInMemoryDatabase(Guid.NewGuid().ToString("N")));
+            services.AddSingleton<Onion.Common.Services.ICurrentUserService>(new TestCurrentUserService(12));
+            services.AddDbContext<OnionDbContext>(options => options.UseInMemoryDatabase(Guid.NewGuid().ToString("N")), ServiceLifetime.Singleton);
             var provider = services.BuildServiceProvider();
-            using var scope = provider.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<OnionDbContext>();
+            var db = provider.GetRequiredService<OnionDbContext>();
             db.Companies.Add(new Company { Id = 12, Name = "Test Company", Active = true, IsDeleted = false });
+            db.UserCompanies.Add(new Onion.Domain.Users.UserCompany
+            {
+                UserId = 1,
+                CompanyId = 12,
+                Active = true,
+                IsDeleted = false
+            });
             db.Users.Add(new Onion.Domain.Users.User
             {
                 Id = 1,
@@ -126,6 +131,8 @@ public class TenantFlowTests
                 CreateBy = "test"
             });
             db.SaveChanges();
+            if (!db.UserCompanies.IgnoreQueryFilters().Any(x => x.UserId == 1 && x.CompanyId == 12 && x.Active && !x.IsDeleted))
+                throw new InvalidOperationException("Tenant test fixture membership was not persisted.");
             context.RequestServices = provider;
         }
         return context;
@@ -136,5 +143,18 @@ public class TenantFlowTests
         context.Response.Body.Position = 0;
         using var reader = new StreamReader(context.Response.Body);
         return await reader.ReadToEndAsync();
+    }
+
+    private sealed class TestCurrentUserService(int companyId) : Onion.Common.Services.ICurrentUserService
+    {
+        public int? CompanyId => companyId;
+        public int? UserId => 1;
+        public string? ClerkUserId => "1";
+        public string? UserEmail => "test@example.com";
+        public string? UserRole => "Admin";
+        public string? IpAddress => null;
+        public string? UserAgent => null;
+        public bool IsAuthenticated => true;
+        public bool IsGlobalAdministrator => false;
     }
 }

@@ -354,6 +354,18 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (!user.Active || user.IsDeleted)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "ACCOUNT_SUSPENDED", Message = "Su cuenta se encuentra suspendida o deshabilitada. Comuníquese con la administración de CuadreEnv.", Language = "ES" });
 
+            var activeCompanyId = user.CompanyId;
+            if (activeCompanyId is > 0)
+            {
+                var companyActive = await _db.Companies.IgnoreQueryFilters().AsNoTracking()
+                    .AnyAsync(x => x.Id == activeCompanyId.Value && x.Active && !x.IsDeleted);
+                var membershipActive = await _db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
+                    .AnyAsync(x => x.UserId == user.Id && x.CompanyId == activeCompanyId.Value && x.Active && !x.IsDeleted);
+                if (!companyActive || (!membershipActive && !user.IsSuperUser))
+                    activeCompanyId = null;
+            }
+            user.CompanyId = activeCompanyId;
+
             // Revoke old and mark rotation. Record replacement token hash for auditability.
             refresh.IsRevoked = true;
             refresh.LastUsedAt = DateTime.UtcNow;

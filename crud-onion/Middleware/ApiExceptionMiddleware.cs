@@ -40,12 +40,22 @@ namespace Onion.Controllers.Middleware
             }
             catch (Onion.Common.Exceptions.TenantRequiredException ex)
             {
-                await WriteBusinessErrorAsync(context, StatusCodes.Status401Unauthorized, "TENANT_REQUIRED", ex.Message);
+                await WriteBusinessErrorAsync(context, StatusCodes.Status400BadRequest, "COMPANY_CONTEXT_REQUIRED", "Se requiere seleccionar una compañía activa válida incluida en la membresía del usuario.");
                 return;
             }
             catch (Onion.Common.Exceptions.FiscalSequenceExhaustedException ex)
             {
                 await WriteBusinessErrorAsync(context, StatusCodes.Status409Conflict, "FISCAL_SEQUENCE_EXHAUSTED", ex.Message);
+                return;
+            }
+            catch (ArgumentException ex)
+            {
+                await WriteBusinessErrorAsync(context, StatusCodes.Status400BadRequest, "INVALID_REQUEST", ex.Message);
+                return;
+            }
+            catch (InvalidOperationException ex)
+            {
+                await WriteBusinessErrorAsync(context, StatusCodes.Status422UnprocessableEntity, "BUSINESS_RULE_VIOLATION", ex.Message);
                 return;
             }
             catch (Onion.Common.Exceptions.FiscalSequenceExpiredException ex)
@@ -126,18 +136,13 @@ namespace Onion.Controllers.Middleware
                 context.Response.StatusCode = StatusCodes.Status500InternalServerError;
                 context.Response.ContentType = "application/json";
 
-                // Surface minimal diagnostic info to FE in development only to avoid leaking secrets in production
                 var payload = new
                 {
                     statusCode = StatusCodes.Status500InternalServerError,
-                    message = _env.IsDevelopment() ? ex.Message : "An internal server error occurred",
-                    errorCode = _env.IsDevelopment() ? ex.GetType().Name : "INTERNAL_ERROR",
+                    message = "An internal server error occurred",
+                    errorCode = "INTERNAL_ERROR",
                     requestId = requestId,
-                    path = context.Request?.Path,
-                    method = context.Request?.Method,
                     timestamp = DateTime.UtcNow,
-                    // include stack trace and inner exception only in development
-                    exception = _env.IsDevelopment() ? new { ex.Message, ex.StackTrace, inner = ex.InnerException?.Message } : null
                 };
 
                 await context.Response.WriteAsync(JsonSerializer.Serialize(payload, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull }));

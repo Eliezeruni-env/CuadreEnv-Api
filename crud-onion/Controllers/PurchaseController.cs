@@ -33,7 +33,14 @@ namespace Onion.Controllers
             try
             {
                 var paged = await _uow.Purchases.GetPagedAsync(Math.Max(1, pageNumber), Math.Clamp(pageSize, 1, 100));
-                return Ok(paged);
+                return Ok(new
+                {
+                    data = paged.Items,
+                    pageNumber = Math.Max(1, pageNumber),
+                    pageSize = paged.PageSize,
+                    totalCount = paged.TotalItemCount,
+                    totalPages = paged.PageCount
+                });
             }
             catch (Exception)
             {

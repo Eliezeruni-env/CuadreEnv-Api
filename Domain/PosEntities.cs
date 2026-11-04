@@ -115,6 +115,10 @@ namespace Onion.Domain
         public string? FiscalRnc { get; set; }
         public string? FiscalBusinessName { get; set; }
         public string? Notes { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        public string FiscalStatus { get; set; } = "Processing";
+        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        public string? FiscalMessage { get; set; }
         public string? CancellationReason { get; set; }
         public DateTime? CancelledAt { get; set; }
         [System.ComponentModel.DataAnnotations.Schema.NotMapped]

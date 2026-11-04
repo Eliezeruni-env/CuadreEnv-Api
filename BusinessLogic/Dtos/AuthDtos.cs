@@ -15,7 +15,7 @@ namespace Onion.BussinesLogic.Dtos
 
 
     public record LoginRequestDto(string Email, string Password, string? DeviceId = null);
-    public record RefreshRequestDto(string RefreshToken);
+    public record RefreshRequestDto(string RefreshToken, string? AccessToken = null);
     public record RevokeRequestDto(string RefreshToken);
     public record TokenResponseDto(string AccessToken, string RefreshToken, UserResponseDto? User = null);
     public record UserResponseDto(

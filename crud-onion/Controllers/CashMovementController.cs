@@ -86,21 +86,28 @@ namespace Onion.Controllers
             return CreatedAtAction(nameof(GetAll), new { id = created.Id }, created);
         }
 
-        private static bool TryParseMovementType(string? value, out CashMovementType type)
+        private static bool TryParseMovementType(object? value, out CashMovementType type)
         {
-            if (string.Equals(value, "Entrada", StringComparison.OrdinalIgnoreCase) || 
-                string.Equals(value, "CashIn", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(value, "In", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(value, "1", StringComparison.OrdinalIgnoreCase))
+            var text = value switch
+            {
+                System.Text.Json.JsonElement element when element.ValueKind == System.Text.Json.JsonValueKind.Number => element.GetInt32().ToString(System.Globalization.CultureInfo.InvariantCulture),
+                System.Text.Json.JsonElement element when element.ValueKind == System.Text.Json.JsonValueKind.String => element.GetString(),
+                _ => value?.ToString()
+            };
+
+            if (string.Equals(text, "Entrada", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(text, "CashIn", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(text, "In", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(text, "1", StringComparison.OrdinalIgnoreCase))
             {
                 type = CashMovementType.CashIn;
                 return true;
             }
-            if (string.Equals(value, "Salida", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(value, "Retiro", StringComparison.OrdinalIgnoreCase) || 
-                string.Equals(value, "CashOut", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(value, "Out", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(value, "2", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(text, "Salida", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(text, "Retiro", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(text, "CashOut", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(text, "Out", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(text, "2", StringComparison.OrdinalIgnoreCase))
             {
                 type = CashMovementType.CashOut;
                 return true;
@@ -111,7 +118,7 @@ namespace Onion.Controllers
 
         public sealed class CashMovementRequest
         {
-            public string? Type { get; set; }
+            public object? Type { get; set; }
             public decimal Amount { get; set; }
             public string? Concept { get; set; }
             public string? Reason { get; set; }

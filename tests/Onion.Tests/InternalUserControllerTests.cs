@@ -55,7 +55,7 @@ public class InternalUserControllerTests
             .UseInMemoryDatabase(databaseName)
             .Options;
 
-        return new OnionDbContext(options, currentUserService: new TenantUserService(10));
+        return new OnionDbContext(options, currentUserService: new GlobalTenantUserService());
     }
 
     private static User CreateUser(int id, int companyId, string identification) => new()
@@ -84,5 +84,18 @@ public class InternalUserControllerTests
         public string? UserAgent => null;
         public bool IsAuthenticated => true;
         public bool IsGlobalAdministrator => false;
+    }
+
+    private sealed class GlobalTenantUserService : Onion.Common.Services.ICurrentUserService
+    {
+        public int? CompanyId => null;
+        public int? UserId => 1;
+        public string? ClerkUserId => "1";
+        public string? UserEmail => "test@example.test";
+        public string? UserRole => "SysAdmin";
+        public string? IpAddress => null;
+        public string? UserAgent => null;
+        public bool IsAuthenticated => true;
+        public bool IsGlobalAdministrator => true;
     }
 }

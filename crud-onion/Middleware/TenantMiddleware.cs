@@ -59,20 +59,30 @@ namespace Onion.Controllers.Middleware
             if (user?.Identity != null && user.Identity.IsAuthenticated)
             {
                 var currentUser = context.RequestServices?.GetService<Onion.Common.Services.ICurrentUserService>();
-                var isGlobalAdministrator = currentUser?.IsGlobalAdministrator == true || IsGlobalAdministratorClaim(user);
-
                 var userIdClaim = user.FindFirst("sub") ?? user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
                 _ = int.TryParse(userIdClaim?.Value, out var userId);
                 var headerValue = context.Request.Headers["X-Company-Id"].FirstOrDefault();
                 var claimValue = (user.FindFirst("companyId") ?? user.FindFirst("CompanyId"))?.Value;
 
-                int? requestedCompanyId = null;
-                if (int.TryParse(headerValue, out var headerCompanyId) && headerCompanyId > 0)
-                    requestedCompanyId = headerCompanyId;
-                else if (int.TryParse(claimValue, out var claimCompanyId) && claimCompanyId > 0)
-                    requestedCompanyId = claimCompanyId;
+                if (!int.TryParse(claimValue, out var claimCompanyId) || claimCompanyId <= 0)
+                {
+                    await WriteCompanyRequiredAsync(context);
+                    return;
+                }
 
-                if (requestedCompanyId is not > 0 && userId <= 0)
+                int? requestedCompanyId = claimCompanyId;
+                if (!string.IsNullOrWhiteSpace(headerValue))
+                {
+                    if (!int.TryParse(headerValue, out var headerCompanyId) || headerCompanyId <= 0 || headerCompanyId != claimCompanyId)
+                    {
+                        await WriteCompanyRequiredAsync(context);
+                        return;
+                    }
+
+                    requestedCompanyId = headerCompanyId;
+                }
+
+                if (userId <= 0)
                 {
                     await WriteCompanyRequiredAsync(context);
                     return;
@@ -82,7 +92,7 @@ namespace Onion.Controllers.Middleware
                 var userRecord = userId > 0
                     ? await db.Users.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId)
                     : null;
-                var resolvedCompanyId = requestedCompanyId ?? userRecord?.CompanyId;
+                var resolvedCompanyId = requestedCompanyId;
 
                 if (resolvedCompanyId is not > 0)
                 {
@@ -98,10 +108,9 @@ namespace Onion.Controllers.Middleware
                     return;
                 }
 
-                var hasCompanyAccess = userRecord?.CompanyId == resolvedCompanyId.Value ||
-                    (userId > 0 && await db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
-                        .AnyAsync(x => x.UserId == userId && x.CompanyId == resolvedCompanyId.Value && x.Active && !x.IsDeleted));
-                if (!hasCompanyAccess && !isGlobalAdministrator)
+                var hasCompanyAccess = userId > 0 && await db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
+                        .AnyAsync(x => x.UserId == userId && x.CompanyId == resolvedCompanyId.Value && x.Active && !x.IsDeleted);
+                if (!hasCompanyAccess)
                 {
                     await WriteCompanyRequiredAsync(context);
                     return;

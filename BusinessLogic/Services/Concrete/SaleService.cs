@@ -446,6 +446,8 @@ namespace Onion.BussinesLogic.Services.Concrete
                 }
 
                 sale.InvoiceFolio = ncf ?? string.Empty;
+                sale.FiscalStatus = "Processing";
+                sale.FiscalMessage = "Documento fiscal en cola de firma y transmisión.";
                 var fiscalDocument = Onion.Domain.Invoices.FiscalDocument.ForSale(sale.CompanyId, sale.Id, ncf);
                 await _uow.FiscalDocuments.AddAsync(fiscalDocument);
 

@@ -26,7 +26,9 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<IEnumerable<CashMovement>> GetAllAsync()
         {
-            return await _uow.CashMovements.ListAsync();
+            return (await _uow.CashMovements.ListAsync())
+                .OrderByDescending(x => x.RecordedAt)
+                .ThenByDescending(x => x.Id);
         }
 
         public async Task<Onion.Common.Models.Pagination.PagedList<CashMovement>> GetPagedAsync(int pageNumber, int pageSize)
@@ -41,24 +43,32 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (movement == null) throw new ArgumentNullException(nameof(movement));
             if (string.IsNullOrWhiteSpace(movement.Reason))
                 movement.Reason = !string.IsNullOrWhiteSpace(movement.Description) ? movement.Description : "Movimiento de caja";
-            if (movement.Amount == 0m)
-                throw new ArgumentException("Cash movement amount cannot be zero.", nameof(movement));
+            if (movement.Amount <= 0m)
+                throw new ArgumentException("Cash movement amount must be greater than zero.", nameof(movement));
             movement.Reason = movement.Reason.Trim();
             movement.RecordedAt = DateTime.UtcNow;
-            if (movement.CashSessionId.HasValue)
+            if (!movement.CashSessionId.HasValue)
+                throw new InvalidOperationException("An open cash session is required.");
+
+            await using var transaction = await _uow.BeginTransactionAsync();
+            try
             {
                 var session = await _db.CashSessions.SingleOrDefaultAsync(x => x.Id == movement.CashSessionId.Value && x.CashRegisterId == movement.CashRegisterId);
                 if (session is null) throw new InvalidOperationException("Cash session was not found.");
                 if (session.Status != CashSessionStatus.Open) throw new InvalidOperationException("A closed session cannot receive movements.");
                 if (movement.Type is not (CashMovementType.CashIn or CashMovementType.CashOut))
                     throw new ArgumentException("Manual movements must be cash in or cash out.", nameof(movement.Type));
-                if (movement.Type == CashMovementType.CashOut && movement.Amount > session.CurrentBalance)
-                    throw new InvalidOperationException("The withdrawal exceeds the current cash balance.");
                 session.ApplyMovement(movement.Type, movement.Amount);
+                await _uow.CashMovements.AddAsync(movement);
+                await _uow.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return movement;
             }
-            await _uow.CashMovements.AddAsync(movement);
-            await _uow.SaveChangesAsync();
-            return movement;
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
     }
 }
