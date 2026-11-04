@@ -73,13 +73,11 @@ namespace Onion.Controllers
                 var items = await _service.GetAllAsync();
                 return Ok(items);
             }
-            catch (System.Exception)
+            catch (System.Exception ex)
             {
-                throw new HttpResponseException
-                {
-                    Errors = new Onion.Common.Models.Error[] { _globalizationService.GetErrorInCurrentLanguage(ErrorCodes.UnknownException) },
-                    StatusCode = System.Net.HttpStatusCode.InternalServerError
-                };
+                _logger.LogError(ex, "Error retrieving sales for tenant {CompanyId}.",
+                    HttpContext.RequestServices.GetService<Onion.Common.Services.ICurrentUserService>()?.CompanyId);
+                throw;
             }
         }
 
