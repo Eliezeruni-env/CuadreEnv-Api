@@ -25,10 +25,43 @@ internal static class AuthorizationBypass
 
 internal static class AuthorizationIdentity
 {
+    public static bool IsAdmin(ClaimsPrincipal user) =>
+        user.Claims.Any(c => string.Equals(c.Type, "isSuperUser", StringComparison.OrdinalIgnoreCase) && string.Equals(c.Value, "true", StringComparison.OrdinalIgnoreCase)) ||
+        user.Claims.Any(c => (string.Equals(c.Type, "role", StringComparison.OrdinalIgnoreCase) || c.Type == ClaimTypes.Role) &&
+                             (string.Equals(c.Value, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(c.Value, "Admin", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(c.Value, "Administrador", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(c.Value, "Owner", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(c.Value, "Dueño", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(c.Value, "Dueno", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(c.Value, "Gerente", StringComparison.OrdinalIgnoreCase)));
+
     public static bool IsGlobalAdministrator(ClaimsPrincipal user) =>
         user.Claims.Any(c => string.Equals(c.Type, "isSuperUser", StringComparison.OrdinalIgnoreCase) && string.Equals(c.Value, "true", StringComparison.OrdinalIgnoreCase)) ||
         user.Claims.Any(c => (string.Equals(c.Type, "role", StringComparison.OrdinalIgnoreCase) || c.Type == ClaimTypes.Role) &&
                              string.Equals(c.Value, "SuperAdmin", StringComparison.OrdinalIgnoreCase));
+}
+
+internal static class TenantResolutionHelper
+{
+    public static int ResolveCompanyId(HttpContext context, ClaimsPrincipal user)
+    {
+        if (context.Items.TryGetValue("TenantCompanyId", out var resolved) && resolved is int cid && cid > 0)
+            return cid;
+
+        var header = context.Request.Headers["X-Company-Id"].FirstOrDefault()
+            ?? context.Request.Headers["x-company-id"].FirstOrDefault()
+            ?? context.Request.Headers["X-Tenant-Id"].FirstOrDefault()
+            ?? context.Request.Headers["x-tenant-id"].FirstOrDefault();
+        if (int.TryParse(header, out var headerId) && headerId > 0)
+            return headerId;
+
+        var claim = user.FindFirst("companyId") ?? user.FindFirst("CompanyId");
+        if (int.TryParse(claim?.Value, out var id) && id > 0)
+            return id;
+
+        return 0;
+    }
 }
 
  [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
@@ -65,22 +98,16 @@ public sealed class AuthorizeExactModuleFilter : IAsyncActionFilter
             return;
         }
 
-        if (AuthorizationBypass.IsEnabled(context.HttpContext))
+        if (AuthorizationBypass.IsEnabled(context.HttpContext) || AuthorizationIdentity.IsGlobalAdministrator(user))
         {
             await next();
             return;
         }
 
-        var companyClaim = user.FindFirst("companyId") ?? user.FindFirst("CompanyId");
-        if (!int.TryParse(companyClaim?.Value, out var companyId) || companyId <= 0)
+        var companyId = TenantResolutionHelper.ResolveCompanyId(context.HttpContext, user);
+        if (companyId <= 0)
         {
-            context.Result = new ObjectResult(new { success = false, errorCode = "COMPANY_REQUIRED", code = "COMPANY_REQUIRED" }) { StatusCode = StatusCodes.Status403Forbidden };
-            return;
-        }
-
-        if (AuthorizationBypass.IsEnabled(context.HttpContext))
-        {
-            await next();
+            context.Result = new ObjectResult(new { success = false, errorCode = "COMPANY_REQUIRED", code = "COMPANY_REQUIRED", message = "El usuario no tiene una empresa válida asignada." }) { StatusCode = StatusCodes.Status403Forbidden };
             return;
         }
 
@@ -88,9 +115,17 @@ public sealed class AuthorizeExactModuleFilter : IAsyncActionFilter
             .SelectMany(ModuleCodes.FromClaimPreservingIds)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var requestedId = _moduleCode.Trim();
+
         if (!assigned.Contains(ModuleCodes.All) && !assigned.Contains(requestedId))
         {
-            context.Result = new ObjectResult(new { success = false, errorCode = "MODULE_NOT_ASSIGNED", code = "MODULE_NOT_ASSIGNED", requiredModule = requestedId, assignedModules = assigned }) { StatusCode = StatusCodes.Status403Forbidden };
+            context.Result = new ObjectResult(new { 
+                success = false, 
+                errorCode = "MODULE_NOT_ASSIGNED", 
+                code = "MODULE_NOT_ASSIGNED", 
+                message = assigned.Count == 0 ? "Su cuenta no tiene módulos asignados. Contacte al administrador." : "No tienes acceso al módulo requerido.",
+                requiredModule = requestedId, 
+                assignedModules = assigned 
+            }) { StatusCode = StatusCodes.Status403Forbidden };
             return;
         }
 
@@ -98,7 +133,14 @@ public sealed class AuthorizeExactModuleFilter : IAsyncActionFilter
         var licensedParent = ModuleCodes.Normalize(requestedId);
         if (!licensed.Contains(ModuleCodes.All) && (licensedParent is null || !licensed.Contains(licensedParent)))
         {
-            context.Result = new ObjectResult(new { success = false, errorCode = "MODULE_NOT_LICENSED", code = "MODULE_NOT_LICENSED", requiredModule = requestedId }) { StatusCode = StatusCodes.Status403Forbidden };
+            context.Result = new ObjectResult(new { 
+                success = false, 
+                errorCode = "MODULE_NOT_LICENSED", 
+                code = "MODULE_NOT_LICENSED", 
+                message = "El módulo no está incluido en la licencia de la empresa.",
+                requiredModule = requestedId, 
+                assignedModules = assigned 
+            }) { StatusCode = StatusCodes.Status403Forbidden };
             return;
         }
 
@@ -133,20 +175,14 @@ public sealed class AuthorizeModuleFilter : IAsyncActionFilter
             return;
         }
 
-        if (AuthorizationBypass.IsEnabled(context.HttpContext))
+        if (AuthorizationBypass.IsEnabled(context.HttpContext) || AuthorizationIdentity.IsGlobalAdministrator(user))
         {
             await next();
             return;
         }
 
-        if (AuthorizationIdentity.IsGlobalAdministrator(user))
-        {
-            await next();
-            return;
-        }
-
-        var claim = user.FindFirst("companyId") ?? user.FindFirst("CompanyId");
-        if (!int.TryParse(claim?.Value, out var companyId) || companyId <= 0)
+        var companyId = TenantResolutionHelper.ResolveCompanyId(context.HttpContext, user);
+        if (companyId <= 0)
         {
             context.Result = Forbidden(user, 0, "COMPANY_REQUIRED", "El usuario no tiene una empresa válida asignada.", _moduleCode, Array.Empty<string>());
             return;
@@ -155,7 +191,7 @@ public sealed class AuthorizeModuleFilter : IAsyncActionFilter
         var requestedModule = ModuleCodes.Normalize(_moduleCode);
         var allowedModules = user.FindClaims("module", "AllowedModulesJson", "allowedModulesJson", "allowedModules", "allowed_modules", "modules")
             .SelectMany(ModuleCodes.FromClaim)
-            .ToHashSet(StringComparer.Ordinal);
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         if (allowedModules.Count == 0)
         {
@@ -163,7 +199,7 @@ public sealed class AuthorizeModuleFilter : IAsyncActionFilter
             return;
         }
 
-        if (requestedModule is null || (!allowedModules.Contains(ModuleCodes.All) && !allowedModules.Contains(requestedModule)))
+        if (requestedModule is null || (!allowedModules.Contains(ModuleCodes.All) && !allowedModules.Contains(requestedModule) && !allowedModules.Contains(_moduleCode)))
         {
             context.Result = Forbidden(user, companyId, "MODULE_NOT_ASSIGNED", "No tienes acceso al módulo requerido. Contacta al administrador para ampliar tu licencia.", requestedModule ?? _moduleCode, allowedModules);
             return;
@@ -171,7 +207,7 @@ public sealed class AuthorizeModuleFilter : IAsyncActionFilter
 
         var access = await _entitlements.GetAsync(companyId, context.HttpContext.RequestAborted);
         var licensedModules = ModuleCodes.Normalize(access.Modules);
-        if (!licensedModules.Contains(ModuleCodes.All) && !licensedModules.Contains(requestedModule))
+        if (!licensedModules.Contains(ModuleCodes.All) && (licensedModules.Count == 0 || !licensedModules.Contains(requestedModule)))
         {
             context.Result = Forbidden(user, companyId, "MODULE_NOT_LICENSED", "No tienes acceso al módulo requerido. Contacta al administrador para ampliar tu licencia.", requestedModule, allowedModules);
             return;
@@ -230,20 +266,14 @@ internal static class AuthorizationBypass
             return;
         }
 
-        if (AuthorizationBypass.IsEnabled(context.HttpContext))
+        if (AuthorizationBypass.IsEnabled(context.HttpContext) || AuthorizationIdentity.IsGlobalAdministrator(user))
         {
             await next();
             return;
         }
 
-        if (AuthorizationIdentity.IsGlobalAdministrator(user) || user.IsInRole("Admin") || user.HasClaim(ClaimTypes.Role, "Admin") || user.HasClaim("role", "Admin"))
-        {
-            await next();
-            return;
-        }
-
-        var companyClaim = user.FindFirst("companyId") ?? user.FindFirst("CompanyId");
-        if (!int.TryParse(companyClaim?.Value, out var companyId) || companyId <= 0)
+        var companyId = TenantResolutionHelper.ResolveCompanyId(context.HttpContext, user);
+        if (companyId <= 0)
         {
             _logger?.LogWarning("Module access denied. UserId={UserId}, RequiredModules={RequiredModules}, Code=COMPANY_REQUIRED", UserId(user), string.Join(',', _moduleCodes));
             context.Result = new ObjectResult(new

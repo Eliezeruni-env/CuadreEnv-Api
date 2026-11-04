@@ -150,7 +150,8 @@ public sealed record SwitchCompanyRequest(int CompanyId, string? DeviceId = null
         [HttpGet("/api/me/modules")]
         public async Task<IActionResult> Modules(
             [FromServices] Onion.Common.Services.ICompanyEntitlementService entitlements,
-            [FromServices] IUserService users)
+            [FromServices] IUserService users,
+            [FromServices] Onion.Common.Services.ICurrentUserService? currentUserService = null)
         {
             var idValue = User.FindFirst("sub")?.Value ??
                           User.FindFirst("userId")?.Value ??
@@ -162,10 +163,39 @@ public sealed record SwitchCompanyRequest(int CompanyId, string? DeviceId = null
             if (currentUser is null || !currentUser.Active || currentUser.IsDeleted)
                 return Unauthorized();
 
-            var assignedModules = ModuleCodes.FromClaimPreservingIds(currentUser.AllowedModulesJson).ToArray();
+            var isAdmin = currentUser.IsSuperUser ||
+                string.Equals(currentUser.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(currentUser.Role, "Admin", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(currentUser.Role, "Administrador", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(currentUser.Role, "Owner", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(currentUser.Role, "Dueño", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(currentUser.Role, "Dueno", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(currentUser.Role, "Gerente", StringComparison.OrdinalIgnoreCase);
 
             var isGlobalAdministrator = currentUser.IsSuperUser ||
                 string.Equals(currentUser.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase);
+
+            IReadOnlyCollection<string> assignedModules;
+            if (string.Equals(currentUser.AllowedModulesJson?.Trim(), "[]", StringComparison.Ordinal))
+            {
+                assignedModules = Array.Empty<string>();
+            }
+            else if (!string.IsNullOrWhiteSpace(currentUser.AllowedModulesJson))
+            {
+                assignedModules = ModuleCodes.FromClaimPreservingIds(currentUser.AllowedModulesJson).ToArray();
+                if (assignedModules.Count == 0)
+                {
+                    assignedModules = isAdmin ? new[] { ModuleCodes.All } : GetDefaultRoleModules(currentUser.Role);
+                }
+            }
+            else if (isAdmin)
+            {
+                assignedModules = new[] { ModuleCodes.All };
+            }
+            else
+            {
+                assignedModules = GetDefaultRoleModules(currentUser.Role);
+            }
 
             IReadOnlyCollection<string> licensedModules;
             if (isGlobalAdministrator)
@@ -174,22 +204,29 @@ public sealed record SwitchCompanyRequest(int CompanyId, string? DeviceId = null
             }
             else
             {
-                var companyClaim = User.FindFirst("companyId") ?? User.FindFirst("CompanyId");
-                licensedModules = int.TryParse(companyClaim?.Value, out var companyId) && companyId > 0
-                    ? ModuleCodes.Normalize((await entitlements.GetAsync(companyId)).Modules)
+                int? companyId = currentUserService?.CompanyId;
+                if (!companyId.HasValue || companyId <= 0)
+                {
+                    var companyClaim = User.FindFirst("companyId") ?? User.FindFirst("CompanyId");
+                    if (int.TryParse(companyClaim?.Value, out var cid) && cid > 0)
+                        companyId = cid;
+                }
+
+                licensedModules = companyId.HasValue && companyId > 0
+                    ? ModuleCodes.Normalize((await entitlements.GetAsync(companyId.Value)).Modules)
                     : Array.Empty<string>();
             }
 
             var hasAllAssignedModules = assignedModules.Contains(ModuleCodes.All, StringComparer.Ordinal);
-            var hasAllLicensedModules = licensedModules.Contains(ModuleCodes.All, StringComparer.Ordinal) || licensedModules.Count == 0;
+            var hasAllLicensedModules = licensedModules.Contains(ModuleCodes.All, StringComparer.Ordinal) || (isGlobalAdministrator && licensedModules.Count == 0);
             var effectiveModules = hasAllAssignedModules && hasAllLicensedModules
                 ? new[] { ModuleCodes.All }
                 : hasAllAssignedModules
-                    ? (licensedModules.Count > 0 ? licensedModules.ToArray() : assignedModules)
+                    ? (licensedModules.Count > 0 ? licensedModules.ToArray() : (isGlobalAdministrator ? assignedModules.ToArray() : Array.Empty<string>()))
                     : hasAllLicensedModules
-                        ? assignedModules
+                        ? assignedModules.ToArray()
                         : assignedModules
-                            .Where(assigned => licensedModules.Contains(ModuleCodes.Normalize(assigned), StringComparer.Ordinal))
+                            .Where(assigned => licensedModules.Contains(ModuleCodes.Normalize(assigned) ?? assigned, StringComparer.Ordinal))
                             .ToArray();
 
             var responseLicensed = licensedModules.ToArray();
@@ -200,6 +237,18 @@ public sealed record SwitchCompanyRequest(int CompanyId, string? DeviceId = null
                 modules = effectiveModules,
                 hasAllModules = effectiveModules.Contains(ModuleCodes.All, StringComparer.Ordinal)
             });
+        }
+
+        private static string[] GetDefaultRoleModules(string? role)
+        {
+            if (string.IsNullOrWhiteSpace(role)) return new[] { "dashboard", "sales", "cashregister", "customers" };
+            if (string.Equals(role, "Supervisor", StringComparison.OrdinalIgnoreCase))
+                return new[] { "dashboard", "sales", "cashregister", "inventory", "customers", "audit", "reports", "users" };
+            if (string.Equals(role, "Cajero", StringComparison.OrdinalIgnoreCase) || string.Equals(role, "Cashier", StringComparison.OrdinalIgnoreCase))
+                return new[] { "dashboard", "sales", "cashregister", "customers", "products.detail_sales" };
+            if (string.Equals(role, "Vendedor", StringComparison.OrdinalIgnoreCase) || string.Equals(role, "Seller", StringComparison.OrdinalIgnoreCase))
+                return new[] { "dashboard", "sales", "inventory", "customers" };
+            return new[] { "dashboard", "sales", "cashregister", "customers" };
         }
 
         [Authorize]

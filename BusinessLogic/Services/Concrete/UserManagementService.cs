@@ -101,7 +101,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                     u.Latitude,
                     u.Longitude,
                     u.LastLoginIp,
-                    ParseAllowedModules(u.AllowedModulesJson, u.Id)
+                    ParseAllowedModules(u.AllowedModulesJson, u.Id, u.Role, u.IsSuperUser)
                 )).ToList(),
                 Total = paged.TotalItemCount,
                 Page = pageNumber,
@@ -116,8 +116,13 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var u = await _userRepo.GetByIdAsync(id);
             if (u == null) return null;
-            if (!_currentUserService.IsGlobalAdministrator && u.CompanyId != _currentUserService.CompanyId)
-                return null;
+            if (!_currentUserService.IsGlobalAdministrator && _currentUserService.CompanyId.HasValue)
+            {
+                var cid = _currentUserService.CompanyId.Value;
+                var belongs = u.CompanyId == cid || await _db.UserCompanies.AnyAsync(uc => uc.UserId == u.Id && uc.CompanyId == cid);
+                if (!belongs && u.CompanyId.HasValue && u.CompanyId.Value > 0)
+                    return null;
+            }
             return new UserDetailDto
             {
                 Id = u.Id,
@@ -138,7 +143,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 LastLoginAt = u.LastLoginAt
                 ,
                 IsSuperUser = u.IsSuperUser,
-                AllowedModules = ParseAllowedModules(u.AllowedModulesJson, u.Id),
+                AllowedModules = ParseAllowedModules(u.AllowedModulesJson, u.Id, u.Role, u.IsSuperUser),
                 Address = u.Address,
                 City = u.City,
                 Country = u.Country,
@@ -250,7 +255,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 TempPasswordSent = false
                 ,
                 IsSuperUser = user.IsSuperUser
-                , AllowedModules = ParseAllowedModules(user.AllowedModulesJson, user.Id)
+                , AllowedModules = ParseAllowedModules(user.AllowedModulesJson, user.Id, user.Role, user.IsSuperUser)
                 , Address = user.Address
                 , City = user.City
                 , Country = user.Country
@@ -290,10 +295,21 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var u = await _userRepo.GetByIdAsync(id);
             if (u == null) throw new InvalidOperationException("User not found");
-            var allowedRoles = new[] { "Admin", "Supervisor", "Vendedor", "Cajero", "Employee" };
-            if (!allowedRoles.Contains(req.Role, StringComparer.OrdinalIgnoreCase) ||
-                (!_currentUserService.IsGlobalAdministrator && string.Equals(req.Role, "Admin", StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidOperationException("Role is not allowed.");
+            var isCurrentAdmin = _currentUserService.IsGlobalAdministrator ||
+                string.Equals(_currentUserService.UserRole, "Admin", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(_currentUserService.UserRole, "Administrador", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(_currentUserService.UserRole, "Owner", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(_currentUserService.UserRole, "Dueño", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(_currentUserService.UserRole, "Dueno", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(_currentUserService.UserRole, "Gerente", StringComparison.OrdinalIgnoreCase);
+
+            var allowedRoles = new[] { "Admin", "Administrador", "Supervisor", "Vendedor", "Cajero", "Employee", "Empleado" };
+            if (!allowedRoles.Contains(req.Role, StringComparer.OrdinalIgnoreCase))
+                throw new InvalidOperationException("El rol seleccionado no es válido.");
+
+            if (!isCurrentAdmin && (string.Equals(req.Role, "Admin", StringComparison.OrdinalIgnoreCase) || string.Equals(req.Role, "Administrador", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("No tienes permisos para asignar el rol de Administrador.");
+
             if (u.Email != req.Email && (await _userRepo.FindAsync(x => x.Email == req.Email)).Any()) throw new InvalidOperationException("Email already in use");
             if (u.UserName != req.UserName && (await _userRepo.FindAsync(x => x.UserName == req.UserName)).Any()) throw new InvalidOperationException("UserName already in use");
 
@@ -309,8 +325,13 @@ namespace Onion.BussinesLogic.Services.Concrete
             u.Role = req.Role;
             if (req.AllowedModules is not null)
                 u.AllowedModulesJson = SerializeAllowedModules(req.AllowedModules);
-            if (!_currentUserService.IsGlobalAdministrator && u.CompanyId != _currentUserService.CompanyId)
-                throw new InvalidOperationException("User not found");
+            if (!_currentUserService.IsGlobalAdministrator && _currentUserService.CompanyId.HasValue)
+            {
+                var cid = _currentUserService.CompanyId.Value;
+                var belongs = u.CompanyId == cid || await _db.UserCompanies.AnyAsync(uc => uc.UserId == u.Id && uc.CompanyId == cid);
+                if (!belongs && u.CompanyId.HasValue && u.CompanyId.Value > 0)
+                    throw new InvalidOperationException("User not found");
+            }
             if (_currentUserService.IsGlobalAdministrator && req.CompanyId.HasValue && req.CompanyId != u.CompanyId)
             {
                 var companyExists = await _db.Companies.IgnoreQueryFilters()
@@ -425,36 +446,65 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         private static string SerializeAllowedModules(IEnumerable<string>? moduleCodes)
         {
-            var assigned = new HashSet<string>(StringComparer.Ordinal);
+            var assigned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var moduleCode in moduleCodes ?? Array.Empty<string>())
             {
                 var literal = moduleCode?.Trim();
-                if (string.Equals(literal, ModuleCodes.All, StringComparison.Ordinal))
-                    throw new InvalidOperationException("El comodín de acceso total no se puede asignar desde User Management.");
+                if (string.IsNullOrWhiteSpace(literal)) continue;
+                if (string.Equals(literal, ModuleCodes.All, StringComparison.Ordinal) ||
+                    string.Equals(literal, "all", StringComparison.OrdinalIgnoreCase))
+                {
+                    assigned.Add(ModuleCodes.All);
+                    continue;
+                }
 
-                if (ModuleCodes.Normalize(literal) is null)
-                    throw new InvalidOperationException($"El módulo '{moduleCode}' no es válido.");
-
-                assigned.Add(literal!);
+                if (ModuleCodes.Normalize(literal) is not null)
+                {
+                    assigned.Add(literal.ToLowerInvariant());
+                }
+                else
+                {
+                    assigned.Add(literal.ToLowerInvariant());
+                }
             }
 
-            return JsonSerializer.Serialize(assigned);
+            return JsonSerializer.Serialize(assigned.ToList());
         }
 
-        private List<string> ParseAllowedModules(string? allowedModulesJson, int userId)
+        private List<string> ParseAllowedModules(string? allowedModulesJson, int userId, string? role = null, bool isSuperUser = false)
         {
-            if (string.IsNullOrWhiteSpace(allowedModulesJson))
-                return new List<string>();
+            if (isSuperUser ||
+                string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(role, "Administrador", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(role, "Owner", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(role, "Dueño", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(role, "Dueno", StringComparison.OrdinalIgnoreCase))
+            {
+                return new List<string> { ModuleCodes.All };
+            }
 
-            try
+            if (!string.IsNullOrWhiteSpace(allowedModulesJson))
             {
-                return ModuleCodes.FromClaimPreservingIds(allowedModulesJson).ToList();
+                try
+                {
+                    var parsed = ModuleCodes.FromClaimPreservingIds(allowedModulesJson).ToList();
+                    if (parsed.Count > 0) return parsed;
+                }
+                catch (JsonException ex)
+                {
+                    _logger?.LogWarning(ex, "Invalid AllowedModulesJson for user {UserId}", userId);
+                }
             }
-            catch (JsonException ex)
-            {
-                _logger.LogWarning(ex, "Invalid AllowedModulesJson for user {UserId}", userId);
-                return new List<string>();
-            }
+
+            if (string.Equals(role, "Supervisor", StringComparison.OrdinalIgnoreCase))
+                return new List<string> { "dashboard", "sales", "cashregister", "inventory", "customers", "audit", "reports", "users" };
+            if (string.Equals(role, "Cajero", StringComparison.OrdinalIgnoreCase) || string.Equals(role, "Cashier", StringComparison.OrdinalIgnoreCase))
+                return new List<string> { "dashboard", "sales", "cashregister", "customers", "products.detail_sales" };
+            if (string.Equals(role, "Vendedor", StringComparison.OrdinalIgnoreCase) || string.Equals(role, "Seller", StringComparison.OrdinalIgnoreCase))
+                return new List<string> { "dashboard", "sales", "inventory", "customers" };
+
+            return new List<string> { "dashboard", "sales", "cashregister", "customers" };
         }
     }
 }

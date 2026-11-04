@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -380,8 +380,8 @@ namespace Onion.DataAccess
              modelBuilder.Entity<Return>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
              modelBuilder.Entity<CashRegister>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
              modelBuilder.Entity<CashMovement>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
-            // Option A: User is a global identity entity across tenants. Membership scoping is enforced via UserCompany.
-            modelBuilder.Entity<User>().HasQueryFilter(e => !e.IsDeleted);
+            // Option A: User is scoped by tenant when tenant context is present, but accessible during global auth/login when TenantCompanyId is null.
+            modelBuilder.Entity<User>().HasQueryFilter(e => !e.IsDeleted && (this.IsGlobalTenantAccess || !this.TenantCompanyId.HasValue || e.CompanyId == (int?)this.TenantCompanyIdForQuery));
             modelBuilder.Entity<Onion.Domain.Audit.AuditLog>().HasQueryFilter(e => this.IsGlobalTenantAccess || e.CompanyId == (int?)this.TenantCompanyIdForQuery);
              modelBuilder.Entity<CompanySettings>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
@@ -619,18 +619,21 @@ namespace Onion.DataAccess
                 }
 
                 var companyProperty = entry.Properties.FirstOrDefault(p => string.Equals(p.Metadata.Name, "CompanyId", StringComparison.OrdinalIgnoreCase));
-                var isGlobalUser = entry.Entity is User;
-                if (companyProperty != null && !IsGlobalTenantAccess && !isGlobalUser)
+                var isUser = entry.Entity is User;
+                if (companyProperty != null && !IsGlobalTenantAccess)
                 {
                     var tenantId = this.TenantCompanyId;
                     var currentCompanyId = companyProperty.CurrentValue is int current ? current : 0;
                     var originalCompanyId = companyProperty.OriginalValue is int original ? original : currentCompanyId;
 
                     if (!tenantId.HasValue || tenantId.Value <= 0)
-                        throw new InvalidOperationException($"Tenant context is required for entity {entry.Metadata.ClrType.Name}.");
-
-                    if ((currentCompanyId > 0 && currentCompanyId != tenantId.Value) ||
-                        (originalCompanyId > 0 && originalCompanyId != tenantId.Value))
+                    {
+                        // Allow updating existing users without tenant context (e.g. at login to record LastLoginAt/LastLoginIp).
+                        if (!isUser || entry.State == EntityState.Added)
+                            throw new InvalidOperationException($"Tenant context is required for entity {entry.Metadata.ClrType.Name}.");
+                    }
+                    else if ((currentCompanyId > 0 && currentCompanyId != tenantId.Value) ||
+                             (originalCompanyId > 0 && originalCompanyId != tenantId.Value))
                     {
                         throw new InvalidOperationException($"Tenant isolation violation: entity {entry.Metadata.ClrType.Name} does not belong to the current company.");
                     }
