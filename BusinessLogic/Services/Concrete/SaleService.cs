@@ -120,12 +120,13 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             // Auto-resolve or validate CashSession and CashRegister
             Onion.Domain.Finance.CashSession? session = null;
+            var currentCashierId = _currentUserService?.UserId ?? 0;
 
             // 1. Try to fetch the requested CashSessionId if provided
             if (sale.CashSessionId.HasValue && sale.CashSessionId.Value > 0)
             {
                 var found = await _uow.CashSessions.GetByIdAsync(sale.CashSessionId.Value);
-                if (found != null && found.Status == CashSessionStatus.Open && (sale.CompanyId <= 0 || found.CompanyId == sale.CompanyId))
+                if (found != null && found.Status == CashSessionStatus.Open && (sale.CompanyId <= 0 || found.CompanyId == sale.CompanyId) && (currentCashierId <= 0 || found.CashierUserId == currentCashierId))
                 {
                     session = found;
                 }
@@ -134,13 +135,13 @@ namespace Onion.BussinesLogic.Services.Concrete
             // 2. If no open session found by CashSessionId, try by CashRegisterId
             if (session == null && sale.CashRegisterId.HasValue && sale.CashRegisterId.Value > 0)
             {
-                session = (await _uow.CashSessions.FindAsync(s => s.CashRegisterId == sale.CashRegisterId.Value && s.Status == CashSessionStatus.Open && (sale.CompanyId <= 0 || s.CompanyId == sale.CompanyId)))?.FirstOrDefault();
+                session = (await _uow.CashSessions.FindAsync(s => s.CashRegisterId == sale.CashRegisterId.Value && s.Status == CashSessionStatus.Open && (sale.CompanyId <= 0 || s.CompanyId == sale.CompanyId) && (currentCashierId <= 0 || s.CashierUserId == currentCashierId)))?.FirstOrDefault();
             }
 
             // 3. Fallback: find ANY active open session belonging to this company
             if (session == null)
             {
-                session = (await _uow.CashSessions.FindAsync(s => s.Status == CashSessionStatus.Open && (sale.CompanyId <= 0 || s.CompanyId == sale.CompanyId)))?.FirstOrDefault();
+                session = (await _uow.CashSessions.FindAsync(s => s.Status == CashSessionStatus.Open && (sale.CompanyId <= 0 || s.CompanyId == sale.CompanyId) && (currentCashierId <= 0 || s.CashierUserId == currentCashierId)))?.FirstOrDefault();
             }
 
             // 4. Auto-healing: If no open session exists, check if any CashRegister is marked OPEN and auto-create the session
@@ -150,13 +151,13 @@ namespace Onion.BussinesLogic.Services.Concrete
                 if (sale.CashRegisterId.HasValue && sale.CashRegisterId.Value > 0)
                 {
                     reg = await _uow.CashRegisters.GetByIdAsync(sale.CashRegisterId.Value);
-                    if (reg != null && (reg.Status != CashRegisterStatus.OPEN || reg.IsDeleted || (sale.CompanyId > 0 && reg.CompanyId != sale.CompanyId)))
+                    if (reg != null && (reg.Status != CashRegisterStatus.OPEN || reg.IsDeleted || (sale.CompanyId > 0 && reg.CompanyId != sale.CompanyId) || (currentCashierId > 0 && reg.OpenedByUserId != currentCashierId)))
                         reg = null;
                 }
 
                 if (reg == null)
                 {
-                    reg = (await _uow.CashRegisters.FindAsync(r => (sale.CompanyId <= 0 || r.CompanyId == sale.CompanyId) && r.Status == CashRegisterStatus.OPEN && !r.IsDeleted))?.FirstOrDefault();
+                    reg = (await _uow.CashRegisters.FindAsync(r => (sale.CompanyId <= 0 || r.CompanyId == sale.CompanyId) && r.Status == CashRegisterStatus.OPEN && !r.IsDeleted && (currentCashierId <= 0 || r.OpenedByUserId == currentCashierId)))?.FirstOrDefault();
                 }
 
                 if (reg != null)

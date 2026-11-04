@@ -5,6 +5,7 @@ namespace Onion.Domain.Users
     public class RefreshToken : BaseEntity
     {
         public int UserId { get; set; }
+        public int CompanyId { get; set; }
         public string Token { get; set; } = string.Empty;
         // SHA256 hash of the token for secure storage. New tokens will populate TokenHash
         // Existing rows may have Token populated for backward compatibility.

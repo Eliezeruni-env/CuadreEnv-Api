@@ -9,7 +9,11 @@ public enum FiscalDocumentStatus
     Submitted,
     Accepted,
     Rejected,
-    Retry
+    Retry,
+    AcceptedByMock,
+    AcceptedByDgii,
+    RejectedByFiscalProvider,
+    RetryScheduled
 }
 
 public class FiscalDocument : BaseEntity

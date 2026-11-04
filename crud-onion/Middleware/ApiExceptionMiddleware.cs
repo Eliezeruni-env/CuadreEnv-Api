@@ -153,7 +153,7 @@ namespace Onion.Controllers.Middleware
         {
             context.Response.StatusCode = status;
             context.Response.ContentType = "application/json";
-            var payload = Onion.Common.Models.ApiResponse<object>.Fail(message, new[] { code });
+            var payload = Onion.Common.Models.ApiResponse<object>.Fail(message, new[] { code }, status, code);
             await context.Response.WriteAsync(JsonSerializer.Serialize(payload, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
         }
     }

@@ -57,7 +57,7 @@ public sealed class FiscalOutboxWorker : BackgroundService
         var candidates = await db.FiscalDocuments
             .IgnoreQueryFilters()
             .Where(x => x.Status == FiscalDocumentStatus.Pending ||
-                        (x.Status == FiscalDocumentStatus.Retry && x.NextAttemptAt <= now) ||
+                        ((x.Status == FiscalDocumentStatus.Retry || x.Status == FiscalDocumentStatus.RetryScheduled) && x.NextAttemptAt <= now) ||
                         (x.Status == FiscalDocumentStatus.Processing && x.LastAttemptAt <= staleProcessingAt))
             .OrderBy(x => x.CreationDate)
             .Select(x => x.Id)
@@ -70,7 +70,7 @@ public sealed class FiscalOutboxWorker : BackgroundService
                 .IgnoreQueryFilters()
                 .Where(x => x.Id == id &&
                             (x.Status == FiscalDocumentStatus.Pending ||
-                             (x.Status == FiscalDocumentStatus.Retry && x.NextAttemptAt <= now) ||
+                             ((x.Status == FiscalDocumentStatus.Retry || x.Status == FiscalDocumentStatus.RetryScheduled) && x.NextAttemptAt <= now) ||
                              (x.Status == FiscalDocumentStatus.Processing && x.LastAttemptAt <= staleProcessingAt)))
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(x => x.Status, FiscalDocumentStatus.Processing)
@@ -93,7 +93,7 @@ public sealed class FiscalOutboxWorker : BackgroundService
             responseBody = result.ResponsePayload;
             if (result.Outcome == FiscalSubmissionOutcome.Rejected)
             {
-                document.Status = FiscalDocumentStatus.Rejected;
+                document.Status = FiscalDocumentStatus.RejectedByFiscalProvider;
                 document.LastError = result.ErrorMessage;
                 document.NextAttemptAt = null;
                 db.FiscalSubmissionAudits.Add(new FiscalSubmissionAudit
@@ -110,7 +110,9 @@ public sealed class FiscalOutboxWorker : BackgroundService
             if (result.Outcome == FiscalSubmissionOutcome.Retry)
                 throw new HttpRequestException(result.ErrorMessage ?? "Fiscal provider requested a retry.");
 
-            document.Status = FiscalDocumentStatus.Accepted;
+            document.Status = _configuration.GetValue<bool>("Dgii:Enabled")
+                ? FiscalDocumentStatus.AcceptedByDgii
+                : FiscalDocumentStatus.AcceptedByMock;
             document.LastError = null;
             document.NextAttemptAt = null;
             db.FiscalSubmissionAudits.Add(new FiscalSubmissionAudit
@@ -125,7 +127,7 @@ public sealed class FiscalOutboxWorker : BackgroundService
         {
             var maxAttempts = Math.Max(1, _configuration.GetValue("Fiscal:MaxAttempts", 8));
             var exhausted = document.AttemptCount >= maxAttempts;
-            document.Status = exhausted ? FiscalDocumentStatus.Rejected : FiscalDocumentStatus.Retry;
+            document.Status = exhausted ? FiscalDocumentStatus.RejectedByFiscalProvider : FiscalDocumentStatus.RetryScheduled;
             document.LastError = ex.Message;
             document.NextAttemptAt = exhausted ? null : DateTime.UtcNow.AddSeconds(Math.Min(3600, Math.Pow(2, document.AttemptCount)));
             responseBody = ex.Message;

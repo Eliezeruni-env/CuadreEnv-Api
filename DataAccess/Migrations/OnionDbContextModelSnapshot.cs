@@ -1673,6 +1673,16 @@ namespace Onion.DataAccess.Migrations
                     b.Property<int?>("SupervisorUserId")
                         .HasColumnType("integer");
 
+                    b.Property<decimal>("TotalIn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal>("TotalOut")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<int>("TransferVoucherCount")
                         .HasColumnType("integer");
 
@@ -3196,6 +3206,9 @@ namespace Onion.DataAccess.Migrations
                     b.Property<bool>("Active")
                         .HasColumnType("boolean");
 
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("CreateBy")
                         .IsRequired()
                         .HasColumnType("text");
@@ -3240,7 +3253,8 @@ namespace Onion.DataAccess.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId", "CompanyId", "TokenHash")
+                        .IsUnique();
 
                     b.ToTable("RefreshTokens");
                 });
@@ -3292,8 +3306,7 @@ namespace Onion.DataAccess.Migrations
 
                     b.Property<string>("Gender")
                         .IsRequired()
-                        .HasMaxLength(1)
-                        .HasColumnType("character varying(1)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Identification")
                         .HasColumnType("text");

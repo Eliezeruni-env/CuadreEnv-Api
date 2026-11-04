@@ -21,37 +21,17 @@ namespace Onion.Controllers.Middleware
         public async Task InvokeAsync(HttpContext context)
         {
             var user = context.User;
-            // Allow some public endpoints to be called without tenant claim even if caller is authenticated
             var path = context.Request.Path.HasValue ? context.Request.Path.Value ?? string.Empty : string.Empty;
             var method = context.Request.Method ?? string.Empty;
 
-            // POST /company is used to register a new tenant; authenticated callers without a CompanyId
-            // should be allowed to create a company and then be associated to it. Skip tenant validation
-            // for that specific case.
             var normalizedPath = path.TrimEnd('/');
-            var pathSegments = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            var resource = pathSegments.Length > 0 ? pathSegments[^1] : string.Empty;
-            var parentResource = pathSegments.Length > 1 ? pathSegments[^2] : string.Empty;
 
-            // Authentication, switch-company, my-companies, and company-plan discovery are valid before/during onboarding and login.
-            if (normalizedPath.Contains("/auth", StringComparison.OrdinalIgnoreCase) ||
+            if (normalizedPath.StartsWith("/auth", StringComparison.OrdinalIgnoreCase) ||
                 normalizedPath.EndsWith("/users/my-companies", StringComparison.OrdinalIgnoreCase) ||
-                normalizedPath.Contains("/api/users/login-sync", StringComparison.OrdinalIgnoreCase) ||
-                (parentResource.Equals("company", StringComparison.OrdinalIgnoreCase) &&
-                 resource.Equals("plans", StringComparison.OrdinalIgnoreCase)))
-            {
-                var cid = ResolveCompanyId(context, user);
-                if (cid.HasValue && cid.Value > 0)
-                {
-                    context.Items["TenantCompanyId"] = cid.Value;
-                }
-                await _next(context);
-                return;
-            }
-
-            if ((string.Equals(normalizedPath, "/company", System.StringComparison.OrdinalIgnoreCase) ||
-                 normalizedPath.EndsWith("/company", System.StringComparison.OrdinalIgnoreCase)) &&
-                string.Equals(method, "POST", System.StringComparison.OrdinalIgnoreCase))
+                normalizedPath.StartsWith("/v1/auth/", StringComparison.OrdinalIgnoreCase) ||
+                normalizedPath.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase) ||
+                normalizedPath.Equals("/health", StringComparison.OrdinalIgnoreCase) ||
+                normalizedPath.Equals("/hc", StringComparison.OrdinalIgnoreCase))
             {
                 await _next(context);
                 return;
@@ -59,10 +39,9 @@ namespace Onion.Controllers.Middleware
 
             if (user?.Identity != null && user.Identity.IsAuthenticated)
             {
-                var currentUser = context.RequestServices?.GetService<Onion.Common.Services.ICurrentUserService>();
                 var userIdClaim = user.FindFirst("sub") ?? user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
                 _ = int.TryParse(userIdClaim?.Value, out var userId);
-                var requestedCompanyId = ResolveCompanyId(context, user);
+                var requestedCompanyId = ResolveCompanyId(context);
 
                 if (userId <= 0)
                 {
@@ -74,7 +53,7 @@ namespace Onion.Controllers.Middleware
                 var userRecord = userId > 0
                     ? await db.Users.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId)
                     : null;
-                var resolvedCompanyId = requestedCompanyId ?? userRecord?.CompanyId;
+                var resolvedCompanyId = requestedCompanyId;
 
                 if (resolvedCompanyId is not > 0)
                 {
@@ -90,12 +69,8 @@ namespace Onion.Controllers.Middleware
                     return;
                 }
 
-                var hasCompanyAccess = userId > 0 && (
-                    (userRecord != null && userRecord.CompanyId == resolvedCompanyId.Value) ||
-                    await db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
-                        .AnyAsync(x => x.UserId == userId && x.CompanyId == resolvedCompanyId.Value && x.Active && !x.IsDeleted) ||
-                    (userRecord != null && (userRecord.IsSuperUser || string.Equals(userRecord.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase)))
-                );
+                var hasCompanyAccess = userId > 0 && await db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
+                    .AnyAsync(x => x.UserId == userId && x.CompanyId == resolvedCompanyId.Value && x.Active && !x.IsDeleted);
                 if (!hasCompanyAccess)
                 {
                     await WriteCompanyRequiredAsync(context);
@@ -110,7 +85,7 @@ namespace Onion.Controllers.Middleware
             await _next(context);
         }
 
-        private static int? ResolveCompanyId(HttpContext context, System.Security.Claims.ClaimsPrincipal user)
+        private static int? ResolveCompanyId(HttpContext context)
         {
             if (context.Items.TryGetValue("TenantCompanyId", out var itemValue) &&
                 TryParseCompanyId(itemValue, out var itemCompanyId))
@@ -121,8 +96,7 @@ namespace Onion.Controllers.Middleware
             if (TryParseCompanyId(headerValue, out var headerCompanyId))
                 return headerCompanyId;
 
-            var claimValue = (user.FindFirst("companyId") ?? user.FindFirst("CompanyId"))?.Value;
-            return TryParseCompanyId(claimValue, out var claimCompanyId) ? claimCompanyId : null;
+            return null;
         }
 
         private static bool TryParseCompanyId(object? value, out int companyId)

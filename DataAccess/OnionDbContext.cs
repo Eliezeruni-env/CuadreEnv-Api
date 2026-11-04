@@ -185,6 +185,8 @@ namespace Onion.DataAccess
                 entity.Property(e => e.OpeningAmount).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.CurrentBalance).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.ExpectedCash).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.TotalIn).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
+                entity.Property(e => e.TotalOut).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
                 entity.Property(e => e.DeclaredCash).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.DeclaredCards).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.DeclaredTransfers).HasColumnType("decimal(18,2)");
@@ -380,6 +382,13 @@ namespace Onion.DataAccess
              modelBuilder.Entity<Return>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
              modelBuilder.Entity<CashRegister>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
              modelBuilder.Entity<CashMovement>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<CashRegisterPause>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<Payment>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<PurchaseDetail>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<SaleDetail>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<ReturnDetail>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<Onion.Domain.Invoices.FiscalDocument>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<Onion.Domain.Invoices.FiscalSubmissionAudit>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
             // Option A: User is scoped by tenant when tenant context is present, but accessible during global auth/login when TenantCompanyId is null.
             modelBuilder.Entity<User>().HasQueryFilter(e => !e.IsDeleted && (this.IsGlobalTenantAccess || !this.TenantCompanyId.HasValue || e.CompanyId == (int?)this.TenantCompanyIdForQuery));
             modelBuilder.Entity<Onion.Domain.Audit.AuditLog>().HasQueryFilter(e => this.IsGlobalTenantAccess || e.CompanyId == (int?)this.TenantCompanyIdForQuery);
@@ -549,6 +558,10 @@ namespace Onion.DataAccess
                 .HasConversion<int>();
 
             modelBuilder.Entity<Onion.Domain.Users.RefreshToken>()
+                .HasIndex(rt => new { rt.UserId, rt.CompanyId, rt.TokenHash })
+                .IsUnique();
+
+            modelBuilder.Entity<Onion.Domain.Users.RefreshToken>()
                 .HasOne(rt => rt.User)
                 .WithMany()
                 .HasForeignKey(rt => rt.UserId)
@@ -613,7 +626,8 @@ namespace Onion.DataAccess
                     {
                         // In Option A, User is a global identity entity and can be created or updated outside a tenant context (e.g. registration/onboarding)
                         var isUserEntity = entry.Entity is User;
-                        if (!isUserEntity && !IsGlobalTenantAccess)
+                        var isRefreshToken = entry.Entity is Onion.Domain.Users.RefreshToken;
+                        if (!isUserEntity && !isRefreshToken && !IsGlobalTenantAccess)
                             throw new InvalidOperationException($"Tenant context is required to insert tenant-owned entity {entry.Metadata.ClrType.Name}.");
                     }
                 }
@@ -629,7 +643,7 @@ namespace Onion.DataAccess
                     if (!tenantId.HasValue || tenantId.Value <= 0)
                     {
                         // Allow updating existing users without tenant context (e.g. at login to record LastLoginAt/LastLoginIp).
-                        if (!isUser || entry.State == EntityState.Added)
+                        if (!isUser && entry.Entity is not Onion.Domain.Users.RefreshToken)
                             throw new InvalidOperationException($"Tenant context is required for entity {entry.Metadata.ClrType.Name}.");
                     }
                     else if ((currentCompanyId > 0 && currentCompanyId != tenantId.Value) ||

@@ -35,7 +35,7 @@ namespace Onion.Controllers
                 var paged = await _uow.Purchases.GetPagedAsync(Math.Max(1, pageNumber), Math.Clamp(pageSize, 1, 100));
                 return Ok(new
                 {
-                    data = paged.Items,
+                    items = paged.Items,
                     pageNumber = Math.Max(1, pageNumber),
                     pageSize = paged.PageSize,
                     totalCount = paged.TotalItemCount,
@@ -100,6 +100,13 @@ namespace Onion.Controllers
         [HttpPut]
         public async Task<IActionResult> Put([FromBody] Purchase purchase)
         {
+            var companyId = _currentUser.CompanyId;
+            if (companyId is not > 0) throw new TenantRequiredException("A valid company is required.");
+            var existing = await _uow.Purchases.GetByIdAsync(purchase.Id);
+            if (existing is null) return NotFound();
+            if (purchase.CompanyId > 0 && purchase.CompanyId != companyId.Value)
+                throw new TenantRequiredException("The purchase belongs to another company.");
+            purchase.CompanyId = companyId.Value;
             _uow.Purchases.Update(purchase);
             await _uow.SaveChangesAsync();
             return NoContent();

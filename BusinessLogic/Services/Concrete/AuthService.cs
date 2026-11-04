@@ -276,6 +276,8 @@ namespace Onion.BussinesLogic.Services.Concrete
             IReadOnlyCollection<string>? modules = null)
         {
             if (user == null) throw new ArgumentNullException(nameof(user));
+            if (user.CompanyId is not > 0)
+                throw new TenantRequiredException("A valid active company is required to issue a refresh token.");
 
             // Cleanup old revoked tokens on login activity to keep table bounded
             await CleanupExpiredRevokedTokensAsync();
@@ -300,6 +302,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             var rt = new Onion.Domain.Users.RefreshToken
             {
                 UserId = user.Id,
+                CompanyId = user.CompanyId.Value,
                 Token = string.Empty, // avoid storing plaintext
                 TokenHash = ComputeSha256Hash(refresh),
                 Expires = DateTime.UtcNow.Add(_refreshTokenLifetime),
@@ -351,19 +354,18 @@ namespace Onion.BussinesLogic.Services.Concrete
             // cannot be used until the user is loaded and the new JWT is issued.
             var user = await _uow.Users.GetByIdUnscopedAsync(refresh.UserId) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_TOKEN", Message = "User not found", Language = "EN" });
 
+            if (refresh.CompanyId <= 0 || !await _db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
+                    .AnyAsync(x => x.UserId == user.Id && x.CompanyId == refresh.CompanyId && x.Active && !x.IsDeleted))
+                throw new CustomException(new Onion.Common.Models.Error { Code = "COMPANY_ACCESS_DENIED", Message = "The refresh token is not linked to an active company membership.", Language = "EN" });
+
             if (!user.Active || user.IsDeleted)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "ACCOUNT_SUSPENDED", Message = "Su cuenta se encuentra suspendida o deshabilitada. Comuníquese con la administración de CuadreEnv.", Language = "ES" });
 
-            var activeCompanyId = user.CompanyId;
-            if (activeCompanyId is > 0)
-            {
-                var companyActive = await _db.Companies.IgnoreQueryFilters().AsNoTracking()
-                    .AnyAsync(x => x.Id == activeCompanyId.Value && x.Active && !x.IsDeleted);
-                var membershipActive = await _db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
-                    .AnyAsync(x => x.UserId == user.Id && x.CompanyId == activeCompanyId.Value && x.Active && !x.IsDeleted);
-                if (!companyActive || (!membershipActive && !user.IsSuperUser))
-                    activeCompanyId = null;
-            }
+            var activeCompanyId = refresh.CompanyId;
+            var companyActive = await _db.Companies.IgnoreQueryFilters().AsNoTracking()
+                .AnyAsync(x => x.Id == activeCompanyId && x.Active && !x.IsDeleted);
+            if (!companyActive)
+                throw new CustomException(new Onion.Common.Models.Error { Code = "COMPANY_ACCESS_DENIED", Message = "The refresh token company is inactive.", Language = "EN" });
             user.CompanyId = activeCompanyId;
 
             // Revoke old and mark rotation. Record replacement token hash for auditability.
@@ -380,6 +382,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             var newRt = new Onion.Domain.Users.RefreshToken
             {
                 UserId = user.Id,
+                CompanyId = activeCompanyId,
                 Token = string.Empty,
                 TokenHash = ComputeSha256Hash(newRefresh),
                 Expires = DateTime.UtcNow.Add(_refreshTokenLifetime),
