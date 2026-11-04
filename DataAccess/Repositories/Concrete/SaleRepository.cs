@@ -17,21 +17,16 @@ namespace Onion.DataAccess.Repositories.Concrete
             return await _context.Sales.Include(s => s.Details).FirstOrDefaultAsync(s => s.Id == id);
         }
 
-        public async Task<Sale?> GetByIdIgnoreQueryFiltersAsync(int id)
-        {
-            return await _context.Sales.IgnoreQueryFilters().Include(s => s.Details).FirstOrDefaultAsync(s => s.Id == id);
-        }
-
         public async Task<List<Sale>> ListWithDetailsAsync()
         {
-            return await _context.Sales.Include(s => s.Details).OrderByDescending(s => s.Date).ToListAsync();
+            return await _context.Sales.AsNoTracking().Include(s => s.Details).OrderByDescending(s => s.Date).ToListAsync();
         }
 
         public async Task<Onion.Common.Models.Pagination.PagedList<Sale>> GetPagedWithDetailsAsync(int pageNumber, int pageSize)
         {
             if (pageNumber < 1) pageNumber = 1;
             if (pageSize < 1) pageSize = 10;
-            var query = _context.Sales.Include(s => s.Details).OrderByDescending(s => s.Date);
+            var query = _context.Sales.AsNoTracking().Include(s => s.Details).OrderByDescending(s => s.Date);
             return await query.ToPagedListAsync(pageNumber, pageSize);
         }
     }

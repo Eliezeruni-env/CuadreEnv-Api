@@ -60,11 +60,6 @@ namespace Onion.Controllers.Middleware
             {
                 var currentUser = context.RequestServices?.GetService<Onion.Common.Services.ICurrentUserService>();
                 var isGlobalAdministrator = currentUser?.IsGlobalAdministrator == true || IsGlobalAdministratorClaim(user);
-                if (isGlobalAdministrator)
-                {
-                    await _next(context);
-                    return;
-                }
 
                 var userIdClaim = user.FindFirst("sub") ?? user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
                 _ = int.TryParse(userIdClaim?.Value, out var userId);

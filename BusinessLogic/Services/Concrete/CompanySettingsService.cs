@@ -22,8 +22,8 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<Onion.BussinesLogic.Dtos.CompanySettingsEditableDto?> GetSettingsAsync(int companyId)
         {
-            var settings = await _db.CompanySettings.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.CompanyId == companyId);
-            var company = await _db.Companies.IgnoreQueryFilters().FirstOrDefaultAsync(c => c.Id == companyId);
+            var settings = await _db.CompanySettings.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(x => x.CompanyId == companyId);
+            var company = await _db.Companies.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(c => c.Id == companyId);
 
             if (settings == null && company == null)
                 return null;

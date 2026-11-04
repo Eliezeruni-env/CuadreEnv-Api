@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Onion.BussinesLogic.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace Onion.BussinesLogic.Services.Concrete
 {
@@ -83,16 +84,18 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             if (days <= 0) days = 30;
             var cutoff = DateTime.UtcNow.AddDays(-days);
-            var sales = await _uow.Sales.FindAsync(s => s.Date >= cutoff);
-            var ids = sales.Where(s => s.CustomerId.HasValue).Select(s => s.CustomerId!.Value).Distinct().ToList();
+            var ids = await _uow.Sales.Query()
+                .AsNoTracking()
+                .Where(s => s.Date >= cutoff && s.CustomerId.HasValue)
+                .Select(s => s.CustomerId!.Value)
+                .Distinct()
+                .ToListAsync();
             if (ids.Count == 0) return new List<Customer>();
-            var customers = new List<Customer>();
-            foreach (var id in ids)
-            {
-                var c = await _uow.Customers.GetByIdAsync(id);
-                if (c != null) customers.Add(c);
-            }
-            return customers;
+            return await _uow.Customers.Query()
+                .AsNoTracking()
+                .Where(c => ids.Contains(c.Id))
+                .OrderBy(c => c.Name)
+                .ToListAsync();
         }
     }
 }

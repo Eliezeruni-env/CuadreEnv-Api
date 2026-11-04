@@ -89,6 +89,10 @@ public sealed class SaleServiceTests
 
     private static SaleService CreateService(Mock<IUnitOfWork> uow)
     {
+        uow.Setup(x => x.CashSessions.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Onion.Domain.Finance.CashSession, bool>>>()))
+            .ReturnsAsync([]);
+        uow.Setup(x => x.CashRegisters.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<Onion.Domain.CashRegister, bool>>>()))
+            .ReturnsAsync([]);
         var pagination = new Mock<IPaginationService>();
         return new SaleService(uow.Object, NullLogger<SaleService>.Instance, pagination.Object);
     }

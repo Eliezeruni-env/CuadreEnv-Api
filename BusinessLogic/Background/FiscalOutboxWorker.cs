@@ -1,11 +1,10 @@
-using System.Net.Http.Json;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Onion.DataAccess;
+using Onion.BussinesLogic.Services.Abstract;
 using Onion.Domain.Invoices;
 
 namespace Onion.BussinesLogic.Background;
@@ -13,20 +12,20 @@ namespace Onion.BussinesLogic.Background;
 public sealed class FiscalOutboxWorker : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<FiscalOutboxWorker> _logger;
+    private readonly IFiscalSubmissionProvider _submissionProvider;
 
     public FiscalOutboxWorker(
         IServiceScopeFactory scopeFactory,
-        IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
-        ILogger<FiscalOutboxWorker> logger)
+        ILogger<FiscalOutboxWorker> logger,
+        IFiscalSubmissionProvider submissionProvider)
     {
         _scopeFactory = scopeFactory;
-        _httpClientFactory = httpClientFactory;
         _configuration = configuration;
         _logger = logger;
+        _submissionProvider = submissionProvider;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -49,10 +48,6 @@ public sealed class FiscalOutboxWorker : BackgroundService
 
     private async Task ProcessBatchAsync(CancellationToken cancellationToken)
     {
-        var baseUrl = _configuration["Dgii:BaseUrl"];
-        if (string.IsNullOrWhiteSpace(baseUrl))
-            return;
-
         await using var scope = _scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<OnionDbContext>();
         var now = DateTime.UtcNow;
@@ -91,43 +86,29 @@ public sealed class FiscalOutboxWorker : BackgroundService
     private async Task SubmitAsync(OnionDbContext db, int id, CancellationToken cancellationToken)
     {
         var document = await db.FiscalDocuments.IgnoreQueryFilters().SingleAsync(x => x.Id == id, cancellationToken);
-        var client = _httpClientFactory.CreateClient("Dgii");
-        using var request = new HttpRequestMessage(HttpMethod.Post,
-            (_configuration["Dgii:SubmitPath"] ?? "api/fiscal/submit").TrimStart('/'))
-        {
-            Content = JsonContent.Create(new { documentKey = document.DocumentKey, saleId = document.SaleId, ncf = document.Ncf })
-        };
-        request.Headers.TryAddWithoutValidation("Idempotency-Key", document.DocumentKey);
-        var apiKey = _configuration["Dgii:ApiKey"];
-        if (!string.IsNullOrWhiteSpace(apiKey))
-            request.Headers.TryAddWithoutValidation("X-Api-Key", apiKey);
-
         string responseBody;
         try
         {
-            using var response = await client.SendAsync(request, cancellationToken);
-            responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            var result = await _submissionProvider.SubmitAsync(document, cancellationToken);
+            responseBody = result.ResponsePayload;
+            if (result.Outcome == FiscalSubmissionOutcome.Rejected)
             {
-                var statusCode = (int)response.StatusCode;
-                if (statusCode is not (408 or 429) && statusCode >= 400 && statusCode < 500)
+                document.Status = FiscalDocumentStatus.Rejected;
+                document.LastError = result.ErrorMessage;
+                document.NextAttemptAt = null;
+                db.FiscalSubmissionAudits.Add(new FiscalSubmissionAudit
                 {
-                    document.Status = FiscalDocumentStatus.Rejected;
-                    document.LastError = $"DGII returned {statusCode} {response.StatusCode}.";
-                    document.NextAttemptAt = null;
-                    db.FiscalSubmissionAudits.Add(new FiscalSubmissionAudit
-                    {
-                        CompanyId = document.CompanyId,
-                        FiscalDocumentId = document.Id,
-                        EventType = "RejectedByDgii",
-                        ResponsePayload = responseBody
-                    });
-                    await db.SaveChangesAsync(cancellationToken);
-                    return;
-                }
-
-                throw new HttpRequestException($"DGII returned {statusCode} {response.StatusCode}.");
+                    CompanyId = document.CompanyId,
+                    FiscalDocumentId = document.Id,
+                    EventType = "RejectedByFiscalProvider",
+                    ResponsePayload = responseBody
+                });
+                await db.SaveChangesAsync(cancellationToken);
+                return;
             }
+
+            if (result.Outcome == FiscalSubmissionOutcome.Retry)
+                throw new HttpRequestException(result.ErrorMessage ?? "Fiscal provider requested a retry.");
 
             document.Status = FiscalDocumentStatus.Accepted;
             document.LastError = null;
@@ -136,11 +117,11 @@ public sealed class FiscalOutboxWorker : BackgroundService
             {
                 CompanyId = document.CompanyId,
                 FiscalDocumentId = document.Id,
-                EventType = "Accepted",
+                EventType = _configuration.GetValue<bool>("Dgii:Enabled") ? "AcceptedByDgii" : "AcceptedByMock",
                 ResponsePayload = responseBody
             });
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        catch (Exception ex) when ((ex is HttpRequestException || ex is TaskCanceledException) && !cancellationToken.IsCancellationRequested)
         {
             var maxAttempts = Math.Max(1, _configuration.GetValue("Fiscal:MaxAttempts", 8));
             var exhausted = document.AttemptCount >= maxAttempts;

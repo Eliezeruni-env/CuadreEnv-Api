@@ -45,21 +45,21 @@ namespace Onion.DataAccess.Repositories.Concrete
         public async Task<IEnumerable<Product>> SearchByNameAsync(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return Enumerable.Empty<Product>();
-            var q = _dbSet.AsQueryable();
+            var q = _dbSet.AsNoTracking().AsQueryable();
             q = q.Where(p => EF.Functions.Like(p.Description, $"%{name}%"));
             return await q.ToListAsync();
         }
 
         public async Task<IEnumerable<Product>> GetByCategoryAsync(int categoryId)
         {
-            return await _dbSet.Where(p => p.CategoryId == categoryId).ToListAsync();
+            return await _dbSet.AsNoTracking().Where(p => p.CategoryId == categoryId).ToListAsync();
         }
 
         public async Task<Product?> GetWithCategoryAsync(int id)
         {
             // Product entity does not have navigation property for Category in current domain model.
             // Return product; category can be retrieved via CategoryRepository when needed.
-            return await _dbSet.FirstOrDefaultAsync(p => p.Id == id);
+            return await _dbSet.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id);
         }
 
         public async Task<bool> ExistsByNameAsync(string name)
@@ -72,7 +72,7 @@ namespace Onion.DataAccess.Repositories.Concrete
         public async Task<IEnumerable<Product>> GetLowStockAsync(int threshold)
         {
             // Domain model does not track current stock; use MinimumQuantity as a proxy for low-stock alert.
-            return await _dbSet.Where(p => p.MinimumQuantity <= threshold).ToListAsync();
+            return await _dbSet.AsNoTracking().Where(p => p.MinimumQuantity <= threshold).ToListAsync();
         }
 
         public Task<bool> ExistsByBarcodeAsync(string barcode, int id)
@@ -93,7 +93,7 @@ namespace Onion.DataAccess.Repositories.Concrete
 
         public async Task<IEnumerable<Product>> SearchByDescriptionAsync(string description)
         {
-            var query = _context.Products.AsQueryable();
+            var query = _context.Products.AsNoTracking().AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(description))
             {

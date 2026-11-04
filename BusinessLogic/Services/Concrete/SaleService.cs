@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Onion.Domain.Finance;
 using Onion.BussinesLogic.Services.Abstract;
@@ -45,16 +46,23 @@ namespace Onion.BussinesLogic.Services.Concrete
             return await _uow.Sales.ListAsync();
         }
 
-        public async Task<IEnumerable<Sale>> GetFilteredAsync(SaleOriginChannel? originChannel, DateTime? startDate, DateTime? endDate, int? customerId)
+        public async Task<IEnumerable<Sale>> GetFilteredAsync(SaleOriginChannel? originChannel, DateTime? startDate, DateTime? endDate, int? customerId, int pageNumber = 1, int pageSize = 10, CancellationToken cancellationToken = default)
         {
-            var repo = _uow.Sales as DataAccess.Repositories.Abstract.ISaleRepository;
-            var sales = repo != null ? await repo.ListWithDetailsAsync() : (await _uow.Sales.ListAsync()).ToList();
-            var query = sales.AsEnumerable();
+            var pn = Math.Max(1, pageNumber);
+            var ps = Math.Clamp(pageSize, 1, 100);
+            var query = _uow.Sales.Query()
+                .Include(x => x.Details)
+                .AsNoTracking();
             if (originChannel.HasValue) query = query.Where(x => x.OriginChannel == originChannel.Value);
             if (startDate.HasValue) query = query.Where(x => x.Date >= startDate.Value);
             if (endDate.HasValue) query = query.Where(x => x.Date < endDate.Value.Date.AddDays(1));
             if (customerId.HasValue) query = query.Where(x => x.CustomerId == customerId.Value);
-            return query.OrderByDescending(x => x.Date).ToList();
+            return await query
+                .OrderByDescending(x => x.Date)
+                .ThenByDescending(x => x.Id)
+                .Skip((pn - 1) * ps)
+                .Take(ps)
+                .ToListAsync(cancellationToken);
         }
 
         public async Task<Onion.Common.Models.Pagination.PagedList<Sale>> GetPagedAsync(int pageNumber, int pageSize)
@@ -126,13 +134,13 @@ namespace Onion.BussinesLogic.Services.Concrete
             // 2. If no open session found by CashSessionId, try by CashRegisterId
             if (session == null && sale.CashRegisterId.HasValue && sale.CashRegisterId.Value > 0)
             {
-                session = (await _uow.CashSessions.FindAsync(s => s.CashRegisterId == sale.CashRegisterId.Value && s.Status == CashSessionStatus.Open && (sale.CompanyId <= 0 || s.CompanyId == sale.CompanyId))).FirstOrDefault();
+                session = (await _uow.CashSessions.FindAsync(s => s.CashRegisterId == sale.CashRegisterId.Value && s.Status == CashSessionStatus.Open && (sale.CompanyId <= 0 || s.CompanyId == sale.CompanyId)))?.FirstOrDefault();
             }
 
             // 3. Fallback: find ANY active open session belonging to this company
             if (session == null)
             {
-                session = (await _uow.CashSessions.FindAsync(s => s.Status == CashSessionStatus.Open && (sale.CompanyId <= 0 || s.CompanyId == sale.CompanyId))).FirstOrDefault();
+                session = (await _uow.CashSessions.FindAsync(s => s.Status == CashSessionStatus.Open && (sale.CompanyId <= 0 || s.CompanyId == sale.CompanyId)))?.FirstOrDefault();
             }
 
             // 4. Auto-healing: If no open session exists, check if any CashRegister is marked OPEN and auto-create the session
@@ -148,7 +156,7 @@ namespace Onion.BussinesLogic.Services.Concrete
 
                 if (reg == null)
                 {
-                    reg = (await _uow.CashRegisters.FindAsync(r => (sale.CompanyId <= 0 || r.CompanyId == sale.CompanyId) && r.Status == CashRegisterStatus.OPEN && !r.IsDeleted)).FirstOrDefault();
+                    reg = (await _uow.CashRegisters.FindAsync(r => (sale.CompanyId <= 0 || r.CompanyId == sale.CompanyId) && r.Status == CashRegisterStatus.OPEN && !r.IsDeleted))?.FirstOrDefault();
                 }
 
                 if (reg != null)
@@ -230,7 +238,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             {
                 var normalizedKey = sale.IdempotencyKey.Trim();
                 sale.IdempotencyKey = normalizedKey;
-                var existing = (await _uow.Sales.FindAsync(s => s.IdempotencyKey == normalizedKey && !s.IsDeleted)).FirstOrDefault();
+                var existing = (await _uow.Sales.FindAsync(s => s.IdempotencyKey == normalizedKey && !s.IsDeleted))?.FirstOrDefault();
                 if (existing != null)
                     return existing;
             }
@@ -504,29 +512,29 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             if (sale.Status == SaleStatus.PAID || sale.Status == SaleStatus.PARTIAL || sale.Status == SaleStatus.PENDING)
             {
-                // Reverse stock for each sale detail
-                if (sale.Details != null)
+                await using var transaction = await _uow.BeginTransactionAsync();
+                try
                 {
-                    foreach (var d in sale.Details)
+                    // Reverse stock for each sale detail
+                    if (sale.Details != null)
                     {
-                        var warehouseId = d.WarehouseId.HasValue && d.WarehouseId.Value > 0 ? d.WarehouseId.Value : 0;
-                        if (warehouseId > 0)
+                        foreach (var d in sale.Details)
                         {
-                            var inv = await _uow.Inventories.GetByProductAndWarehouseAsync(d.ProductId, warehouseId);
-                            if (inv != null)
+                            var warehouseId = d.WarehouseId.HasValue && d.WarehouseId.Value > 0 ? d.WarehouseId.Value : 0;
+                            if (warehouseId > 0)
                             {
-                                inv.Quantity += d.Quantity;
-                                _uow.Inventories.Update(inv);
+                                var inv = await _uow.Inventories.GetByProductAndWarehouseAsync(d.ProductId, warehouseId);
+                                if (inv != null)
+                                {
+                                    inv.Quantity += d.Quantity;
+                                    _uow.Inventories.Update(inv);
+                                }
                             }
-                        }
-                        else
-                        {
-                            // increase product-level stock back
-                            await _uow.Products.TryIncreaseStockAsync(d.ProductId, d.Quantity);
-                        }
-                        // record inventory movement
-                        try
-                        {
+                            else
+                            {
+                                await _uow.Products.TryIncreaseStockAsync(d.ProductId, d.Quantity);
+                            }
+
                             var mv = new Onion.Domain.Inventory.InventoryMovement
                             {
                                 CompanyId = sale.CompanyId,
@@ -540,13 +548,9 @@ namespace Onion.BussinesLogic.Services.Concrete
                             };
                             await _uow.InventoryMovements.AddAsync(mv);
                         }
-                        catch { }
                     }
-                }
 
-                // Adjust cash register / cash session balance
-                try
-                {
+                    // Adjust cash register / cash session balance
                     if (sale.CashSessionId.HasValue || sale.CashRegisterId.HasValue)
                     {
                         if (sale.PaymentType != PaymentType.CREDIT && sale.Total > 0m)
@@ -564,14 +568,19 @@ namespace Onion.BussinesLogic.Services.Concrete
                             await _uow.CashMovements.AddAsync(cm);
                         }
                     }
-                }
-                catch { }
 
-                sale.Status = SaleStatus.CANCELLED;
-                sale.CancellationReason = reason;
-                sale.CancelledAt = DateTime.UtcNow;
-                _uow.Sales.Update(sale);
-                await _uow.SaveChangesAsync();
+                    sale.Status = SaleStatus.CANCELLED;
+                    sale.CancellationReason = reason;
+                    sale.CancelledAt = DateTime.UtcNow;
+                    _uow.Sales.Update(sale);
+                    await _uow.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
             }
             else
             {
@@ -585,39 +594,32 @@ namespace Onion.BussinesLogic.Services.Concrete
             var sale = await _uow.Sales.GetByIdAsync(saleId);
             if (sale == null)
             {
-                // Try to detect if sale exists but is filtered by tenant scope
-                var existsElsewhere = await (_uow.Sales as DataAccess.Repositories.Abstract.ISaleRepository)?.GetByIdIgnoreQueryFiltersAsync(saleId);
-                if (existsElsewhere != null)
-                    throw new CustomException(new Onion.Common.Models.Error { Code = "FORBIDDEN", Message = "Sale exists but access is forbidden for current tenant", Language = "ES" });
-
                 throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "Sale not found", Language = "ES" });
             }
-            if (payment.Amount <= 0) throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_AMOUNT", Message = "Payment amount must be greater than zero", Language = "ES" });
+            if (payment.Amount <= 0)
+                throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_AMOUNT", Message = "Payment amount must be greater than zero", Language = "EN" });
 
-            // attach payment to sale
-            payment.SaleId = saleId;
-            payment.CompanyId = sale.CompanyId;
-            payment.CashSessionId ??= sale.CashSessionId;
-            // Map method string to enum PaymentMethod
-            if (!string.IsNullOrWhiteSpace(method) && System.Enum.TryParse<PaymentMethod>(method, true, out var pm))
-                payment.PaymentMethod = pm;
-            else
-                payment.PaymentMethod = PaymentMethod.OTHER;
-            await _uow.Payments.AddAsync(payment);
-            sale.PaidAmount += payment.Amount;
-
-            if (sale.PaidAmount >= sale.Total) sale.Status = SaleStatus.PAID;
-            else if (sale.PaidAmount > 0) sale.Status = SaleStatus.PARTIAL;
-
-            _uow.Sales.Update(sale);
-            await _uow.SaveChangesAsync();
-
-            // Create cash movement when cashRegisterId provided
-            if (cashRegisterId.HasValue && payment.PaymentMethod == PaymentMethod.CASH && payment.Amount > 0)
+            await using var transaction = await _uow.BeginTransactionAsync();
+            try
             {
-                try
+                payment.SaleId = saleId;
+                payment.CompanyId = sale.CompanyId;
+                payment.CashSessionId ??= sale.CashSessionId;
+                payment.PaymentMethod = !string.IsNullOrWhiteSpace(method) && System.Enum.TryParse<PaymentMethod>(method, true, out var pm)
+                    ? pm
+                    : PaymentMethod.OTHER;
+
+                await _uow.Payments.AddAsync(payment);
+                sale.PaidAmount += payment.Amount;
+                if (sale.PaidAmount >= sale.Total) sale.Status = SaleStatus.PAID;
+                else if (sale.PaidAmount > 0) sale.Status = SaleStatus.PARTIAL;
+
+                _uow.Sales.Update(sale);
+                await _uow.SaveChangesAsync();
+
+                if (cashRegisterId.HasValue && payment.PaymentMethod == PaymentMethod.CASH && payment.Amount > 0)
                 {
-                    var cm = new CashMovement
+                    await _uow.CashMovements.AddAsync(new CashMovement
                     {
                         CashRegisterId = cashRegisterId.Value,
                         Amount = payment.Amount,
@@ -627,14 +629,16 @@ namespace Onion.BussinesLogic.Services.Concrete
                         Type = CashMovementType.Sale,
                         Reason = "Sale payment",
                         CreateBy = payment.CreateBy
-                    };
-                    await _uow.CashMovements.AddAsync(cm);
+                    });
                     await _uow.SaveChangesAsync();
                 }
-                catch (Exception ex)
-                {
-                    _logger?.LogWarning(ex, "Failed to record cash movement for sale payment {SaleId}", saleId);
-                }
+
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
             }
         }
     }

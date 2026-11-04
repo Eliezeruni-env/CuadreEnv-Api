@@ -18,26 +18,22 @@ namespace Onion.Controllers
     {
         private readonly IUnitOfWork _uow;
         private readonly IGlobalizationService _globalizationService;
+        private readonly ICurrentUserService _currentUser;
 
-        public PurchaseController(IUnitOfWork uow, IGlobalizationService globalizationService)
+        public PurchaseController(IUnitOfWork uow, IGlobalizationService globalizationService, ICurrentUserService currentUser)
         {
             _uow = uow;
             _globalizationService = globalizationService;
+            _currentUser = currentUser;
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll([FromQuery] int? pageNumber = null, [FromQuery] int? pageSize = null)
+        public async Task<IActionResult> GetAll([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 25)
         {
             try
             {
-                if (pageNumber.HasValue)
-                {
-                    var paged = await _uow.Purchases.GetPagedAsync(pageNumber.Value, pageSize ?? 10);
-                    return Ok(paged);
-                }
-
-                var items = await _uow.Purchases.GetAllWithDetailsAsync();
-                return Ok(items);
+                var paged = await _uow.Purchases.GetPagedAsync(Math.Max(1, pageNumber), Math.Clamp(pageSize, 1, 100));
+                return Ok(paged);
             }
             catch (Exception)
             {
@@ -62,11 +58,10 @@ namespace Onion.Controllers
         {
             if (purchase == null) return BadRequest(new { message = "Purchase payload is required" });
 
-            if (purchase.CompanyId <= 0)
-            {
-                var compId = User.FindFirst("companyId")?.Value ?? User.FindFirst("CompanyId")?.Value;
-                purchase.CompanyId = int.TryParse(compId, out var cid) && cid > 0 ? cid : 1;
-            }
+            var companyId = _currentUser.CompanyId;
+            if (!companyId.HasValue || companyId.Value <= 0) return Forbid();
+            if (purchase.CompanyId > 0 && purchase.CompanyId != companyId.Value) return Forbid();
+            purchase.CompanyId = companyId.Value;
 
             purchase.CreationDate = DateTime.UtcNow;
             purchase.Active = true;

@@ -8,7 +8,7 @@ namespace Onion.BussinesLogic.Services.Abstract
     public interface ISaleService
     {
         Task<IEnumerable<Sale>> GetAllAsync();
-        Task<IEnumerable<Sale>> GetFilteredAsync(SaleOriginChannel? originChannel, DateTime? startDate, DateTime? endDate, int? customerId);
+        Task<IEnumerable<Sale>> GetFilteredAsync(SaleOriginChannel? originChannel, DateTime? startDate, DateTime? endDate, int? customerId, int pageNumber = 1, int pageSize = 10, CancellationToken cancellationToken = default);
         Task<PagedList<Sale>> GetPagedAsync(int pageNumber, int pageSize);
         Task<Sale?> GetByIdAsync(int id);
         Task<Sale> CreateAsync(Sale sale, IReadOnlyCollection<Payment>? payments = null);

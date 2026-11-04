@@ -42,6 +42,7 @@ namespace Onion.Controllers
         }
 
         [HttpGet("search")]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("SearchPolicy")]
         public async Task<IActionResult> Search([FromQuery] string description)
         {
             _logger.LogInformation("Search Products by Description: {Description}", description);
@@ -53,6 +54,7 @@ namespace Onion.Controllers
 
         [HttpGet]
         [HttpGet("paged")]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("SearchPolicy")]
         public async Task<IActionResult> GetPaged(
             [FromQuery] FilterPayload filterPayload,
             CancellationToken ct = default)

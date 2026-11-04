@@ -18,11 +18,13 @@ namespace Onion.Controllers
     {
         private readonly ICashMovementService _service;
         private readonly IGlobalizationService _globalizationService;
+        private readonly ICurrentUserService _currentUser;
 
-        public CashMovementController(ICashMovementService service, IGlobalizationService globalizationService)
+        public CashMovementController(ICashMovementService service, IGlobalizationService globalizationService, ICurrentUserService currentUser)
         {
             _service = service;
             _globalizationService = globalizationService;
+            _currentUser = currentUser;
         }
 
         [HttpGet]
@@ -63,19 +65,22 @@ namespace Onion.Controllers
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] CashMovementRequest request)
         {
+            if (_currentUser.CompanyId is not > 0) return Forbid();
+            if (request.CompanyId.HasValue && request.CompanyId.Value != _currentUser.CompanyId.Value)
+                return Forbid();
             if (request.Amount <= 0) return BadRequest(new { errorCode = "INVALID_MOVEMENT_AMOUNT", message = "amount debe ser mayor que cero." });
             if (!TryParseMovementType(request.Type, out var type))
-                return BadRequest(new { errorCode = "INVALID_MOVEMENT_TYPE", message = "type debe ser Entrada o Retiro." });
+                return BadRequest(new { errorCode = "INVALID_MOVEMENT_TYPE", message = "type debe ser Entrada o Retiro/Salida." });
 
             var cm = new CashMovement
             {
                 CashRegisterId = request.CashRegisterId,
-                CashSessionId = request.SessionId,
+                CashSessionId = request.SessionId ?? request.CashSessionId,
                 Amount = request.Amount,
                 Type = type,
-                Reason = request.Concept ?? request.Category ?? "Movimiento de caja",
-                Description = request.Concept ?? request.Category,
-                CompanyId = request.CompanyId ?? 0
+                Reason = request.Concept ?? request.Reason ?? request.Category ?? "Movimiento de caja",
+                Description = request.Description ?? request.Concept ?? request.Category,
+                CompanyId = _currentUser.CompanyId.Value
             };
             var created = await _service.AddAsync(cm);
             return CreatedAtAction(nameof(GetAll), new { id = created.Id }, created);
@@ -83,12 +88,19 @@ namespace Onion.Controllers
 
         private static bool TryParseMovementType(string? value, out CashMovementType type)
         {
-            if (string.Equals(value, "Entrada", StringComparison.OrdinalIgnoreCase) || string.Equals(value, "CashIn", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(value, "Entrada", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(value, "CashIn", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "In", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "1", StringComparison.OrdinalIgnoreCase))
             {
                 type = CashMovementType.CashIn;
                 return true;
             }
-            if (string.Equals(value, "Retiro", StringComparison.OrdinalIgnoreCase) || string.Equals(value, "CashOut", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(value, "Salida", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "Retiro", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(value, "CashOut", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "Out", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(value, "2", StringComparison.OrdinalIgnoreCase))
             {
                 type = CashMovementType.CashOut;
                 return true;
@@ -102,9 +114,12 @@ namespace Onion.Controllers
             public string? Type { get; set; }
             public decimal Amount { get; set; }
             public string? Concept { get; set; }
+            public string? Reason { get; set; }
+            public string? Description { get; set; }
             public string? Category { get; set; }
             public int CashRegisterId { get; set; }
             public int? SessionId { get; set; }
+            public int? CashSessionId { get; set; }
             public int? CompanyId { get; set; }
         }
     }

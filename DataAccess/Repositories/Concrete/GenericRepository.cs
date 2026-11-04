@@ -54,7 +54,7 @@ namespace Onion.DataAccess.Repositories.Concrete
 
         public async Task<IEnumerable<T>> ListAsync()
         {
-            return await _dbSet.ToListAsync();
+            return await _dbSet.AsNoTracking().ToListAsync();
         }
 
         public IQueryable<T> Query() => _dbSet.AsQueryable();
@@ -63,7 +63,7 @@ namespace Onion.DataAccess.Repositories.Concrete
         {
             if (pageNumber < 1) pageNumber = 1;
             if (pageSize < 1) pageSize = 10;
-            var query = _dbSet.AsQueryable();
+            var query = _dbSet.AsNoTracking().AsQueryable();
             var total = await query.CountAsync();
             var pageCount = (int)Math.Ceiling(total / (double)pageSize);
             var items = await query.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToListAsync();
@@ -74,12 +74,12 @@ namespace Onion.DataAccess.Repositories.Concrete
         public Task<Onion.Common.Models.Pagination.PagedList<T>> GetPagedAsync(IQueryable<T> query, int pageNumber, int pageSize)
         {
             // Delegate to PaginationExtensions to keep consistent behavior
-            return query.ToPagedListAsync(pageNumber, pageSize);
+            return query.AsNoTracking().ToPagedListAsync(pageNumber, pageSize);
         }
 
         public async Task<IEnumerable<T>> FindAsync(Expression<Func<T, bool>> predicate)
         {
-            return await _dbSet.AsQueryable().Where(predicate).ToListAsync();
+            return await _dbSet.AsNoTracking().Where(predicate).ToListAsync();
         }
 
         public void Remove(T entity)

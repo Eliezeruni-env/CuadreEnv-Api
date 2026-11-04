@@ -16,7 +16,7 @@ namespace Onion.DataAccess.Repositories.Concrete
 
         public async Task<System.Collections.Generic.List<Purchase>> GetAllWithDetailsAsync()
         {
-            return await _context.Purchases.Include(p => p.Details).OrderByDescending(p => p.Id).ToListAsync();
+            return await _context.Purchases.AsNoTracking().Include(p => p.Details).OrderByDescending(p => p.Id).ToListAsync();
         }
     }
 }

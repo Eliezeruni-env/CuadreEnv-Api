@@ -53,7 +53,14 @@ namespace Onion.Controllers
             {
                 if (originChannel.HasValue || startDate.HasValue || endDate.HasValue || customerId.HasValue)
                 {
-                    var filtered = await _service.GetFilteredAsync(originChannel, startDate, endDate, customerId);
+                    var filtered = await _service.GetFilteredAsync(
+                        originChannel,
+                        startDate,
+                        endDate,
+                        customerId,
+                        pageNumber ?? 1,
+                        pageSize ?? 10,
+                        HttpContext.RequestAborted);
                     return Ok(filtered);
                 }
 

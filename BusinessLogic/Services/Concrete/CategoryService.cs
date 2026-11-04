@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Onion.BusinessLogic.Dtos;
 using Onion.BusinessLogic.Services.Abstract;
@@ -20,13 +21,15 @@ namespace Onion.BusinessLogic.Services.Concrete
         private readonly IMapper _mapper;
         private readonly ILogger<CategoryService> _logger;
         private readonly Onion.Common.Services.ICurrentUserService _currentUserService;
+        private readonly IMemoryCache _memoryCache;
 
-        public CategoryService(Onion.DataAccess.Repositories.Concrete.IUnitOfWork uow, IMapper mapper, ILogger<CategoryService> logger, Onion.Common.Services.ICurrentUserService currentUserService)
+        public CategoryService(Onion.DataAccess.Repositories.Concrete.IUnitOfWork uow, IMapper mapper, ILogger<CategoryService> logger, Onion.Common.Services.ICurrentUserService currentUserService, IMemoryCache memoryCache)
         {
             _uow = uow;
             _mapper = mapper;
             _logger = logger;
             _currentUserService = currentUserService;
+            _memoryCache = memoryCache;
         }
 
         public async Task AddAsync(CategoryDto entityDto)
@@ -36,12 +39,19 @@ namespace Onion.BusinessLogic.Services.Concrete
             entity.CompanyId = _currentUserService?.CompanyId ?? 0;
             await _uow.Categories.AddAsync(entity);
             await _uow.SaveChangesAsync();
+            _memoryCache.Remove(GetCacheKey());
         }
 
         public async Task<IEnumerable<CategoryDto>> GetAllAsync()
         {
+            var cacheKey = GetCacheKey();
+            if (_memoryCache.TryGetValue(cacheKey, out IReadOnlyList<CategoryDto>? cached))
+                return cached;
+
             var list = await _uow.Categories.ListAsync();
-            return _mapper.Map<IEnumerable<CategoryDto>>(list);
+            var result = _mapper.Map<List<CategoryDto>>(list);
+            _memoryCache.Set(cacheKey, (IReadOnlyList<CategoryDto>)result);
+            return result;
         }
 
         public async Task<CategoryDto?> GetByIdAsync(int id)
@@ -59,6 +69,10 @@ namespace Onion.BusinessLogic.Services.Concrete
 
             _uow.Categories.Remove(existing);
             await _uow.SaveChangesAsync();
+            _memoryCache.Remove(GetCacheKey());
         }
+
+        private string GetCacheKey()
+            => $"catalog:categories:company:{_currentUserService.CompanyId?.ToString() ?? "none"}";
     }
 }

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -43,6 +44,12 @@ builder.Services.AddControllers(options =>
         opts.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
         opts.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+});
 builder.Services.AddSignalR();
 builder.Services.AddScoped<Onion.Common.Services.ISecurityAlertPublisher, SignalRSecurityAlertPublisher>();
 builder.Services.AddHttpClient("Dgii", client =>
@@ -51,6 +58,10 @@ builder.Services.AddHttpClient("Dgii", client =>
     if (!string.IsNullOrWhiteSpace(baseUrl)) client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
     client.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("Dgii:TimeoutSeconds", 15));
 });
+builder.Services.AddSingleton<Onion.BussinesLogic.Services.Abstract.IFiscalSubmissionProvider>(sp =>
+    sp.GetRequiredService<IConfiguration>().GetValue<bool>("Dgii:Enabled")
+        ? ActivatorUtilities.CreateInstance<Onion.BussinesLogic.Services.Concrete.DgiiFiscalSubmissionProvider>(sp)
+        : ActivatorUtilities.CreateInstance<Onion.BussinesLogic.Services.Concrete.MockFiscalSubmissionProvider>(sp));
 
 builder.Services.AddSingleton<Onion.BussinesLogic.Services.Concrete.ILicenseStartupValidator, Onion.BussinesLogic.Services.Concrete.LicenseStartupValidator>();
 
@@ -227,6 +238,17 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0
             }));
 
+    options.AddPolicy("SearchPolicy", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "anon",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+
     options.OnRejected = async (context, token) =>
     {
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
@@ -267,6 +289,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 app.UseCors("DefaultCors");
+app.UseResponseCompression();
 
 app.UseMiddleware<crud_onion.Middleware.CorrelationIdMiddleware>();
 // Capture exceptions from every downstream middleware and endpoint in one consistent format.

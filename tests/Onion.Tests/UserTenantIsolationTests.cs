@@ -75,6 +75,28 @@ public sealed class UserTenantIsolationTests
     }
 
     [Fact]
+    public async Task Tenant_Cannot_Insert_Entity_For_Another_Tenant()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+        await using var tenant10 = CreateContext(databaseName, 10);
+
+        tenant10.Users.Add(CreateUser(1, 20, "cross-tenant@example.test"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => tenant10.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task Tenant_Cannot_Save_Without_Tenant_Context()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+        await using var noTenant = CreateContext(databaseName, null);
+
+        noTenant.Users.Add(CreateUser(1, 10, "missing-context@example.test"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => noTenant.SaveChangesAsync());
+    }
+
+    [Fact]
     public async Task Tenant_Admin_UserManagementService_GetPaged_Forces_Caller_Tenant_And_Excludes_Other_Tenants()
     {
         var databaseName = Guid.NewGuid().ToString();

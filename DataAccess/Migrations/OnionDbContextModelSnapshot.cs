@@ -2551,7 +2551,15 @@ namespace Onion.DataAccess.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Description");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Description"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Description"), new[] { "gin_trgm_ops" });
+
                     b.HasIndex("CompanyId", "Stock", "MinimumQuantity");
+
+                    b.HasIndex("CompanyId", "IsDeleted", "Active", "Barcode")
+                        .HasDatabaseName("idx_products_company_code");
 
                     b.ToTable("Products");
                 });
@@ -3051,6 +3059,10 @@ namespace Onion.DataAccess.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CompanyId", "Date")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("idx_sales_company_date");
+
                     b.HasIndex("CompanyId", "IdempotencyKey", "IsDeleted")
                         .IsUnique()
                         .HasFilter("\"IdempotencyKey\" IS NOT NULL AND \"IsDeleted\" = false");
@@ -3109,7 +3121,8 @@ namespace Onion.DataAccess.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SaleId");
+                    b.HasIndex("SaleId", "ProductId")
+                        .HasDatabaseName("idx_saledetails_sale_product");
 
                     b.ToTable("SaleDetails");
                 });

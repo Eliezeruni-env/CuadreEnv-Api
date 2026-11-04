@@ -28,13 +28,13 @@ namespace Onion.DataAccess.Repositories.Concrete
 
         public async Task<IEnumerable<Product>> GetProductsAsync(int categoryId)
         {
-            return await _context.Products.Where(p => p.CategoryId == categoryId).ToListAsync();
+            return await _context.Products.AsNoTracking().Where(p => p.CategoryId == categoryId).ToListAsync();
         }
 
         public async Task<IEnumerable<Category>> GetWithProductsAsync()
         {
             // Category has no navigation property to Products; return categories and consumers can query products as needed.
-            return await _context.Categories.ToListAsync();
+            return await _context.Categories.AsNoTracking().ToListAsync();
         }
 
         public async Task<bool> ExistsByNameAsync(string name)

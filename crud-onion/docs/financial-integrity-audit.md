@@ -3,7 +3,7 @@
 ## Decisions and implementation status
 
 1. **Cash concurrency**
-   - **Diagnosis:** `CashRegister.RowVersion` is configured as a SQL Server `rowversion`; close uses `If-Match`/ETag and translates a lost update into a conflict. The database trigger `TR_CashRegisters_ImmutableAfterClose` prevents updates after closure.
+	   - **Diagnosis:** `CashRegister.RowVersion` is configured against PostgreSQL `xmin`; close uses `If-Match`/ETag and translates a lost update into a conflict. The database trigger `TR_CashRegisters_ImmutableAfterClose` prevents updates after closure.
    - **Decision:** Fail explicitly on a stale ETag or a second close. Never merge two closure results.
    - **Changes:** `CashRegister.Close` is the write-once domain operation; `CashRegisterService` catches `DbUpdateConcurrencyException`.
    - **Verification:** Domain test covers the second-close rule. SQL migration must be applied in each environment.
@@ -12,7 +12,7 @@
    - **Diagnosis:** Stock reservation and commit use conditional SQL `UPDATE` statements, so two sales cannot both consume the last available quantity.
    - **Decision:** Reject the losing sale with `INSUFFICIENT_STOCK`; do not silently retry a cashier operation.
    - **Changes:** Existing `TryReserveStockAsync`/`TryCommitReservedStockAsync` remain the atomic conflict boundary.
-   - **Verification:** Requires a concurrent SQL integration test against the target SQL Server instance; no integration harness exists yet.
+	   - **Verification:** Requires a concurrent PostgreSQL integration test against the target database; the integration project still depends on external database configuration.
 
 3. **Sale, stock, cash, and fiscal atomicity**
    - **Diagnosis:** The POS `CajaService` previously saved a sale independently and bypassed stock/cash/fiscal processing.
@@ -36,7 +36,7 @@
    - **Diagnosis:** Domain state is write-once and SQL trigger enforcement rejects updates to closed registers. Cash movements are append-only at the database level.
    - **Decision:** Corrections require a new adjustment/audit event, never editing the old closure.
    - **Changes:** `IsImmutable`, private closure amount, domain guard, and SQL triggers are in place.
-   - **Verification:** Migration `HardenFinancialIntegrity` must be applied; direct SQL update should be tested in deployment validation.
+	   - **Verification:** The PostgreSQL migration that creates `TR_CashRegisters_ImmutableAfterClose` must be applied; direct SQL update should be tested in deployment validation.
 
 7. **Granular authorization**
    - **Diagnosis:** Module authorization is centralized through `ModuleAuthorizationConvention`, which applies `AuthorizeModuleAttribute` to unmapped controllers and fails startup for a missing mapping. Permission checks currently remain explicit attributes because there is no authoritative controller/action-to-permission map.
@@ -61,13 +61,26 @@
 	- **Verification:** Configuration is source-verified; timeout and retry behavior need integration tests with fault injection.
 
 11. **Tests**
-	- **Implemented:** 5 domain tests cover discrepancy rounding/classification, immutable closure, and fiscal key generation.
-	- **Required next:** SQL Server integration tests for concurrent last-unit sales, stale ETag close, complete sale transaction rollback, and opening→sale→close. Add a load-test project (k6 or NBomber) for concurrent POS sessions.
-	- **Verification blocker:** The existing `tests/Onion.BusinessLogic.Tests` project had incorrect project-reference paths; those were corrected, but its tests still target an older `SaleService` constructor/repository contract and are not currently executable. The integration project is outside `crud-onion.slnx` and depends on LocalDB/WebApplicationFactory configuration.
+	- **Implemented:** Domain integrity tests and 4 `SaleService` unit tests pass. The test fixture now supplies empty asynchronous cash-session/register results, matching the current repository contracts.
+	- **Required next:** PostgreSQL integration tests for concurrent last-unit sales, stale cash close, complete sale transaction rollback, and opening→sale→close. Add a load-test project (k6 or NBomber) for concurrent POS sessions.
+	- **Verification blocker:** The integration project is outside `crud-onion.slnx` and depends on PostgreSQL/WebApplicationFactory configuration. These tests require a deployed test database and cannot be safely substituted by unit mocks.
 	- **Load scaffold:** `tests/load/pos-concurrency.js` provides a k6 scenario. Run it against a deployed test database with `BASE_URL`, `JWT`, `CASH_REGISTER_ID`, `PRODUCT_ID`, `VUS`, and `DURATION`; it treats successful sales, explicit stock conflicts, and validation conflicts as expected outcomes, while failing on 5xx responses.
 
 12. **API and flow documentation**
 	- **Implemented:** Swagger is configured in `Program.cs`; this document records the financial contract and flow.
+	- **Implemented:** `GET /Purchase` now paginates by default with 25 records and caps `pageSize` at 100, preventing an unbounded purchase/detail response.
+
+13. **Tenant isolation**
+	- **Implemented:** Authenticated HTTP requests must resolve an active tenant with validated user membership. Global administrator status no longer bypasses tenant resolution for ordinary HTTP requests.
+	- **Implemented:** `OnionDbContext.SaveChangesAsync` rejects tenant-owned inserts without a tenant context, rejects a supplied `CompanyId` belonging to another tenant, and rejects updates/deletes whose current or original tenant differs from the active tenant. The unsafe fallback to company `1` was removed.
+	- **Implemented:** Purchase and cash-movement endpoints derive `CompanyId` from the validated current-user context instead of trusting the request body. Sale payment no longer performs an unscoped lookup that could reveal the existence of another tenant's sale.
+	- **Verification:** `UserTenantIsolationTests` has 11 passing tests, including cross-tenant read protection, cross-tenant insert rejection, and missing-context rejection. PostgreSQL row-level/security validation and concurrent integration tests remain required before production certification.
+
+14. **Hybrid DGII provider**
+	- **Implemented:** The fiscal outbox selects `MockFiscalSubmissionProvider` when `Dgii:Enabled=false`. The mock does not call external services and records `provider=mock` in its accepted response payload.
+	- **Implemented:** When `Dgii:Enabled=true`, the outbox selects `DgiiFiscalSubmissionProvider`, which requires `Dgii:BaseUrl`, sends `Idempotency-Key` using `FiscalDocument.DocumentKey`, and uses `Dgii:ApiKey` when configured.
+	- **Configuration:** Keep `Dgii:Enabled=false` while developing. Before enabling production delivery, configure `Dgii:BaseUrl`, `Dgii:SubmitPath`, `Dgii:ApiKey` or the required secret headers, and `Dgii:TimeoutSeconds` through environment variables or a secret store. No credentials are stored in source control.
+	- **Limitation:** The mock confirms the internal outbox flow only; it is not legal DGII acceptance. The real endpoint payload and authentication contract must be validated against DGII's official integration environment before production use.
 
 ## Critical flow
 

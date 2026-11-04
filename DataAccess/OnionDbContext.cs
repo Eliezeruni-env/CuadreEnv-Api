@@ -254,6 +254,11 @@ namespace Onion.DataAccess
             {
                 entity.Property(e => e.RowVersion).HasColumnName("xmin").HasColumnType("xid").IsRowVersion();
                 entity.HasIndex(e => new { e.CompanyId, e.Stock, e.MinimumQuantity });
+                entity.HasIndex(e => new { e.CompanyId, e.IsDeleted, e.Active, e.Barcode })
+                    .HasDatabaseName("idx_products_company_code");
+                entity.HasIndex(e => e.Description)
+                    .HasMethod("gin")
+                    .HasOperators("gin_trgm_ops");
             });
 
             modelBuilder.Entity<CashRegister>(entity =>
@@ -291,6 +296,9 @@ namespace Onion.DataAccess
 
             modelBuilder.Entity<Sale>(entity =>
             {
+                entity.HasIndex(e => new { e.CompanyId, e.Date })
+                    .HasDatabaseName("idx_sales_company_date")
+                    .IsDescending(false, true);
                 entity.HasIndex(e => new { e.CompanyId, e.IdempotencyKey, e.IsDeleted })
                     .IsUnique()
                     .HasFilter(@"""IdempotencyKey"" IS NOT NULL AND ""IsDeleted"" = false");
@@ -305,6 +313,8 @@ namespace Onion.DataAccess
 
             modelBuilder.Entity<SaleDetail>(entity =>
             {
+                entity.HasIndex(e => new { e.SaleId, e.ProductId })
+                    .HasDatabaseName("idx_saledetails_sale_product");
                 entity.Property(e => e.Discount).HasColumnType("decimal(18,2)");
                 entity.Property(e => e.Tax).HasColumnType("decimal(18,2)");
             });
@@ -585,35 +595,49 @@ namespace Onion.DataAccess
                     if (string.IsNullOrWhiteSpace(entity.CreateBy))
                         entity.CreateBy = actor;
                     entity.ModifiedBy = actor;
-                    // Set CompanyId from the effective tenant source or preserve entity's explicit CompanyId
+                    // Set CompanyId only from the effective tenant source. Never accept a
+                    // client-supplied CompanyId that belongs to another tenant.
                     var tenantId = this.TenantCompanyId;
                     var prop = entry.Properties.FirstOrDefault(p => string.Equals(p.Metadata.Name, "CompanyId", StringComparison.OrdinalIgnoreCase));
 
-                    if (tenantId.HasValue && tenantId.Value > 0)
+                    if (prop != null && tenantId.HasValue && tenantId.Value > 0)
                     {
-                        if (prop != null && (prop.CurrentValue == null || (int)prop.CurrentValue == 0))
+                        if (prop.CurrentValue is int requestedCompanyId && requestedCompanyId > 0 && requestedCompanyId != tenantId.Value)
+                            throw new InvalidOperationException($"Tenant isolation violation: entity {entry.Metadata.ClrType.Name} belongs to company {requestedCompanyId}, current company is {tenantId.Value}.");
+
+                        if (prop.CurrentValue == null || (prop.CurrentValue is int currentCompanyId && currentCompanyId == 0))
                             prop.CurrentValue = tenantId.Value;
-                    }
-                    else if (prop != null && prop.CurrentValue is int existingCompanyId && existingCompanyId > 0)
-                    {
-                        // Entity already has a valid CompanyId assigned; allow it to proceed safely
                     }
                     else if (prop != null)
                     {
                         var isUnassignedUser = entry.Entity is User user && !user.CompanyId.HasValue;
-                        if (!isUnassignedUser && (prop.CurrentValue == null || (int)prop.CurrentValue <= 0))
-                        {
-                            prop.CurrentValue = 1;
-                        }
+                        if (!isUnassignedUser && !IsGlobalTenantAccess)
+                            throw new InvalidOperationException($"Tenant context is required to insert tenant-owned entity {entry.Metadata.ClrType.Name}.");
                     }
                 }
-                else
+
+                var companyProperty = entry.Properties.FirstOrDefault(p => string.Equals(p.Metadata.Name, "CompanyId", StringComparison.OrdinalIgnoreCase));
+                if (companyProperty != null && !IsGlobalTenantAccess)
+                {
+                    var tenantId = this.TenantCompanyId;
+                    var currentCompanyId = companyProperty.CurrentValue is int current ? current : 0;
+                    var originalCompanyId = companyProperty.OriginalValue is int original ? original : currentCompanyId;
+
+                    if (!tenantId.HasValue || tenantId.Value <= 0)
+                        throw new InvalidOperationException($"Tenant context is required for entity {entry.Metadata.ClrType.Name}.");
+
+                    if ((currentCompanyId > 0 && currentCompanyId != tenantId.Value) ||
+                        (originalCompanyId > 0 && originalCompanyId != tenantId.Value))
+                    {
+                        throw new InvalidOperationException($"Tenant isolation violation: entity {entry.Metadata.ClrType.Name} does not belong to the current company.");
+                    }
+                }
+                if (entry.State != EntityState.Added)
                 {
                     entity.ModificationDate = now;
                     entity.ModifiedBy = actor;
                 }
 
-                var companyProperty = entry.Properties.FirstOrDefault(p => string.Equals(p.Metadata.Name, "CompanyId", StringComparison.OrdinalIgnoreCase));
                 var entityName = entry.Metadata.ClrType.Name;
                 AuditLogs.Add(new Onion.Domain.Audit.AuditLog
                 {
