@@ -380,7 +380,8 @@ namespace Onion.DataAccess
              modelBuilder.Entity<Return>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
              modelBuilder.Entity<CashRegister>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
              modelBuilder.Entity<CashMovement>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
-            modelBuilder.Entity<User>().HasQueryFilter(e => !e.IsDeleted && (this.IsGlobalTenantAccess || e.CompanyId == (int?)this.TenantCompanyIdForQuery));
+            // Option A: User is a global identity entity across tenants. Membership scoping is enforced via UserCompany.
+            modelBuilder.Entity<User>().HasQueryFilter(e => !e.IsDeleted);
             modelBuilder.Entity<Onion.Domain.Audit.AuditLog>().HasQueryFilter(e => this.IsGlobalTenantAccess || e.CompanyId == (int?)this.TenantCompanyIdForQuery);
              modelBuilder.Entity<CompanySettings>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
@@ -610,14 +611,16 @@ namespace Onion.DataAccess
                     }
                     else if (prop != null)
                     {
-                        var isUnassignedUser = entry.Entity is User user && !user.CompanyId.HasValue;
-                        if (!isUnassignedUser && !IsGlobalTenantAccess)
+                        // In Option A, User is a global identity entity and can be created or updated outside a tenant context (e.g. registration/onboarding)
+                        var isUserEntity = entry.Entity is User;
+                        if (!isUserEntity && !IsGlobalTenantAccess)
                             throw new InvalidOperationException($"Tenant context is required to insert tenant-owned entity {entry.Metadata.ClrType.Name}.");
                     }
                 }
 
                 var companyProperty = entry.Properties.FirstOrDefault(p => string.Equals(p.Metadata.Name, "CompanyId", StringComparison.OrdinalIgnoreCase));
-                if (companyProperty != null && !IsGlobalTenantAccess)
+                var isGlobalUser = entry.Entity is User;
+                if (companyProperty != null && !IsGlobalTenantAccess && !isGlobalUser)
                 {
                     var tenantId = this.TenantCompanyId;
                     var currentCompanyId = companyProperty.CurrentValue is int current ? current : 0;
