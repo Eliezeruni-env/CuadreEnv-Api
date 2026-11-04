@@ -95,6 +95,50 @@ public class TenantFlowTests
         Assert.True(service.IsGlobalAdministrator);
     }
 
+    [Fact]
+    public void JwtTenantProvider_PrioritizesItemsOverHeaderAndClaim()
+    {
+        var context = new DefaultHttpContext();
+        context.Items["TenantCompanyId"] = "12";
+        context.Request.Headers["X-Company-Id"] = "20";
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim("companyId", "30") }, "test"));
+
+        var provider = new Onion.DataAccess.Tenant.JwtTenantProvider(new HttpContextAccessor { HttpContext = context });
+
+        Assert.Equal(12, provider.GetCompanyId());
+    }
+
+    [Fact]
+    public void JwtTenantProvider_PrioritizesHeaderOverClaim()
+    {
+        var context = new DefaultHttpContext();
+        context.Request.Headers["x-company-id"] = "20";
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim("CompanyId", "30") }, "test"));
+
+        var provider = new Onion.DataAccess.Tenant.JwtTenantProvider(new HttpContextAccessor { HttpContext = context });
+
+        Assert.Equal(20, provider.GetCompanyId());
+    }
+
+    [Fact]
+    public async Task Middleware_PrioritizesExistingTenantItem()
+    {
+        var context = CreateContext("/v1/sale", "GET", new Claim("sub", "1"), new Claim("companyId", "12"));
+        context.Items["TenantCompanyId"] = 12;
+        context.Request.Headers["X-Company-Id"] = "999";
+        var called = false;
+        var middleware = new TenantMiddleware(_ =>
+        {
+            called = true;
+            return Task.CompletedTask;
+        });
+
+        await middleware.InvokeAsync(context);
+
+        Assert.True(called, await ReadBodyAsync(context));
+        Assert.Equal(12, context.Items["TenantCompanyId"]);
+    }
+
     private static DefaultHttpContext CreateContext(string path, string method, params Claim[] claims)
     {
         var context = new DefaultHttpContext();

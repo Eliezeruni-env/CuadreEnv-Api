@@ -61,26 +61,7 @@ namespace Onion.Controllers.Middleware
                 var currentUser = context.RequestServices?.GetService<Onion.Common.Services.ICurrentUserService>();
                 var userIdClaim = user.FindFirst("sub") ?? user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
                 _ = int.TryParse(userIdClaim?.Value, out var userId);
-                var headerValue = context.Request.Headers["X-Company-Id"].FirstOrDefault();
-                var claimValue = (user.FindFirst("companyId") ?? user.FindFirst("CompanyId"))?.Value;
-
-                if (!int.TryParse(claimValue, out var claimCompanyId) || claimCompanyId <= 0)
-                {
-                    await WriteCompanyRequiredAsync(context);
-                    return;
-                }
-
-                int? requestedCompanyId = claimCompanyId;
-                if (!string.IsNullOrWhiteSpace(headerValue))
-                {
-                    if (!int.TryParse(headerValue, out var headerCompanyId) || headerCompanyId <= 0 || headerCompanyId != claimCompanyId)
-                    {
-                        await WriteCompanyRequiredAsync(context);
-                        return;
-                    }
-
-                    requestedCompanyId = headerCompanyId;
-                }
+                var requestedCompanyId = ResolveCompanyId(context, user);
 
                 if (userId <= 0)
                 {
@@ -122,6 +103,26 @@ namespace Onion.Controllers.Middleware
             }
 
             await _next(context);
+        }
+
+        private static int? ResolveCompanyId(HttpContext context, System.Security.Claims.ClaimsPrincipal user)
+        {
+            if (context.Items.TryGetValue("TenantCompanyId", out var itemValue) &&
+                TryParseCompanyId(itemValue, out var itemCompanyId))
+                return itemCompanyId;
+
+            var headerValue = context.Request.Headers["X-Company-Id"].FirstOrDefault()
+                ?? context.Request.Headers["x-company-id"].FirstOrDefault();
+            if (TryParseCompanyId(headerValue, out var headerCompanyId))
+                return headerCompanyId;
+
+            var claimValue = (user.FindFirst("companyId") ?? user.FindFirst("CompanyId"))?.Value;
+            return TryParseCompanyId(claimValue, out var claimCompanyId) ? claimCompanyId : null;
+        }
+
+        private static bool TryParseCompanyId(object? value, out int companyId)
+        {
+            return int.TryParse(value?.ToString(), out companyId) && companyId > 0;
         }
 
         private static bool IsGlobalAdministratorClaim(System.Security.Claims.ClaimsPrincipal user)
