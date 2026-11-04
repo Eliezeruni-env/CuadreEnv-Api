@@ -96,7 +96,9 @@ public sealed class CashSessionService : ICashSessionService
     public async Task<CashSessionDto?> GetActiveAsync(int companyId, int cashierUserId, CancellationToken cancellationToken = default)
     {
         var session = await _db.CashSessions.AsNoTracking()
-            .SingleOrDefaultAsync(x => x.CompanyId == companyId && x.CashierUserId == cashierUserId && x.Status == CashSessionStatus.Open, cancellationToken);
+            .Where(x => x.CompanyId == companyId && x.CashierUserId == cashierUserId && x.Status == CashSessionStatus.Open)
+            .OrderByDescending(x => x.OpenedAt)
+            .FirstOrDefaultAsync(cancellationToken);
         if (session is null) return null;
 
         var payments = await _db.Payments.AsNoTracking()

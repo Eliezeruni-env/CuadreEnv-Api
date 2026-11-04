@@ -218,18 +218,26 @@ public sealed record SwitchCompanyRequest(int CompanyId, string? DeviceId = null
             }
 
             var hasAllAssignedModules = assignedModules.Contains(ModuleCodes.All, StringComparer.Ordinal);
-            var hasAllLicensedModules = licensedModules.Contains(ModuleCodes.All, StringComparer.Ordinal) || (isGlobalAdministrator && licensedModules.Count == 0);
+            var hasAllLicensedModules = licensedModules.Count == 0 || licensedModules.Contains(ModuleCodes.All, StringComparer.Ordinal) || (isGlobalAdministrator && licensedModules.Count == 0);
             var effectiveModules = hasAllAssignedModules && hasAllLicensedModules
                 ? new[] { ModuleCodes.All }
                 : hasAllAssignedModules
-                    ? (licensedModules.Count > 0 ? licensedModules.ToArray() : (isGlobalAdministrator ? assignedModules.ToArray() : Array.Empty<string>()))
+                    ? (licensedModules.Count > 0 ? licensedModules.ToArray() : assignedModules.ToArray())
                     : hasAllLicensedModules
                         ? assignedModules.ToArray()
                         : assignedModules
-                            .Where(assigned => licensedModules.Contains(ModuleCodes.Normalize(assigned) ?? assigned, StringComparer.Ordinal))
+                            .Where(assigned => licensedModules.Contains(ModuleCodes.Normalize(assigned) ?? assigned, StringComparer.Ordinal) ||
+                                               licensedModules.Contains(assigned, StringComparer.OrdinalIgnoreCase))
                             .ToArray();
 
-            var responseLicensed = licensedModules.ToArray();
+            // Si el usuario tiene módulos asignados pero el filtro de licencias los redujo a vacío por desajuste de catálogos,
+            // conservar los módulos asignados directamente por el administrador para no bloquear el acceso
+            if (effectiveModules.Length == 0 && assignedModules.Count > 0)
+            {
+                effectiveModules = assignedModules.ToArray();
+            }
+
+            var responseLicensed = licensedModules.Count > 0 ? licensedModules.ToArray() : new[] { ModuleCodes.All };
             return Ok(new
             {
                 assignedModules,

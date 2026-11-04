@@ -222,7 +222,7 @@ public sealed class CompanyEntitlementService : ICompanyEntitlementService
     private async Task<CompanyEntitlements> LoadLocalAsync(int companyId, CancellationToken cancellationToken)
     {
         var connectionString = _configuration.GetConnectionString("Usm") ?? _configuration.GetConnectionString("OnionCrud");
-        if (string.IsNullOrWhiteSpace(connectionString)) return Empty;
+        if (string.IsNullOrWhiteSpace(connectionString)) return new CompanyEntitlements(DefaultModules, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         var modules = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var projects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         await using var connection = new NpgsqlConnection(connectionString);
@@ -240,6 +240,10 @@ public sealed class CompanyEntitlementService : ICompanyEntitlementService
             command.Parameters.Add(new NpgsqlParameter("companyId", companyId));
             try { await using var reader = await command.ExecuteReaderAsync(cancellationToken); while (await reader.ReadAsync(cancellationToken)) projects.Add(reader.GetString(0)); }
             catch (PostgresException ex) when (ex.SqlState == "42P01") { }
+        }
+        if (modules.Count == 0)
+        {
+            modules = new HashSet<string>(DefaultModules, StringComparer.OrdinalIgnoreCase);
         }
         return new CompanyEntitlements(modules, projects);
     }

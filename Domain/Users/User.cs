@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Text;
@@ -8,27 +8,22 @@ namespace Onion.Domain.Users
     public class User : BaseEntity
     {
         //User info
-        [Required]
-        public string FirstName { get; set; }
+        public string FirstName { get; set; } = string.Empty;
 
-        [Required]
-        public string LastName { get; set; }
+        public string LastName { get; set; } = string.Empty;
 
         // Identification is optional during onboarding; make nullable to allow users without it
         public string? Identification { get; set; }
 
-        [Required]
-        [MaxLength(1)]
-        public string Gender { get; set; }
-            
+        public string Gender { get; set; } = "M";
 
         //Login infor
         [EmailAddress]
-        public string Email { get; set; }
-        public string PasswordHash { get; set; }
-        public string PhoneNumber { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string PasswordHash { get; set; } = string.Empty;
+        public string PhoneNumber { get; set; } = string.Empty;
         public DateTime BirthDate { get; set; }
-        public string UserName { get; set; }
+        public string UserName { get; set; } = string.Empty;
         public int? CompanyId { get; set; }
         // Simple role string to support basic RBAC (e.g. "Admin", "Employee")
         public string Role { get; set; } = "Employee";
