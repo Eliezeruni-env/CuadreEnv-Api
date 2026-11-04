@@ -29,21 +29,22 @@ namespace Onion.Controllers.Middleware
             // should be allowed to create a company and then be associated to it. Skip tenant validation
             // for that specific case.
             var normalizedPath = path.TrimEnd('/');
-            if (normalizedPath.EndsWith("/users/my-companies", StringComparison.OrdinalIgnoreCase) ||
-                normalizedPath.EndsWith("/auth/switch-company", StringComparison.OrdinalIgnoreCase))
-            {
-                await _next(context);
-                return;
-            }
             var pathSegments = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
             var resource = pathSegments.Length > 0 ? pathSegments[^1] : string.Empty;
             var parentResource = pathSegments.Length > 1 ? pathSegments[^2] : string.Empty;
 
-            // Authentication and company-plan discovery are valid before onboarding.
-            if (resource.Equals("auth", StringComparison.OrdinalIgnoreCase) ||
+            // Authentication, switch-company, my-companies, and company-plan discovery are valid before/during onboarding and login.
+            if (normalizedPath.Contains("/auth", StringComparison.OrdinalIgnoreCase) ||
+                normalizedPath.EndsWith("/users/my-companies", StringComparison.OrdinalIgnoreCase) ||
+                normalizedPath.Contains("/api/users/login-sync", StringComparison.OrdinalIgnoreCase) ||
                 (parentResource.Equals("company", StringComparison.OrdinalIgnoreCase) &&
                  resource.Equals("plans", StringComparison.OrdinalIgnoreCase)))
             {
+                var cid = ResolveCompanyId(context, user);
+                if (cid.HasValue && cid.Value > 0)
+                {
+                    context.Items["TenantCompanyId"] = cid.Value;
+                }
                 await _next(context);
                 return;
             }
@@ -73,7 +74,7 @@ namespace Onion.Controllers.Middleware
                 var userRecord = userId > 0
                     ? await db.Users.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId)
                     : null;
-                var resolvedCompanyId = requestedCompanyId;
+                var resolvedCompanyId = requestedCompanyId ?? userRecord?.CompanyId;
 
                 if (resolvedCompanyId is not > 0)
                 {
@@ -89,8 +90,12 @@ namespace Onion.Controllers.Middleware
                     return;
                 }
 
-                var hasCompanyAccess = userId > 0 && await db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
-                        .AnyAsync(x => x.UserId == userId && x.CompanyId == resolvedCompanyId.Value && x.Active && !x.IsDeleted);
+                var hasCompanyAccess = userId > 0 && (
+                    (userRecord != null && userRecord.CompanyId == resolvedCompanyId.Value) ||
+                    await db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
+                        .AnyAsync(x => x.UserId == userId && x.CompanyId == resolvedCompanyId.Value && x.Active && !x.IsDeleted) ||
+                    (userRecord != null && (userRecord.IsSuperUser || string.Equals(userRecord.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase)))
+                );
                 if (!hasCompanyAccess)
                 {
                     await WriteCompanyRequiredAsync(context);
