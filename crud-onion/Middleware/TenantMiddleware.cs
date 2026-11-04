@@ -53,7 +53,7 @@ namespace Onion.Controllers.Middleware
                 var userRecord = userId > 0
                     ? await db.Users.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId)
                     : null;
-                var resolvedCompanyId = requestedCompanyId;
+                var resolvedCompanyId = requestedCompanyId ?? userRecord?.CompanyId;
 
                 if (resolvedCompanyId is not > 0)
                 {
@@ -69,8 +69,10 @@ namespace Onion.Controllers.Middleware
                     return;
                 }
 
-                var hasCompanyAccess = userId > 0 && await db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
-                    .AnyAsync(x => x.UserId == userId && x.CompanyId == resolvedCompanyId.Value && x.Active && !x.IsDeleted);
+                var hasCompanyAccess = (userRecord != null && userRecord.CompanyId == resolvedCompanyId.Value) ||
+                    (userId > 0 && await db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
+                        .AnyAsync(x => x.UserId == userId && x.CompanyId == resolvedCompanyId.Value && x.Active && !x.IsDeleted)) ||
+                    IsGlobalAdministratorClaim(user);
                 if (!hasCompanyAccess)
                 {
                     await WriteCompanyRequiredAsync(context);
