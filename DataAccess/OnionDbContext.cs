@@ -139,6 +139,19 @@ namespace Onion.DataAccess
         {
             base.OnModelCreating(modelBuilder);
 
+            modelBuilder.Entity<Product>(entity =>
+            {
+                entity.Property(e => e.Barcode)
+                    .IsRequired(false)
+                    .HasDefaultValue(string.Empty);
+                entity.Property(e => e.ShortDescription)
+                    .IsRequired(false)
+                    .HasDefaultValue(string.Empty);
+                entity.Property(e => e.Reference)
+                    .IsRequired(false)
+                    .HasDefaultValue(string.Empty);
+            });
+
             modelBuilder.Entity<ClerkUser>(entity =>
             {
                 entity.HasKey(e => e.ClerkUserId);

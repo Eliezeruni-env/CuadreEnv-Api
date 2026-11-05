@@ -2474,9 +2474,10 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("Barcode")
-                        .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("");
 
                     b.Property<int>("CategoryId")
                         .HasColumnType("integer");
@@ -2537,8 +2538,9 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("numeric");
 
                     b.Property<string>("Reference")
-                        .IsRequired()
-                        .HasColumnType("text");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("");
 
                     b.Property<decimal>("ReservedStock")
                         .HasColumnType("numeric");
@@ -2550,8 +2552,9 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnName("xmin");
 
                     b.Property<string>("ShortDescription")
-                        .IsRequired()
-                        .HasColumnType("text");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("");
 
                     b.Property<decimal>("Stock")
                         .HasColumnType("numeric");

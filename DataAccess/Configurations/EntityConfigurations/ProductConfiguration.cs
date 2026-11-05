@@ -20,13 +20,19 @@ namespace Onion.DataAccess.Configurations.EntityConfigurations
                    .HasMaxLength(200);
 
             builder.Property(x => x.Barcode)
-                   .HasMaxLength(100);
+                   .HasMaxLength(100)
+                   .IsRequired(false)
+                   .HasDefaultValue(string.Empty);
 
             builder.Property(x => x.ShortDescription)
-                   .HasMaxLength(100);
+                   .HasMaxLength(100)
+                   .IsRequired(false)
+                   .HasDefaultValue(string.Empty);
 
             builder.Property(x => x.Reference)
-                   .HasMaxLength(50);
+                   .HasMaxLength(50)
+                   .IsRequired(false)
+                   .HasDefaultValue(string.Empty);
 
             // Store Cost as decimal in database with precision. Migrations will convert existing float columns to decimal(18,2).
             builder.Property(x => x.Cost)

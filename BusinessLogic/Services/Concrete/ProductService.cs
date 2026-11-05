@@ -253,6 +253,12 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             entity.CompanyId = companyId.Value;
 
+            entity.Barcode ??= string.Empty;
+            entity.ShortDescription ??= string.Empty;
+            entity.Reference ??= string.Empty;
+            entity.CreateBy = string.IsNullOrWhiteSpace(entity.CreateBy) ? (_currentUserService.UserId?.ToString() ?? "System") : entity.CreateBy;
+            entity.ModifiedBy = string.IsNullOrWhiteSpace(entity.ModifiedBy) ? (_currentUserService.UserId?.ToString() ?? "System") : entity.ModifiedBy;
+
             if (entity.ProductTypeId <= 0)
                 entity.ProductTypeId = 1;
 
@@ -365,6 +371,11 @@ namespace Onion.BussinesLogic.Services.Concrete
             }
 
             _mapper.Map(entityDto, existing);
+
+            existing.Barcode ??= string.Empty;
+            existing.ShortDescription ??= string.Empty;
+            existing.Reference ??= string.Empty;
+            existing.ModifiedBy = _currentUserService.UserId?.ToString() ?? "System";
 
             if (existing.ProductTypeId == 2)
                 existing.InvoiceWithoutStock = true;
