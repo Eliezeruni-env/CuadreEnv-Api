@@ -12,6 +12,8 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Net.Http;
+using System.Text.Json;
 
 namespace Onion.BussinesLogic.Services.Concrete
 {
@@ -22,14 +24,145 @@ namespace Onion.BussinesLogic.Services.Concrete
         private readonly ILogger<ProductService> _logger;
         private readonly Onion.BussinesLogic.Services.Abstract.ISubscriptionService _subscriptionService;
         private readonly Onion.Common.Services.ICurrentUserService _currentUserService;
+        private readonly IHttpClientFactory _httpClientFactory;
 
-        public ProductService(IUnitOfWork uow, IMapper mapper, ILogger<ProductService> logger, Onion.BussinesLogic.Services.Abstract.ISubscriptionService subscriptionService, Onion.Common.Services.ICurrentUserService currentUserService)
+        public ProductService(IUnitOfWork uow, IMapper mapper, ILogger<ProductService> logger, Onion.BussinesLogic.Services.Abstract.ISubscriptionService subscriptionService, Onion.Common.Services.ICurrentUserService currentUserService, IHttpClientFactory httpClientFactory)
         {
             _uow = uow ?? throw new ArgumentNullException(nameof(uow));
             _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
             _logger = logger;
             _subscriptionService = subscriptionService;
             _currentUserService = currentUserService ?? throw new ArgumentNullException(nameof(currentUserService));
+            _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
+        }
+
+        public async Task<ProductLookupDto?> LookupByBarcodeAsync(string barcode, CancellationToken cancellationToken = default)
+        {
+            var normalizedBarcode = barcode?.Trim();
+            if (string.IsNullOrWhiteSpace(normalizedBarcode))
+                return null;
+
+            var local = await _uow.Products.GetByBarcodeAsync(normalizedBarcode);
+            if (local is not null)
+            {
+                var category = local.CategoryId > 0
+                    ? await _uow.Categories.GetByIdAsync(local.CategoryId)
+                    : null;
+                return new ProductLookupDto
+                {
+                    Barcode = normalizedBarcode,
+                    Name = local.Description,
+                    Brand = local.Brand,
+                    Category = category?.Description,
+                    Description = local.Description,
+                    ImageUrl = local.ImageUrl,
+                    IsLocal = true
+                };
+            }
+
+            var client = _httpClientFactory.CreateClient("ProductLookup");
+            var brocade = await GetExternalProductAsync(
+                client,
+                $"https://www.brocade.io/api/items/{Uri.EscapeDataString(normalizedBarcode)}",
+                normalizedBarcode,
+                cancellationToken);
+            if (brocade is not null)
+                return brocade;
+
+            return await GetExternalProductAsync(
+                client,
+                $"https://world.openfoodfacts.org/api/v2/product/{Uri.EscapeDataString(normalizedBarcode)}.json",
+                normalizedBarcode,
+                cancellationToken);
+        }
+
+        private async Task<ProductLookupDto?> GetExternalProductAsync(
+            HttpClient client,
+            string url,
+            string barcode,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                using var response = await client.GetAsync(url, cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                    return null;
+
+                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+                var root = document.RootElement;
+                if (root.ValueKind != JsonValueKind.Object)
+                    return null;
+
+                if (root.TryGetProperty("status", out var status) &&
+                    status.ValueKind == JsonValueKind.Number && status.GetInt32() == 0)
+                    return null;
+
+                if (root.TryGetProperty("product", out var nestedProduct) && nestedProduct.ValueKind == JsonValueKind.Object)
+                    root = nestedProduct;
+                else if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
+                    root = data;
+
+                var name = FirstString(root, "name", "product_name", "product_name_en");
+                var brand = FirstString(root, "brand", "brands", "brand_name");
+                var category = FirstString(root, "category", "categories", "categories_en");
+                var description = FirstString(root, "description", "generic_name", "generic_name_en");
+                var imageUrl = FirstString(root, "imageUrl", "image_url", "image_front_url", "image_small_url");
+                var quantity = FirstString(root, "quantity", "serving_size");
+
+                if (string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(description))
+                    return null;
+
+                var combinedDescription = string.Join(" · ", new[] { description, brand }
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase));
+
+                return new ProductLookupDto
+                {
+                    Barcode = FirstString(root, "barcode", "code") ?? barcode,
+                    Name = name ?? description,
+                    Brand = brand,
+                    Category = category,
+                    Description = string.IsNullOrWhiteSpace(combinedDescription) ? name : combinedDescription,
+                    ImageUrl = imageUrl,
+                    Quantity = quantity,
+                    IsLocal = false
+                };
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "External product lookup failed for barcode {Barcode} using {Url}", barcode, url);
+                return null;
+            }
+        }
+
+        private static string? FirstString(JsonElement element, params string[] propertyNames)
+        {
+            foreach (var propertyName in propertyNames)
+            {
+                if (!element.TryGetProperty(propertyName, out var value))
+                    continue;
+
+                if (value.ValueKind == JsonValueKind.String)
+                {
+                    var text = value.GetString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(text))
+                        return text;
+                }
+                else if (value.ValueKind == JsonValueKind.Array)
+                {
+                    var first = value.EnumerateArray()
+                        .FirstOrDefault(x => x.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(x.GetString()));
+                    if (first.ValueKind == JsonValueKind.String)
+                        return first.GetString()?.Trim();
+                }
+            }
+
+            return null;
         }
 
         public async Task<IEnumerable<Product>> GetByTypeAsync(int productTypeId)

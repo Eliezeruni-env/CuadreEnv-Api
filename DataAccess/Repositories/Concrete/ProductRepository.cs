@@ -17,6 +17,16 @@ namespace Onion.DataAccess.Repositories.Concrete
         {
         }
 
+        public Task<Product?> GetByBarcodeAsync(string barcode)
+        {
+            if (string.IsNullOrWhiteSpace(barcode))
+                return Task.FromResult<Product?>(null);
+
+            var normalizedBarcode = barcode.Trim();
+            return _context.Products.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Barcode == normalizedBarcode);
+        }
+
         public async Task<bool> TryIncreaseStockAsync(int productId, decimal quantity)
         {
             if (!_context.TenantCompanyId.HasValue) throw new InvalidOperationException("Tenant company id missing for multi-tenant operation.");
@@ -124,7 +134,9 @@ namespace Onion.DataAccess.Repositories.Concrete
                             Id = p.Id,
                             Description = p.Description,
                             Barcode = p.Barcode,
+                            Brand = p.Brand,
                             Cost = p.Cost,
+                            Price = p.Price,
                             Stock = p.Stock,
                             Reference = p.Reference,
                             ShortDescription = p.ShortDescription,

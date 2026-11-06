@@ -5,6 +5,7 @@
         public int Id { get; set; }
         public string? Description { get; set; }
         public string? Barcode { get; set; }
+        public string? Brand { get; set; }
         public int CompanyId { get; set; }
         public decimal Cost { get; set; } = 0m;
         public decimal Price { get; set; } = 0m;
@@ -35,4 +36,16 @@
 
     public record PreloadedProductDto(string Description, string? Barcode, string? Reference, string Category, decimal Cost, decimal Price, decimal Stock, int MinQuantity);
     public record PreloadedCatalogDto(string Name, IReadOnlyList<PreloadedProductDto> Products);
+
+    public sealed class ProductLookupDto
+    {
+        public string Barcode { get; init; } = string.Empty;
+        public string? Name { get; init; }
+        public string? Brand { get; init; }
+        public string? Category { get; init; }
+        public string? Description { get; init; }
+        public string? ImageUrl { get; init; }
+        public string? Quantity { get; init; }
+        public bool IsLocal { get; init; }
+    }
 }

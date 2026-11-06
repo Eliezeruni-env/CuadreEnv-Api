@@ -23,6 +23,10 @@ namespace Onion.DataAccess.Configurations.EntityConfigurations
                    .HasMaxLength(100)
                    .IsRequired(false);
 
+            builder.Property(x => x.Brand)
+                   .HasMaxLength(100)
+                   .IsRequired(false);
+
             builder.Property(x => x.ShortDescription)
                    .HasMaxLength(100)
                    .IsRequired(false)
@@ -66,7 +70,7 @@ namespace Onion.DataAccess.Configurations.EntityConfigurations
                    .HasDefaultValue(false);
 
             builder.Property(x => x.ImageUrl)
-                   .HasMaxLength(1000);
+                   .HasMaxLength(500);
 
             builder.Property(x => x.ProfitMargin)
                    .HasColumnType("decimal(18,2)");

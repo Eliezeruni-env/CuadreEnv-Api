@@ -7,6 +7,7 @@ namespace Onion.BussinesLogic.Services.Abstract
     public interface IProductService
     {
         Task<ProductDto?> GetAsync(int id);
+        Task<ProductLookupDto?> LookupByBarcodeAsync(string barcode, CancellationToken cancellationToken = default);
         Task<IEnumerable<ProductDto>> SearchByDescriptionAsync(string description);
         Task<PagedList<ProductRow>> GetPagedListAsync(FilterPayload filterPayload, CancellationToken ct = default);
         Task AddAsync(ProductDto entityDto);

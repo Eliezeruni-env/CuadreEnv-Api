@@ -2479,6 +2479,10 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("character varying(100)")
                         .HasDefaultValue("");
 
+                    b.Property<string>("Brand")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<int>("CategoryId")
                         .HasColumnType("integer");
 
@@ -2504,7 +2508,8 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ImageUrl")
-                        .HasColumnType("text");
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<bool>("InvoiceWithoutStock")
                         .HasColumnType("boolean");

@@ -133,6 +133,11 @@ builder.Services.AddDomainServices();
 builder.Services.AddValidators();
 // HttpClient factory used by UM proxy example
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("ProductLookup", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("ProductLookup:TimeoutSeconds", 8));
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("CuadreEnv-Api/1.0");
+});
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient("Usm", client =>
 {

@@ -7,6 +7,7 @@ namespace Onion.DataAccess.Repositories.Abstract
     public interface IProductRepository : IRepository<Product>
     {
         Task<bool> ExistsByBarcodeAsync(string barcode, int id);
+        Task<Product?> GetByBarcodeAsync(string barcode);
         Task<IEnumerable<Product>> SearchByDescriptionAsync(string description);
         Task<IEnumerable<Product>> SearchByNameAsync(string name);
         Task<IEnumerable<Product>> GetByCategoryAsync(int categoryId);

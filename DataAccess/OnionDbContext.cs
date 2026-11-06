@@ -144,6 +144,12 @@ namespace Onion.DataAccess
                 entity.Property(e => e.Barcode)
                     .IsRequired(false)
                     .HasDefaultValue(string.Empty);
+                entity.Property(e => e.Brand)
+                    .HasMaxLength(100)
+                    .IsRequired(false);
+                entity.Property(e => e.ImageUrl)
+                    .HasMaxLength(500)
+                    .IsRequired(false);
                 entity.Property(e => e.ShortDescription)
                     .IsRequired(false)
                     .HasDefaultValue(string.Empty);

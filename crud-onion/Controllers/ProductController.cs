@@ -31,6 +31,19 @@ namespace Onion.Controllers
             return Ok(Onion.Common.Models.ApiResponse<object>.Ok(catalogs));
         }
 
+        [HttpGet("lookup/{barcode}")]
+        public async Task<IActionResult> LookupByBarcode(string barcode, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(barcode))
+                return BadRequest(Onion.Common.Models.ApiResponse<object>.Fail("Barcode is required."));
+
+            var result = await _productService.LookupByBarcodeAsync(barcode, cancellationToken);
+            if (result is null)
+                return NotFound(Onion.Common.Models.ApiResponse<object>.Fail("Product was not found."));
+
+            return Ok(Onion.Common.Models.ApiResponse<ProductLookupDto>.Ok(result));
+        }
+
         [HttpGet("services")]
         public async Task<IActionResult> GetServices()
         {

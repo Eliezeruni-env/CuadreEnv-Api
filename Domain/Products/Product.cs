@@ -10,6 +10,8 @@ namespace Onion.Domain.Products
         public string Description { get; set; } = string.Empty;
         [MaxLength(100)]
         public string? Barcode { get; set; }
+        [MaxLength(100)]
+        public string? Brand { get; set; }
         public string? ShortDescription { get; set; }
         public string? Reference { get; set; }
         public int MaximumQuantity { get; set; } = 0;
