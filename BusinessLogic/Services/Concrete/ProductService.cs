@@ -234,7 +234,8 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             if (entityDto is null) throw new ArgumentNullException(nameof(entityDto));
 
-            bool existsBarcode = await _uow.Products.ExistsByBarcodeAsync(entityDto.Barcode ?? string.Empty, 0);
+            bool existsBarcode = !string.IsNullOrWhiteSpace(entityDto.Barcode) &&
+                await _uow.Products.ExistsByBarcodeAsync(entityDto.Barcode.Trim(), 0);
             if (existsBarcode)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "DUPLICATE_BARCODE", Message = "El código de barras ya existe", Language = "ES" });
 
@@ -253,9 +254,9 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             entity.CompanyId = companyId.Value;
 
-            entity.Barcode ??= string.Empty;
-            entity.ShortDescription ??= string.Empty;
-            entity.Reference ??= string.Empty;
+            entity.Barcode = string.IsNullOrWhiteSpace(entity.Barcode) ? null : entity.Barcode.Trim();
+            entity.ShortDescription = string.IsNullOrWhiteSpace(entity.ShortDescription) ? null : entity.ShortDescription.Trim();
+            entity.Reference = string.IsNullOrWhiteSpace(entity.Reference) ? null : entity.Reference.Trim();
             entity.CreateBy = string.IsNullOrWhiteSpace(entity.CreateBy) ? (_currentUserService.UserId?.ToString() ?? "System") : entity.CreateBy;
             entity.ModifiedBy = string.IsNullOrWhiteSpace(entity.ModifiedBy) ? (_currentUserService.UserId?.ToString() ?? "System") : entity.ModifiedBy;
 
@@ -271,8 +272,8 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (entity.MinimumQuantity < 0)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_STOCK", Message = "MinimumQuantity must be >= 0", Language = "ES" });
 
-            if (entity.Cost <= 0)
-                throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_COST", Message = "Cost must be greater than zero", Language = "ES" });
+            if (entity.Cost < 0 || entity.Price < 0 || entity.Stock < 0)
+                throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_STOCK", Message = "Cost, Price and Stock must be >= 0", Language = "ES" });
 
             // Validate or fallback ProductType
             if (entity.ProductTypeId > 0)
@@ -357,7 +358,8 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             if (entityDto is null) throw new ArgumentNullException(nameof(entityDto));
 
-            bool existsBarcode = await _uow.Products.ExistsByBarcodeAsync(entityDto.Barcode ?? string.Empty, entityDto.Id);
+            bool existsBarcode = !string.IsNullOrWhiteSpace(entityDto.Barcode) &&
+                await _uow.Products.ExistsByBarcodeAsync(entityDto.Barcode.Trim(), entityDto.Id);
             if (existsBarcode)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "DUPLICATE_BARCODE", Message = "El código de barras ya existe", Language = "ES" });
 
@@ -372,9 +374,9 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             _mapper.Map(entityDto, existing);
 
-            existing.Barcode ??= string.Empty;
-            existing.ShortDescription ??= string.Empty;
-            existing.Reference ??= string.Empty;
+            existing.Barcode = string.IsNullOrWhiteSpace(existing.Barcode) ? null : existing.Barcode.Trim();
+            existing.ShortDescription = string.IsNullOrWhiteSpace(existing.ShortDescription) ? null : existing.ShortDescription.Trim();
+            existing.Reference = string.IsNullOrWhiteSpace(existing.Reference) ? null : existing.Reference.Trim();
             existing.ModifiedBy = _currentUserService.UserId?.ToString() ?? "System";
 
             if (existing.ProductTypeId == 2)
@@ -383,8 +385,8 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (existing.MinimumQuantity < 0)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_STOCK", Message = "MinimumQuantity must be >= 0", Language = "ES" });
 
-            if (existing.Cost <= 0)
-                throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_COST", Message = "Cost must be greater than zero", Language = "ES" });
+            if (existing.Cost < 0 || existing.Price < 0 || existing.Stock < 0)
+                throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_STOCK", Message = "Cost, Price and Stock must be >= 0", Language = "ES" });
 
             // Validate related entities to avoid FK errors (only if product type provided)
             if (existing.ProductTypeId > 0)

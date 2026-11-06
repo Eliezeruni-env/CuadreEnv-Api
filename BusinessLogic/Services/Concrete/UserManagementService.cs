@@ -112,6 +112,17 @@ namespace Onion.BussinesLogic.Services.Concrete
             return result;
         }
 
+        public async Task<UserPermissionsDto> GetPermissionsAsync()
+        {
+            if (_currentUserService.UserId is not > 0)
+                throw new InvalidOperationException("Authenticated user is required.");
+
+            var user = await _db.Users.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == _currentUserService.UserId.Value)
+                ?? throw new InvalidOperationException("User not found");
+            return new UserPermissionsDto(user.CanAccessMobilePOS, user.CanOpenCashDrawer, user.CanConfigureFiscalReceipt, user.CanChangeThemeAndLanguage);
+        }
+
         public async Task<UserDetailDto?> GetByIdAsync(int id)
         {
             var u = await _userRepo.GetByIdAsync(id);
@@ -144,6 +155,10 @@ namespace Onion.BussinesLogic.Services.Concrete
                 ,
                 IsSuperUser = u.IsSuperUser,
                 AllowedModules = ParseAllowedModules(u.AllowedModulesJson, u.Id, u.Role, u.IsSuperUser),
+                CanAccessMobilePOS = u.CanAccessMobilePOS,
+                CanOpenCashDrawer = u.CanOpenCashDrawer,
+                CanConfigureFiscalReceipt = u.CanConfigureFiscalReceipt,
+                CanChangeThemeAndLanguage = u.CanChangeThemeAndLanguage,
                 Address = u.Address,
                 City = u.City,
                 Country = u.Country,
@@ -218,6 +233,10 @@ namespace Onion.BussinesLogic.Services.Concrete
                 CompanyId = companyId,
                 PasswordHash = hash,
                 AllowedModulesJson = SerializeAllowedModules(req.AllowedModules),
+                CanAccessMobilePOS = req.CanAccessMobilePOS,
+                CanOpenCashDrawer = req.CanOpenCashDrawer,
+                CanConfigureFiscalReceipt = req.CanConfigureFiscalReceipt,
+                CanChangeThemeAndLanguage = req.CanChangeThemeAndLanguage,
                 Active = req.Active,
                 CreateBy = performedByUserId
                 , Address = req.Address
@@ -255,6 +274,10 @@ namespace Onion.BussinesLogic.Services.Concrete
                 TempPasswordSent = false
                 ,
                 IsSuperUser = user.IsSuperUser
+                , CanAccessMobilePOS = user.CanAccessMobilePOS
+                , CanOpenCashDrawer = user.CanOpenCashDrawer
+                , CanConfigureFiscalReceipt = user.CanConfigureFiscalReceipt
+                , CanChangeThemeAndLanguage = user.CanChangeThemeAndLanguage
                 , AllowedModules = ParseAllowedModules(user.AllowedModulesJson, user.Id, user.Role, user.IsSuperUser)
                 , Address = user.Address
                 , City = user.City
@@ -323,6 +346,10 @@ namespace Onion.BussinesLogic.Services.Concrete
                 u.BirthDate = req.BirthDate.Value;
             u.Gender = req.Gender;
             u.Role = req.Role;
+            u.CanAccessMobilePOS = req.CanAccessMobilePOS;
+            u.CanOpenCashDrawer = req.CanOpenCashDrawer;
+            u.CanConfigureFiscalReceipt = req.CanConfigureFiscalReceipt;
+            u.CanChangeThemeAndLanguage = req.CanChangeThemeAndLanguage;
             if (req.AllowedModules is not null)
                 u.AllowedModulesJson = SerializeAllowedModules(req.AllowedModules);
             if (!_currentUserService.IsGlobalAdministrator && _currentUserService.CompanyId.HasValue)

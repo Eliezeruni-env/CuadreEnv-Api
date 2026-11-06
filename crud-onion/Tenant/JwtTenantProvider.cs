@@ -24,6 +24,12 @@ namespace Onion.DataAccess.Tenant
                 if (int.TryParse(header, out var headerId) && headerId > 0)
                     return headerId;
 
+                var claim = ctx.User.FindFirst("company_id")?.Value
+                    ?? ctx.User.FindFirst("companyId")?.Value
+                    ?? ctx.User.FindFirst("CompanyId")?.Value;
+                if (int.TryParse(claim, out var claimId) && claimId > 0)
+                    return claimId;
+
                 return null;
             }
             catch

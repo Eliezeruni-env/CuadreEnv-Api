@@ -2531,6 +2531,9 @@ namespace Onion.DataAccess.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<decimal>("Price")
+                        .HasColumnType("numeric");
+
                     b.Property<int>("ProductTypeId")
                         .HasColumnType("integer");
 
@@ -3281,6 +3284,18 @@ namespace Onion.DataAccess.Migrations
 
                     b.Property<DateTime>("BirthDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("CanAccessMobilePOS")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanChangeThemeAndLanguage")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanConfigureFiscalReceipt")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanOpenCashDrawer")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("City")
                         .HasColumnType("text");

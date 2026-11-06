@@ -98,6 +98,12 @@ namespace Onion.Controllers.Middleware
             if (TryParseCompanyId(headerValue, out var headerCompanyId))
                 return headerCompanyId;
 
+            var claimValue = context.User.FindFirst("company_id")?.Value
+                ?? context.User.FindFirst("companyId")?.Value
+                ?? context.User.FindFirst("CompanyId")?.Value;
+            if (TryParseCompanyId(claimValue, out var claimCompanyId))
+                return claimCompanyId;
+
             return null;
         }
 

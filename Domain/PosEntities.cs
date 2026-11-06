@@ -135,6 +135,8 @@ namespace Onion.Domain
         public decimal UnitPrice { get; set; }
         public decimal Discount { get; set; }
         public decimal Tax { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        public decimal GrossMargin { get; set; }
         // Optional warehouse where the product will be taken from
         public int? WarehouseId { get; set; }
     }

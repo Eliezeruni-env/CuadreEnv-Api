@@ -39,6 +39,19 @@ namespace Onion.Controllers
             return Ok(new { exists });
         }
 
+        [HttpGet("permissions")]
+        public async Task<IActionResult> Permissions()
+        {
+            try
+            {
+                return Ok(ApiResponse<UserPermissionsDto>.Ok(await _svc.GetPermissionsAsync()));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ApiResponse<object>.Fail(ex.Message));
+            }
+        }
+
         [HttpGet("{id:int}")]
         [Onion.Common.Authorization.AuthorizeExactModule("users")]
         public async Task<IActionResult> Get(int id)

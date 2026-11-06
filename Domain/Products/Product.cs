@@ -7,13 +7,13 @@ namespace Onion.Domain.Products
     {
         #region General
         [MaxLength(200)]
-        public string Description { get; set; }
+        public string Description { get; set; } = string.Empty;
         [MaxLength(100)]
-        public string Barcode { get; set; }
-        public string ShortDescription { get; set; }
-        public string Reference { get; set; }
-        public int MaximumQuantity { get; set; }
-        public int MinimumQuantity { get; set; }
+        public string? Barcode { get; set; }
+        public string? ShortDescription { get; set; }
+        public string? Reference { get; set; }
+        public int MaximumQuantity { get; set; } = 0;
+        public int MinimumQuantity { get; set; } = 0;
 
         #endregion
 
@@ -32,9 +32,11 @@ namespace Onion.Domain.Products
         public decimal? ProfitMargin { get; set; }
 
         #region Cost
-        public decimal Cost { get; set; }
+        public decimal Cost { get; set; } = 0m;
+        // Unit price charged to the customer. Cost is reserved for margin calculations.
+        public decimal Price { get; set; } = 0m;
         // Current stock quantity available for sale
-        public decimal Stock { get; set; }
+        public decimal Stock { get; set; } = 0m;
         // Quantity reserved (not yet deducted from stock until sale is confirmed)
         public decimal ReservedStock { get; set; }
         public uint RowVersion { get; set; }

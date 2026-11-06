@@ -41,5 +41,9 @@ namespace Onion.Domain.Users
         public string? AllowedModulesJson { get; set; }
         // Allow marking a user as super-user (persistent override for management tools)
         public bool IsSuperUser { get; set; } = false;
+        public bool CanAccessMobilePOS { get; set; } = true;
+        public bool CanOpenCashDrawer { get; set; } = false;
+        public bool CanConfigureFiscalReceipt { get; set; } = true;
+        public bool CanChangeThemeAndLanguage { get; set; } = true;
     }
 }

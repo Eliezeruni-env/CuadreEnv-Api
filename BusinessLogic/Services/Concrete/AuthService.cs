@@ -277,6 +277,20 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             if (user == null) throw new ArgumentNullException(nameof(user));
             if (user.CompanyId is not > 0)
+            {
+                var defaultMembership = await _db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
+                    .Where(x => x.UserId == user.Id && x.Active && !x.IsDeleted)
+                    .OrderByDescending(x => x.IsDefault)
+                    .ThenBy(x => x.Id)
+                    .FirstOrDefaultAsync();
+                if (defaultMembership is not null)
+                {
+                    user.CompanyId = defaultMembership.CompanyId;
+                    _uow.Users.Update(user);
+                    await _uow.SaveChangesAsync();
+                }
+            }
+            if (user.CompanyId is not > 0)
                 throw new TenantRequiredException("A valid active company is required to issue a refresh token.");
 
             // Cleanup old revoked tokens on login activity to keep table bounded
@@ -595,7 +609,11 @@ namespace Onion.BussinesLogic.Services.Concrete
                 user.Id,
                 user.Email ?? string.Empty,
                 user.Role ?? "Employee",
-                modules.ToList());
+                modules.ToList(),
+                user.CanAccessMobilePOS,
+                user.CanOpenCashDrawer,
+                user.CanConfigureFiscalReceipt,
+                user.CanChangeThemeAndLanguage);
 
         private string GenerateJwtToken(User user, string? deviceId = null, IReadOnlyCollection<string>? modules = null)
         {
@@ -631,7 +649,13 @@ namespace Onion.BussinesLogic.Services.Concrete
             {
                 claims.Add(new System.Security.Claims.Claim("companyId", user.CompanyId.Value.ToString()));
                 claims.Add(new System.Security.Claims.Claim("CompanyId", user.CompanyId.Value.ToString()));
+                claims.Add(new System.Security.Claims.Claim("company_id", user.CompanyId.Value.ToString()));
             }
+
+            claims.Add(new Claim("canAccessMobilePOS", user.CanAccessMobilePOS.ToString().ToLowerInvariant()));
+            claims.Add(new Claim("canOpenCashDrawer", user.CanOpenCashDrawer.ToString().ToLowerInvariant()));
+            claims.Add(new Claim("canConfigureFiscalReceipt", user.CanConfigureFiscalReceipt.ToString().ToLowerInvariant()));
+            claims.Add(new Claim("canChangeThemeAndLanguage", user.CanChangeThemeAndLanguage.ToString().ToLowerInvariant()));
 
             if (user.IsSuperUser)
                 claims.Add(new System.Security.Claims.Claim("isSuperUser", "true"));

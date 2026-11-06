@@ -22,7 +22,11 @@ namespace Onion.BussinesLogic.Dtos
         int Id,
         string Email,
         string Role = "Employee",
-        List<string>? AllowedModules = null);
+        List<string>? AllowedModules = null,
+        bool CanAccessMobilePOS = true,
+        bool CanOpenCashDrawer = false,
+        bool CanConfigureFiscalReceipt = true,
+        bool CanChangeThemeAndLanguage = true);
 
     public record SessionDto(string DeviceId, DateTime CreatedAt, DateTime? LastUsedAt, bool IsActive, DateTime Expires);
 }

@@ -112,6 +112,17 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (sale.OriginChannel == SaleOriginChannel.CREDITO)
                 sale.PaymentType = PaymentType.CREDIT;
 
+            if (_currentUserService?.UserId is > 0)
+            {
+                var currentUser = await _uow.Users.GetByIdUnscopedAsync(_currentUserService.UserId.Value);
+                if (currentUser is not null && !currentUser.CanConfigureFiscalReceipt)
+                {
+                    sale.VoucherType = Onion.Domain.Invoices.VoucherType.B02;
+                    sale.FiscalRnc = null;
+                    sale.FiscalBusinessName = null;
+                }
+            }
+
             if (sale.VoucherType == 0)
                 sale.VoucherType = Onion.Domain.Invoices.VoucherType.B02;
 
@@ -251,6 +262,14 @@ namespace Onion.BussinesLogic.Services.Concrete
             decimal lineTaxTotal = 0m;
             foreach (var d in sale.Details)
             {
+                var product = await _uow.Products.GetByIdAsync(d.ProductId);
+                if (product is null)
+                    throw new CustomException(new Onion.Common.Models.Error { Code = "PRODUCT_NOT_FOUND", Message = $"Product {d.ProductId} was not found.", Language = "ES" });
+
+                // The client cannot choose the sale price. Product.Price is the amount
+                // charged to the customer; Product.Cost is only used for margin analysis.
+                d.UnitPrice = product.Price;
+                d.GrossMargin = (d.UnitPrice - product.Cost) * d.Quantity;
                 if (d.Quantity <= 0) throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_QTY", Message = "Quantity must be greater than zero", Language = "ES" });
                 if (d.UnitPrice <= 0) throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_PRICE", Message = "UnitPrice must be greater than zero", Language = "ES" });
                 var lineGross = d.Quantity * d.UnitPrice;

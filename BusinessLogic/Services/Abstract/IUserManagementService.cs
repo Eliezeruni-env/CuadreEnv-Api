@@ -15,5 +15,6 @@ namespace Onion.BussinesLogic.Services.Abstract
         Task DeleteAsync(int id, string performedByUserId);
         Task<bool> ExistsEmailAsync(string email, int? excludeId = null);
         Task<bool> ExistsUserNameAsync(string userName, int? excludeId = null);
+        Task<UserPermissionsDto> GetPermissionsAsync();
     }
 }

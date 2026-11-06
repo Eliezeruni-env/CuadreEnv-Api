@@ -27,6 +27,24 @@ namespace Onion.Controllers
             return Ok(await _warehouseService.AddStockAsync(req, User?.Identity?.Name ?? "system"));
         }
 
+        [HttpPost("movements")]
+        public async Task<IActionResult> CreateMovement([FromBody] InventoryMovementRequestDto req)
+        {
+            if (req is null || string.IsNullOrWhiteSpace(req.Type))
+                return BadRequest(new { message = "A movement type is required." });
+
+            if (!req.Type.Equals("Entrada", StringComparison.OrdinalIgnoreCase) &&
+                !req.Type.Equals("In", StringComparison.OrdinalIgnoreCase) &&
+                !req.Type.Equals("Compra", StringComparison.OrdinalIgnoreCase) &&
+                !req.Type.Equals("Purchase", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { message = "Only Entrada/Compra inventory movements are supported by this endpoint." });
+
+            var movement = await _warehouseService.AddStockAsync(
+                new MovementRequestDto(req.ProductId, req.WarehouseId, req.Quantity, req.IsPackage, req.PackageFactor),
+                User?.Identity?.Name ?? "system");
+            return Ok(movement);
+        }
+
         [HttpPost("outbound")]
         public async Task<IActionResult> Outbound([FromBody] MovementRequestDto req)
         {

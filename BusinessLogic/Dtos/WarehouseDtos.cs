@@ -20,5 +20,6 @@ namespace Onion.BussinesLogic.Dtos
         DateTime? CreationDate = null);
 
     public record MovementRequestDto(int ProductId, int WarehouseId, decimal Quantity, bool? IsPackage = false, decimal? PackageFactor = null);
+    public record InventoryMovementRequestDto(int ProductId, int WarehouseId, decimal Quantity, string Type = "Entrada", bool? IsPackage = false, decimal? PackageFactor = null);
     public record TransferRequestDto(int ProductId, int FromWarehouseId, int ToWarehouseId, decimal Quantity);
 }

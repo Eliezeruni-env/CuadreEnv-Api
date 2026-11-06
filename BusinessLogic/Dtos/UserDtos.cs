@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations;
 namespace Onion.BussinesLogic.Dtos
 {
     public record UserListDto(int Id, string FullName, string FirstName, string LastName, string Email, string UserName, string Role, int? CompanyId, string? CompanyName, bool Active, DateTime? LastLoginAt, bool IsSuperUser, string? Address = null, string? City = null, string? Country = null, string? OperatingLocation = null, string? IpAddress = null, decimal? Latitude = null, decimal? Longitude = null, string? LastLoginIp = null, IReadOnlyList<string>? AllowedModules = null);
+    public record UserPermissionsDto(bool CanAccessMobilePOS, bool CanOpenCashDrawer, bool CanConfigureFiscalReceipt, bool CanChangeThemeAndLanguage);
 
     public class UserDetailDto
     {
@@ -35,6 +36,10 @@ namespace Onion.BussinesLogic.Dtos
         public bool TempPasswordSent { get; set; }
         public bool IsSuperUser { get; set; }
         public List<string> AllowedModules { get; set; } = new();
+        public bool CanAccessMobilePOS { get; set; } = true;
+        public bool CanOpenCashDrawer { get; set; }
+        public bool CanConfigureFiscalReceipt { get; set; } = true;
+        public bool CanChangeThemeAndLanguage { get; set; } = true;
         public string? Address { get; set; }
         public string? City { get; set; }
         public string Country { get; set; } = "República Dominicana";
@@ -66,6 +71,10 @@ namespace Onion.BussinesLogic.Dtos
         public bool SendByEmail { get; set; } = true;
         public bool Active { get; set; } = true;
         public List<string> AllowedModules { get; set; } = new();
+        public bool CanAccessMobilePOS { get; set; } = true;
+        public bool CanOpenCashDrawer { get; set; }
+        public bool CanConfigureFiscalReceipt { get; set; } = true;
+        public bool CanChangeThemeAndLanguage { get; set; } = true;
         public string? Address { get; set; }
         public string? City { get; set; }
         public string? Country { get; set; }
@@ -94,6 +103,10 @@ namespace Onion.BussinesLogic.Dtos
         public int? CompanyId { get; set; }
         public bool Active { get; set; }
         public List<string>? AllowedModules { get; set; }
+        public bool CanAccessMobilePOS { get; set; } = true;
+        public bool CanOpenCashDrawer { get; set; }
+        public bool CanConfigureFiscalReceipt { get; set; } = true;
+        public bool CanChangeThemeAndLanguage { get; set; } = true;
         public string? Address { get; set; }
         public string? City { get; set; }
         public string? Country { get; set; }

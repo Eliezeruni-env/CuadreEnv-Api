@@ -13,12 +13,22 @@ namespace Onion.Controllers
     {
         private readonly IProductService _productService;
         private readonly ILogger<ProductController> _logger;
+        private readonly IConfiguration _configuration;
 
-        public ProductController(IProductService productService, ILogger<ProductController> logger)
+        public ProductController(IProductService productService, ILogger<ProductController> logger, IConfiguration configuration)
             : base()
         {
             _productService = productService;
             _logger = logger;
+            _configuration = configuration;
+        }
+
+        [HttpGet("catalogs/preloaded")]
+        public IActionResult GetPreloadedCatalogs()
+        {
+            var catalogs = _configuration.GetSection("ProductCatalogs:Preloaded").Get<List<PreloadedCatalogDto>>()
+                ?? new List<PreloadedCatalogDto>();
+            return Ok(Onion.Common.Models.ApiResponse<object>.Ok(catalogs));
         }
 
         [HttpGet("services")]

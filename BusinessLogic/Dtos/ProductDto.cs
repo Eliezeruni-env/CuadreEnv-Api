@@ -6,12 +6,13 @@
         public string? Description { get; set; }
         public string? Barcode { get; set; }
         public int CompanyId { get; set; }
-        public decimal Cost { get; set; }
-        public decimal Stock { get; set; }
+        public decimal Cost { get; set; } = 0m;
+        public decimal Price { get; set; } = 0m;
+        public decimal Stock { get; set; } = 0m;
         public string? ShortDescription { get; set; }
         public string? Reference { get; set; }
         public int MaximumQuantity { get; set; }
-        public int MinimumQuantity { get; set; }
+        public int MinimumQuantity { get; set; } = 0;
         public int? ProductTypeId { get; set; }
         public int? CategoryId { get; set; }
         public string? CategoryName { get; set; }
@@ -31,4 +32,7 @@
         public string? Name { get; set; }
         public string? Description { get; set; }
     }
+
+    public record PreloadedProductDto(string Description, string? Barcode, string? Reference, string Category, decimal Cost, decimal Price, decimal Stock, int MinQuantity);
+    public record PreloadedCatalogDto(string Name, IReadOnlyList<PreloadedProductDto> Products);
 }
