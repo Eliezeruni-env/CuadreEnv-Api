@@ -61,19 +61,44 @@ namespace Onion.BussinesLogic.Services.Concrete
             }
 
             var client = _httpClientFactory.CreateClient("ProductLookup");
-            var brocade = await GetExternalProductAsync(
-                client,
-                $"https://www.brocade.io/api/items/{Uri.EscapeDataString(normalizedBarcode)}",
-                normalizedBarcode,
-                cancellationToken);
-            if (brocade is not null)
-                return brocade;
 
-            return await GetExternalProductAsync(
+            // 1. Open Food Facts (v0 / v2 - enorme base comunitaria global de alimentos y bebidas)
+            var off = await GetExternalProductAsync(
                 client,
-                $"https://world.openfoodfacts.org/api/v2/product/{Uri.EscapeDataString(normalizedBarcode)}.json",
+                $"https://world.openfoodfacts.org/api/v0/product/{Uri.EscapeDataString(normalizedBarcode)}.json",
                 normalizedBarcode,
                 cancellationToken);
+            if (off is not null)
+                return off;
+
+            // 2. UPCitemdb (productos generales de consumo, electrónica, hogar, etc.)
+            var upc = await GetExternalProductAsync(
+                client,
+                $"https://api.upcitemdb.com/prod/trial/lookup?upc={Uri.EscapeDataString(normalizedBarcode)}",
+                normalizedBarcode,
+                cancellationToken);
+            if (upc is not null)
+                return upc;
+
+            // 3. Open Beauty Facts (cosmética, cuidado personal, higiene)
+            var beauty = await GetExternalProductAsync(
+                client,
+                $"https://world.openbeautyfacts.org/api/v0/product/{Uri.EscapeDataString(normalizedBarcode)}.json",
+                normalizedBarcode,
+                cancellationToken);
+            if (beauty is not null)
+                return beauty;
+
+            // 4. Open Products Facts (ferretería, limpieza, artículos varios)
+            var prod = await GetExternalProductAsync(
+                client,
+                $"https://world.openproductsfacts.org/api/v0/product/{Uri.EscapeDataString(normalizedBarcode)}.json",
+                normalizedBarcode,
+                cancellationToken);
+            if (prod is not null)
+                return prod;
+
+            return null;
         }
 
         private async Task<ProductLookupDto?> GetExternalProductAsync(
@@ -98,34 +123,52 @@ namespace Onion.BussinesLogic.Services.Concrete
                     status.ValueKind == JsonValueKind.Number && status.GetInt32() == 0)
                     return null;
 
-                if (root.TryGetProperty("product", out var nestedProduct) && nestedProduct.ValueKind == JsonValueKind.Object)
+                // Soporte UPCitemdb array "items"
+                if (root.TryGetProperty("items", out var items) &&
+                    items.ValueKind == JsonValueKind.Array &&
+                    items.GetArrayLength() > 0)
+                {
+                    root = items[0];
+                }
+                else if (root.TryGetProperty("product", out var nestedProduct) && nestedProduct.ValueKind == JsonValueKind.Object)
+                {
                     root = nestedProduct;
+                }
                 else if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
+                {
                     root = data;
+                }
 
-                var name = FirstString(root, "name", "product_name", "product_name_en");
-                var brand = FirstString(root, "brand", "brands", "brand_name");
-                var category = FirstString(root, "category", "categories", "categories_en");
+                var name = FirstString(root, "title", "name", "product_name_es", "product_name", "product_name_en", "generic_name_es", "generic_name");
+                var brand = FirstString(root, "brand", "brands", "brand_name", "brand_owner");
+                var category = FirstString(root, "category", "categories", "categories_en", "main_category");
                 var description = FirstString(root, "description", "generic_name", "generic_name_en");
                 var imageUrl = FirstString(root, "imageUrl", "image_url", "image_front_url", "image_small_url");
+                if (string.IsNullOrWhiteSpace(imageUrl) && root.TryGetProperty("images", out var images) && images.ValueKind == JsonValueKind.Array && images.GetArrayLength() > 0)
+                {
+                    imageUrl = images[0].GetString();
+                }
                 var quantity = FirstString(root, "quantity", "serving_size");
 
                 if (string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(description))
                     return null;
 
-                var combinedDescription = string.Join(" · ", new[] { description, brand }
-                    .Where(x => !string.IsNullOrWhiteSpace(x))
-                    .Distinct(StringComparer.OrdinalIgnoreCase));
+                var finalName = (name ?? description)?.Trim();
+                var combinedDescription = finalName;
+                if (!string.IsNullOrWhiteSpace(brand) && finalName != null && !finalName.Contains(brand, StringComparison.OrdinalIgnoreCase))
+                {
+                    combinedDescription = $"{finalName} · {brand.Trim()}";
+                }
 
                 return new ProductLookupDto
                 {
-                    Barcode = FirstString(root, "barcode", "code") ?? barcode,
-                    Name = name ?? description,
-                    Brand = brand,
-                    Category = category,
-                    Description = string.IsNullOrWhiteSpace(combinedDescription) ? name : combinedDescription,
-                    ImageUrl = imageUrl,
-                    Quantity = quantity,
+                    Barcode = FirstString(root, "barcode", "code", "ean", "upc") ?? barcode,
+                    Name = finalName,
+                    Brand = brand?.Trim(),
+                    Category = category?.Trim(),
+                    Description = combinedDescription,
+                    ImageUrl = imageUrl?.Trim(),
+                    Quantity = quantity?.Trim(),
                     IsLocal = false
                 };
             }

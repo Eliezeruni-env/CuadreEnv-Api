@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Onion.BussinesLogic.Dtos;
 using Onion.BussinesLogic.Services.Abstract;
 using Onion.Common.Exceptions;
@@ -7,6 +7,7 @@ using Onion.DataAccess.Models;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("v1/[controller]")]
     [ApiController]
     [Microsoft.AspNetCore.Authorization.Authorize]
     public class ProductController : ControllerBase
@@ -32,6 +33,7 @@ namespace Onion.Controllers
         }
 
         [HttpGet("lookup/{barcode}")]
+        [Microsoft.AspNetCore.Authorization.AllowAnonymous]
         public async Task<IActionResult> LookupByBarcode(string barcode, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(barcode))
