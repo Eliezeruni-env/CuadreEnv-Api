@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -62,7 +62,11 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (productId.HasValue) q = q.Where(m => m.ProductId == productId.Value);
             if (warehouseId.HasValue) q = q.Where(m => (m.FromWarehouseId == warehouseId.Value) || (m.ToWarehouseId == warehouseId.Value));
             if (from.HasValue) q = q.Where(m => m.CreationDate >= from.Value);
-            if (to.HasValue) q = q.Where(m => m.CreationDate <= to.Value);
+            if (to.HasValue)
+            {
+                var toDate = to.Value.TimeOfDay == TimeSpan.Zero ? to.Value.Date.AddDays(1).AddTicks(-1) : to.Value;
+                q = q.Where(m => m.CreationDate <= toDate);
+            }
             if (!string.IsNullOrWhiteSpace(type)) q = q.Where(m => m.Type.ToString().Equals(type, StringComparison.OrdinalIgnoreCase));
 
             var products = (await _uow.Products.ListAsync()).ToDictionary(p => p.Id);
@@ -77,7 +81,11 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (productId.HasValue) q = q.Where(m => m.ProductId == productId.Value);
             if (warehouseId.HasValue) q = q.Where(m => (m.FromWarehouseId == warehouseId.Value) || (m.ToWarehouseId == warehouseId.Value));
             if (from.HasValue) q = q.Where(m => m.CreationDate >= from.Value);
-            if (to.HasValue) q = q.Where(m => m.CreationDate <= to.Value);
+            if (to.HasValue)
+            {
+                var toDate = to.Value.TimeOfDay == TimeSpan.Zero ? to.Value.Date.AddDays(1).AddTicks(-1) : to.Value;
+                q = q.Where(m => m.CreationDate <= toDate);
+            }
             if (!string.IsNullOrWhiteSpace(type)) q = q.Where(m => m.Type.ToString().Equals(type, StringComparison.OrdinalIgnoreCase));
 
             var products = (await _uow.Products.ListAsync()).ToDictionary(p => p.Id);

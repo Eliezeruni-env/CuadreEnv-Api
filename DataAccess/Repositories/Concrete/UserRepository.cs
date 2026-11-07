@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Onion.DataAccess.Repositories.Abstract;
@@ -17,7 +17,10 @@ namespace Onion.DataAccess.Repositories.Concrete
             return await _context.Set<User>()
                 .IgnoreQueryFilters()
                 .AsNoTracking()
-                .FirstOrDefaultAsync(u => u.Email.ToLower() == normalized);
+                .FirstOrDefaultAsync(u => 
+                    u.Email.ToLower() == normalized ||
+                    (u.UserName != null && u.UserName.ToLower() == normalized) ||
+                    (u.Identification != null && u.Identification.ToLower() == normalized));
         }
 
         public async Task<User?> GetByIdUnscopedAsync(int id)
