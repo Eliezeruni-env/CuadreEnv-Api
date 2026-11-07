@@ -146,7 +146,8 @@ public sealed record SwitchCompanyRequest(int CompanyId, string? DeviceId = null
         }
 
         [Authorize]
-        [HttpGet("/v1/auth/me/modules")]
+        [HttpGet("me/modules")]
+        [HttpGet("/auth/me/modules")]
         [HttpGet("/api/me/modules")]
         public async Task<IActionResult> Modules(
             [FromServices] Onion.Common.Services.ICompanyEntitlementService entitlements,
