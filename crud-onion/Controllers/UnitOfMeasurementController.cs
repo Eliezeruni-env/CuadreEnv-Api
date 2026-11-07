@@ -17,6 +17,9 @@ namespace Onion.Controllers
 
     [Route("unitofmeasurement")]
     [Route("v1/unitofmeasurement")]
+    [Route("units-of-measurement")]
+    [Route("unit-of-measurement")]
+    [Route("units")]
     [ApiController]
     [Onion.Common.Authorization.AuthorizeModule("sales")]
     public class UnitOfMeasurementController : ControllerBase

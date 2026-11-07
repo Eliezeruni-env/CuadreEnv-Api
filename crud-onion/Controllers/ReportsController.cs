@@ -6,6 +6,8 @@ using Onion.Common.Authorization;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("reports")]
+    [Route("report")]
     [ApiController]
     [AuthorizeModule("REPORTS")]
     public class ReportsController : ControllerBase

@@ -12,6 +12,8 @@ using Onion.Common.Authorization;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("purchase-order-receipts")]
+    [Route("purchase-order-receipt")]
     [ApiController]
     [Authorize]
     [AuthorizeExactModule("purchases-receipts")]

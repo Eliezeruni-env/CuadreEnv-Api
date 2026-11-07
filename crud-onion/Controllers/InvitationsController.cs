@@ -11,6 +11,8 @@ using Microsoft.AspNetCore.Authorization;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("invitations")]
+    [Route("invitation")]
     [ApiController]
     [Authorize]
     public class InvitationsController : ControllerBase

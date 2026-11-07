@@ -4,6 +4,8 @@ using Onion.BussinesLogic.Services.Abstract;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("subscriptions")]
+    [Route("subscription")]
     [ApiController]
     public class SubscriptionController : ControllerBase
     {

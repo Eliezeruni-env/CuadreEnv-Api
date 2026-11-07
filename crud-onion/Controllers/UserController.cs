@@ -25,6 +25,8 @@ namespace Onion.Controllers
         public record ChangeRoleRequest(string Role);
 
         [HttpGet("cashiers")]
+        [HttpGet("/v1/users/cashiers")]
+        [HttpGet("/v1/user/cashiers")]
         public async Task<IActionResult> GetCashiers()
         {
             var users = await _service.GetCashiersAsync();

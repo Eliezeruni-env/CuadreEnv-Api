@@ -5,6 +5,8 @@ namespace crud_onion.Controllers;
 
 [ApiController]
 [Route("api")]
+[Route("dashboard")]
+[Route("[controller]")]
 public sealed class DashboardController : ControllerBase
 {
     [HttpGet("data")]

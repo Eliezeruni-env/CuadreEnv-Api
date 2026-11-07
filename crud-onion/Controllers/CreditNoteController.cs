@@ -7,6 +7,8 @@ namespace Onion.Controllers
 {
     [ApiController]
     [Route("[controller]")]
+    [Route("credit-notes")]
+    [Route("credit-note")]
     [Authorize]
     public class CreditNoteController : ControllerBase
     {

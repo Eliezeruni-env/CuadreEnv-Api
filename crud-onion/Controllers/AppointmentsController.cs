@@ -9,6 +9,7 @@ namespace Onion.Controllers
 {
     [ApiController]
     [Route("[controller]")]
+    [Route("appointments")]
     public class AppointmentsController : ControllerBase
     {
         private readonly Onion.BussinesLogic.Services.Abstract.IAppointmentService _svc;

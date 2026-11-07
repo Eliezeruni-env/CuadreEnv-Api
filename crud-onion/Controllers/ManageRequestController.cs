@@ -12,6 +12,8 @@ using Onion.Common.Authorization;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("manage-requests")]
+    [Route("manage-request")]
     [ApiController]
     public class ManageRequestController : ControllerBase
     {

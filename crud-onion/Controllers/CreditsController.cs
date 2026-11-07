@@ -7,6 +7,8 @@ namespace CrudOnion.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Route("[controller]")]
+    [Route("credits")]
     public class CreditsController : ControllerBase
     {
         private readonly ICreditService _svc;

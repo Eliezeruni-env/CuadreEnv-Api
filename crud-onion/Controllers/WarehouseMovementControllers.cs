@@ -6,6 +6,8 @@ using Onion.BussinesLogic.Dtos;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("warehouse-entry")]
+    [Route("Warehouse/entry")]
     [ApiController]
     [Authorize]
     public class WarehouseEntryController : ControllerBase
@@ -34,6 +36,8 @@ namespace Onion.Controllers
     }
 
     [Route("[controller]")]
+    [Route("warehouse-outlet")]
+    [Route("Warehouse/outlet")]
     [ApiController]
     [Authorize]
     public class WarehouseOutletController : ControllerBase
@@ -62,6 +66,8 @@ namespace Onion.Controllers
     }
 
     [Route("[controller]")]
+    [Route("warehouse-transfer")]
+    [Route("Warehouse/transfer")]
     [ApiController]
     [Authorize]
     public class WarehouseTransferController : ControllerBase

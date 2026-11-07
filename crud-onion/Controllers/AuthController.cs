@@ -184,18 +184,10 @@ public sealed record SwitchCompanyRequest(int CompanyId, string? DeviceId = null
             else if (!string.IsNullOrWhiteSpace(currentUser.AllowedModulesJson))
             {
                 assignedModules = ModuleCodes.FromClaimPreservingIds(currentUser.AllowedModulesJson).ToArray();
-                if (assignedModules.Count == 0)
-                {
-                    assignedModules = isAdmin ? new[] { ModuleCodes.All } : GetDefaultRoleModules(currentUser.Role);
-                }
-            }
-            else if (isAdmin)
-            {
-                assignedModules = new[] { ModuleCodes.All };
             }
             else
             {
-                assignedModules = GetDefaultRoleModules(currentUser.Role);
+                assignedModules = Array.Empty<string>();
             }
 
             IReadOnlyCollection<string> licensedModules;
@@ -219,7 +211,7 @@ public sealed record SwitchCompanyRequest(int CompanyId, string? DeviceId = null
             }
 
             var hasAllAssignedModules = assignedModules.Contains(ModuleCodes.All, StringComparer.Ordinal);
-            var hasAllLicensedModules = licensedModules.Count == 0 || licensedModules.Contains(ModuleCodes.All, StringComparer.Ordinal) || (isGlobalAdministrator && licensedModules.Count == 0);
+            var hasAllLicensedModules = licensedModules.Contains(ModuleCodes.All, StringComparer.Ordinal);
             var effectiveModules = hasAllAssignedModules && hasAllLicensedModules
                 ? new[] { ModuleCodes.All }
                 : hasAllAssignedModules
@@ -231,18 +223,10 @@ public sealed record SwitchCompanyRequest(int CompanyId, string? DeviceId = null
                                                licensedModules.Contains(assigned, StringComparer.OrdinalIgnoreCase))
                             .ToArray();
 
-            // Si el usuario tiene módulos asignados pero el filtro de licencias los redujo a vacío por desajuste de catálogos,
-            // conservar los módulos asignados directamente por el administrador para no bloquear el acceso
-            if (effectiveModules.Length == 0 && assignedModules.Count > 0)
-            {
-                effectiveModules = assignedModules.ToArray();
-            }
-
-            var responseLicensed = licensedModules.Count > 0 ? licensedModules.ToArray() : new[] { ModuleCodes.All };
             return Ok(new
             {
                 assignedModules,
-                licensedModules = responseLicensed,
+                licensedModules,
                 modules = effectiveModules,
                 hasAllModules = effectiveModules.Contains(ModuleCodes.All, StringComparer.Ordinal)
             });

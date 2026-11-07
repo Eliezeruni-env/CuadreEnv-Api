@@ -10,6 +10,7 @@ namespace Onion.Controllers
 {
     [ApiController]
     [Route("[controller]")]
+    [Route("company-settings")]
     [Authorize]
     public class CompanySettingsController : ControllerBase
     {

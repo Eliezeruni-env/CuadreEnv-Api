@@ -10,6 +10,11 @@ namespace Onion.Controllers;
 [ApiController]
 [Route("~/api/v1/ncf-sequences")]
 [Route("~/api/v1/fiscal-sequences")]
+[Route("~/v1/ncf-sequences")]
+[Route("~/v1/fiscal-sequences")]
+[Route("ncf-sequences")]
+[Route("fiscal-sequences")]
+[Route("[controller]")]
 [AuthorizeModule("BILLING")]
 public sealed class FiscalSequenceController : ControllerBase
 {

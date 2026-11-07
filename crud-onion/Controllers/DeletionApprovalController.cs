@@ -6,6 +6,8 @@ namespace Onion.Controllers;
 
 [ApiController]
 [Route("approvals")]
+[Route("approval")]
+[Route("[controller]")]
 [AuthorizeExactModule("admin-approvals")]
 public sealed class DeletionApprovalController : ControllerBase
 {

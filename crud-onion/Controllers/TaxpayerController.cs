@@ -9,6 +9,11 @@ namespace Onion.Controllers;
 [ApiController]
 [Route("~/api/v1/taxpayers")]
 [Route("~/api/v1/dgii/taxpayers")]
+[Route("~/v1/taxpayers")]
+[Route("~/v1/dgii/taxpayers")]
+[Route("taxpayers")]
+[Route("dgii/taxpayers")]
+[Route("[controller]")]
 [AuthorizeModule("BILLING")]
 public sealed class TaxpayerController : ControllerBase
 {
