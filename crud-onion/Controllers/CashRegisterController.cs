@@ -10,6 +10,7 @@ using Onion.BussinesLogic.Services.Abstract;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("cash-register")]
     [ApiController]
     [AuthorizeModule("POS")]
     public class CashRegisterController : ControllerBase
