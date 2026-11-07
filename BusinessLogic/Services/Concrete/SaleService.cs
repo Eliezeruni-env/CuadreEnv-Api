@@ -162,13 +162,13 @@ namespace Onion.BussinesLogic.Services.Concrete
                 if (sale.CashRegisterId.HasValue && sale.CashRegisterId.Value > 0)
                 {
                     reg = await _uow.CashRegisters.GetByIdAsync(sale.CashRegisterId.Value);
-                    if (reg != null && (reg.Status != CashRegisterStatus.OPEN || reg.IsDeleted || (sale.CompanyId > 0 && reg.CompanyId != sale.CompanyId) || (currentCashierId > 0 && reg.OpenedByUserId != currentCashierId)))
+                    if (reg != null && (reg.Status != CashRegisterStatus.OPEN || !reg.IsOpen || reg.IsDeleted || (sale.CompanyId > 0 && reg.CompanyId != sale.CompanyId) || (currentCashierId > 0 && reg.OpenedByUserId != currentCashierId)))
                         reg = null;
                 }
 
                 if (reg == null)
                 {
-                    reg = (await _uow.CashRegisters.FindAsync(r => (sale.CompanyId <= 0 || r.CompanyId == sale.CompanyId) && r.Status == CashRegisterStatus.OPEN && !r.IsDeleted && (currentCashierId <= 0 || r.OpenedByUserId == currentCashierId)))?.FirstOrDefault();
+                    reg = (await _uow.CashRegisters.FindAsync(r => (sale.CompanyId <= 0 || r.CompanyId == sale.CompanyId) && r.Status == CashRegisterStatus.OPEN && r.IsOpen && !r.IsDeleted && (currentCashierId <= 0 || r.OpenedByUserId == currentCashierId)))?.FirstOrDefault();
                 }
 
                 if (reg != null)
