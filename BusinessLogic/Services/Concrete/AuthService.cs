@@ -81,13 +81,22 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (membership is null && !ownsPrimaryCompany && !user.IsSuperUser)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "COMPANY_ACCESS_DENIED", Message = "The user does not have access to the selected company.", Language = "EN" });
 
-            user.CompanyId = companyId;
-            _uow.Users.Update(user);
-            await _uow.SaveChangesAsync();
+            var previousAmbientCompanyId = Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId;
+            try
+            {
+                Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = companyId;
+                user.CompanyId = companyId;
+                _uow.Users.Update(user);
+                await _uow.SaveChangesAsync();
 
-            var modules = await GetAllowedModulesAsync(user);
-            var (access, refresh) = await LoginWithTokensAsync(user, deviceId, modules);
-            return new TokenResponseDto(access, refresh, ToUserResponse(user, modules));
+                var modules = await GetAllowedModulesAsync(user);
+                var (access, refresh) = await LoginWithTokensAsync(user, deviceId, modules);
+                return new TokenResponseDto(access, refresh, ToUserResponse(user, modules));
+            }
+            finally
+            {
+                Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = previousAmbientCompanyId;
+            }
         }
 
         public async Task<UserResponseDto> RegisterAsync(RegisterRequestDto request)
@@ -254,18 +263,31 @@ namespace Onion.BussinesLogic.Services.Concrete
                 throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_CREDENTIALS", Message = "Invalid email or password", Language = "EN" });
             }
 
-            user.LastLoginIp = GetClientIp();
-            user.LastLoginAt = DateTime.UtcNow;
-            // Login is intentionally unscoped before the JWT exists. Update only
-            // authentication metadata; normal tenant-protected updates remain enforced.
-            _uow.Users.UpdateLoginMetadata(user);
-            await _uow.SaveChangesAsync();
+            var previousAmbientCompanyId = Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId;
+            try
+            {
+                if (user.CompanyId is > 0)
+                {
+                    Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = user.CompanyId;
+                }
 
-            _logger?.LogInformation("User {Email} (Id: {Id}) logged in successfully", normalizedEmail, user.Id);
-            _ = ReportLoginToUsmAsync(user);
-            var modules = await GetAllowedModulesAsync(user);
-            var (access, refresh) = await LoginWithTokensAsync(user, request.DeviceId, modules);
-            return new TokenResponseDto(access, refresh, ToUserResponse(user, modules));
+                user.LastLoginIp = GetClientIp();
+                user.LastLoginAt = DateTime.UtcNow;
+                // Login is intentionally unscoped before the JWT exists. Update only
+                // authentication metadata; normal tenant-protected updates remain enforced.
+                _uow.Users.UpdateLoginMetadata(user);
+                await _uow.SaveChangesAsync();
+
+                _logger?.LogInformation("User {Email} (Id: {Id}) logged in successfully", normalizedEmail, user.Id);
+                _ = ReportLoginToUsmAsync(user);
+                var modules = await GetAllowedModulesAsync(user);
+                var (access, refresh) = await LoginWithTokensAsync(user, request.DeviceId, modules);
+                return new TokenResponseDto(access, refresh, ToUserResponse(user, modules));
+            }
+            finally
+            {
+                Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = previousAmbientCompanyId;
+            }
         }
 
         private string GetClientIp()
@@ -391,33 +413,46 @@ namespace Onion.BussinesLogic.Services.Concrete
                 throw new CustomException(new Onion.Common.Models.Error { Code = "COMPANY_ACCESS_DENIED", Message = "The refresh token company is inactive.", Language = "EN" });
             user.CompanyId = activeCompanyId;
 
-            // Revoke old and mark rotation. Record replacement token hash for auditability.
-            refresh.IsRevoked = true;
-            refresh.LastUsedAt = DateTime.UtcNow;
-            var newRefresh = GenerateRefreshToken();
-            refresh.ReplacedByToken = ComputeSha256Hash(newRefresh);
-            _uow.RefreshTokens.Update(refresh);
-
-            // Issue new pair and carry device id forward
-            var modules = await GetAllowedModulesAsync(user);
-            var newAccess = GenerateJwtToken(user, refresh.DeviceId, modules);
-
-            var newRt = new Onion.Domain.Users.RefreshToken
+            var previousAmbientCompanyId = Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId;
+            try
             {
-                UserId = user.Id,
-                CompanyId = activeCompanyId,
-                Token = string.Empty,
-                TokenHash = ComputeSha256Hash(newRefresh),
-                Expires = DateTime.UtcNow.Add(_refreshTokenLifetime),
-                IsRevoked = false,
-                DeviceId = refresh.DeviceId,
-                LastUsedAt = DateTime.UtcNow
-            };
+                if (activeCompanyId > 0)
+                {
+                    Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = activeCompanyId;
+                }
 
-            await _uow.RefreshTokens.AddAsync(newRt);
-            await _uow.SaveChangesAsync();
+                // Revoke old and mark rotation. Record replacement token hash for auditability.
+                refresh.IsRevoked = true;
+                refresh.LastUsedAt = DateTime.UtcNow;
+                var newRefresh = GenerateRefreshToken();
+                refresh.ReplacedByToken = ComputeSha256Hash(newRefresh);
+                _uow.RefreshTokens.Update(refresh);
 
-            return new TokenResponseDto(newAccess, newRefresh, ToUserResponse(user, modules));
+                // Issue new pair and carry device id forward
+                var modules = await GetAllowedModulesAsync(user);
+                var newAccess = GenerateJwtToken(user, refresh.DeviceId, modules);
+
+                var newRt = new Onion.Domain.Users.RefreshToken
+                {
+                    UserId = user.Id,
+                    CompanyId = activeCompanyId,
+                    Token = string.Empty,
+                    TokenHash = ComputeSha256Hash(newRefresh),
+                    Expires = DateTime.UtcNow.Add(_refreshTokenLifetime),
+                    IsRevoked = false,
+                    DeviceId = refresh.DeviceId,
+                    LastUsedAt = DateTime.UtcNow
+                };
+
+                await _uow.RefreshTokens.AddAsync(newRt);
+                await _uow.SaveChangesAsync();
+
+                return new TokenResponseDto(newAccess, newRefresh, ToUserResponse(user, modules));
+            }
+            finally
+            {
+                Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = previousAmbientCompanyId;
+            }
         }
 
         public async Task RevokeTokenAsync(RevokeRequestDto request)

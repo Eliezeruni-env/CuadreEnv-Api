@@ -26,7 +26,10 @@ namespace Onion.Controllers.Middleware
 
             var normalizedPath = path.TrimEnd('/');
 
-            if (normalizedPath.StartsWith("/auth", StringComparison.OrdinalIgnoreCase) ||
+            if ((HttpMethods.IsPost(method) &&
+                 (normalizedPath.Equals("/v1/company", StringComparison.OrdinalIgnoreCase) ||
+                  normalizedPath.Equals("/company", StringComparison.OrdinalIgnoreCase))) ||
+                normalizedPath.StartsWith("/auth", StringComparison.OrdinalIgnoreCase) ||
                 normalizedPath.EndsWith("/users/my-companies", StringComparison.OrdinalIgnoreCase) ||
                 normalizedPath.StartsWith("/v1/auth/", StringComparison.OrdinalIgnoreCase) ||
                 normalizedPath.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase) ||

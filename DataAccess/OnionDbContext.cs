@@ -640,16 +640,20 @@ namespace Onion.DataAccess
                     }
                     else if (prop != null)
                     {
-                        // In Option A, User is a global identity entity and can be created or updated outside a tenant context (e.g. registration/onboarding)
+                        // Users without a company are allowed during registration; a user already assigned to a company requires tenant context.
                         var isUserEntity = entry.Entity is User;
                         var isRefreshToken = entry.Entity is Onion.Domain.Users.RefreshToken;
-                        if (!isUserEntity && !isRefreshToken && !IsGlobalTenantAccess)
+                        var userCompanyId = isUserEntity ? (entry.Entity as User)?.CompanyId : null;
+                        if (((!isUserEntity && !isRefreshToken) ||
+                             (isUserEntity && userCompanyId is > 0)) &&
+                            !IsGlobalTenantAccess)
                             throw new InvalidOperationException($"Tenant context is required to insert tenant-owned entity {entry.Metadata.ClrType.Name}.");
                     }
                 }
 
                 var companyProperty = entry.Properties.FirstOrDefault(p => string.Equals(p.Metadata.Name, "CompanyId", StringComparison.OrdinalIgnoreCase));
                 var isUser = entry.Entity is User;
+                var isToken = entry.Entity is Onion.Domain.Users.RefreshToken;
                 if (companyProperty != null && !IsGlobalTenantAccess)
                 {
                     var tenantId = this.TenantCompanyId;
@@ -658,14 +662,15 @@ namespace Onion.DataAccess
 
                     if (!tenantId.HasValue || tenantId.Value <= 0)
                     {
-                        // Allow updating existing users without tenant context (e.g. at login to record LastLoginAt/LastLoginIp).
-                        if (!isUser && entry.Entity is not Onion.Domain.Users.RefreshToken)
+                        // Allow updating existing users and tokens without tenant context (e.g. at login/refresh to record LastLoginAt/LastLoginIp).
+                        if (!isUser && !isToken)
                             throw new InvalidOperationException($"Tenant context is required for entity {entry.Metadata.ClrType.Name}.");
                     }
                     else if ((currentCompanyId > 0 && currentCompanyId != tenantId.Value) ||
                              (originalCompanyId > 0 && originalCompanyId != tenantId.Value))
                     {
-                        throw new InvalidOperationException($"Tenant isolation violation: entity {entry.Metadata.ClrType.Name} does not belong to the current company.");
+                        if (!isUser && !isToken)
+                            throw new InvalidOperationException($"Tenant isolation violation: entity {entry.Metadata.ClrType.Name} does not belong to the current company.");
                     }
                 }
                 if (entry.State != EntityState.Added)
