@@ -7,6 +7,7 @@ using Onion.DataAccess.Models;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("products")]
     [Route("v1/[controller]")]
     [ApiController]
     [Microsoft.AspNetCore.Authorization.Authorize]

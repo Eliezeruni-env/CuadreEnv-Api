@@ -13,6 +13,7 @@ using Onion.Common.Authorization;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("warehouses")]
     [ApiController]
     [Authorize]
     public class WarehouseController : ControllerBase

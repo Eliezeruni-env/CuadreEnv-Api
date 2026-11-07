@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("sales")]
     [ApiController]
     [AuthorizeModule("SALES")]
     public class SaleController : ControllerBase

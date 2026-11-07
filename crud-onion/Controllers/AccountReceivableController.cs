@@ -12,6 +12,8 @@ using Onion.Domain.Finance;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("account-receivable")]
+    [Route("account-receivables")]
     [ApiController]
     public class AccountReceivableController : ControllerBase
     {

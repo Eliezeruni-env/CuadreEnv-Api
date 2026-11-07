@@ -9,6 +9,7 @@ using Onion.Common.Enums;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("returns")]
     [ApiController]
     public class ReturnController : ControllerBase
     {

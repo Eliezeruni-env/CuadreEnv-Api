@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("purchases")]
     [ApiController]
     [AuthorizeModule("PURCHASES")]
     public class PurchaseController : ControllerBase

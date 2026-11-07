@@ -9,6 +9,7 @@ using Onion.Common.Enums;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("companies")]
     [ApiController]
     public class CompanyController : ControllerBase
     {

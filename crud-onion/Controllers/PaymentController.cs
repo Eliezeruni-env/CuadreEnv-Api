@@ -10,6 +10,7 @@ using System.Security.Claims;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("payments")]
     [ApiController]
     public class PaymentController : ControllerBase
     {

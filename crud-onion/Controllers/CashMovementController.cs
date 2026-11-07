@@ -12,6 +12,8 @@ using Onion.Domain.Finance;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("cash-movement")]
+    [Route("cash-movements")]
     [ApiController]
     [AuthorizeModule("POS")]
     public class CashMovementController : ControllerBase

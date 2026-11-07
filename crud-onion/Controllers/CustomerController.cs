@@ -9,6 +9,7 @@ using Onion.Common.Services;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("customers")]
     [ApiController]
     public class CustomerController : ControllerBase
     {

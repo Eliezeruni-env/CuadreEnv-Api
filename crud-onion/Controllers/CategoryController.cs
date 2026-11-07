@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Onion.BusinessLogic.Dtos;
 using Onion.BusinessLogic.Services.Abstract;
@@ -6,6 +6,7 @@ using Onion.BusinessLogic.Services.Abstract;
 namespace Onion.Controllers
 {
     [Route("[controller]")]
+    [Route("categories")]
     [ApiController]
     public class CategoryController : ControllerBase
     {
