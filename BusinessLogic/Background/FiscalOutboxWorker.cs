@@ -86,61 +86,69 @@ public sealed class FiscalOutboxWorker : BackgroundService
     private async Task SubmitAsync(OnionDbContext db, int id, CancellationToken cancellationToken)
     {
         var document = await db.FiscalDocuments.IgnoreQueryFilters().SingleAsync(x => x.Id == id, cancellationToken);
-        string responseBody;
+        Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = document.CompanyId;
         try
         {
-            var result = await _submissionProvider.SubmitAsync(document, cancellationToken);
-            responseBody = result.ResponsePayload;
-            if (result.Outcome == FiscalSubmissionOutcome.Rejected)
+            string responseBody;
+            try
             {
-                document.Status = FiscalDocumentStatus.RejectedByFiscalProvider;
-                document.LastError = result.ErrorMessage;
+                var result = await _submissionProvider.SubmitAsync(document, cancellationToken);
+                responseBody = result.ResponsePayload;
+                if (result.Outcome == FiscalSubmissionOutcome.Rejected)
+                {
+                    document.Status = FiscalDocumentStatus.RejectedByFiscalProvider;
+                    document.LastError = result.ErrorMessage;
+                    document.NextAttemptAt = null;
+                    db.FiscalSubmissionAudits.Add(new FiscalSubmissionAudit
+                    {
+                        CompanyId = document.CompanyId,
+                        FiscalDocumentId = document.Id,
+                        EventType = "RejectedByFiscalProvider",
+                        ResponsePayload = responseBody
+                    });
+                    await db.SaveChangesAsync(cancellationToken);
+                    return;
+                }
+
+                if (result.Outcome == FiscalSubmissionOutcome.Retry)
+                    throw new HttpRequestException(result.ErrorMessage ?? "Fiscal provider requested a retry.");
+
+                document.Status = _configuration.GetValue<bool>("Dgii:Enabled")
+                    ? FiscalDocumentStatus.AcceptedByDgii
+                    : FiscalDocumentStatus.AcceptedByMock;
+                document.LastError = null;
                 document.NextAttemptAt = null;
                 db.FiscalSubmissionAudits.Add(new FiscalSubmissionAudit
                 {
                     CompanyId = document.CompanyId,
                     FiscalDocumentId = document.Id,
-                    EventType = "RejectedByFiscalProvider",
+                    EventType = _configuration.GetValue<bool>("Dgii:Enabled") ? "AcceptedByDgii" : "AcceptedByMock",
                     ResponsePayload = responseBody
                 });
-                await db.SaveChangesAsync(cancellationToken);
-                return;
+            }
+            catch (Exception ex) when ((ex is HttpRequestException || ex is TaskCanceledException) && !cancellationToken.IsCancellationRequested)
+            {
+                var maxAttempts = Math.Max(1, _configuration.GetValue("Fiscal:MaxAttempts", 8));
+                var exhausted = document.AttemptCount >= maxAttempts;
+                document.Status = exhausted ? FiscalDocumentStatus.RejectedByFiscalProvider : FiscalDocumentStatus.RetryScheduled;
+                document.LastError = ex.Message;
+                document.NextAttemptAt = exhausted ? null : DateTime.UtcNow.AddSeconds(Math.Min(3600, Math.Pow(2, document.AttemptCount)));
+                responseBody = ex.Message;
+                db.FiscalSubmissionAudits.Add(new FiscalSubmissionAudit
+                {
+                    CompanyId = document.CompanyId,
+                    FiscalDocumentId = document.Id,
+                    EventType = exhausted ? "RejectedAfterRetries" : "RetryScheduled",
+                    ResponsePayload = responseBody
+                });
+                _logger.LogWarning(ex, "Fiscal submission failed for document {DocumentId}; status {Status}", id, document.Status);
             }
 
-            if (result.Outcome == FiscalSubmissionOutcome.Retry)
-                throw new HttpRequestException(result.ErrorMessage ?? "Fiscal provider requested a retry.");
-
-            document.Status = _configuration.GetValue<bool>("Dgii:Enabled")
-                ? FiscalDocumentStatus.AcceptedByDgii
-                : FiscalDocumentStatus.AcceptedByMock;
-            document.LastError = null;
-            document.NextAttemptAt = null;
-            db.FiscalSubmissionAudits.Add(new FiscalSubmissionAudit
-            {
-                CompanyId = document.CompanyId,
-                FiscalDocumentId = document.Id,
-                EventType = _configuration.GetValue<bool>("Dgii:Enabled") ? "AcceptedByDgii" : "AcceptedByMock",
-                ResponsePayload = responseBody
-            });
+            await db.SaveChangesAsync(cancellationToken);
         }
-        catch (Exception ex) when ((ex is HttpRequestException || ex is TaskCanceledException) && !cancellationToken.IsCancellationRequested)
+        finally
         {
-            var maxAttempts = Math.Max(1, _configuration.GetValue("Fiscal:MaxAttempts", 8));
-            var exhausted = document.AttemptCount >= maxAttempts;
-            document.Status = exhausted ? FiscalDocumentStatus.RejectedByFiscalProvider : FiscalDocumentStatus.RetryScheduled;
-            document.LastError = ex.Message;
-            document.NextAttemptAt = exhausted ? null : DateTime.UtcNow.AddSeconds(Math.Min(3600, Math.Pow(2, document.AttemptCount)));
-            responseBody = ex.Message;
-            db.FiscalSubmissionAudits.Add(new FiscalSubmissionAudit
-            {
-                CompanyId = document.CompanyId,
-                FiscalDocumentId = document.Id,
-                EventType = exhausted ? "RejectedAfterRetries" : "RetryScheduled",
-                ResponsePayload = responseBody
-            });
-            _logger.LogWarning(ex, "Fiscal submission failed for document {DocumentId}; status {Status}", id, document.Status);
+            Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = null;
         }
-
-        await db.SaveChangesAsync(cancellationToken);
     }
 }
