@@ -50,7 +50,7 @@ namespace Onion.Controllers
             }
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id)
         {
             var item = await _service.GetByIdAsync(id);
@@ -74,7 +74,7 @@ namespace Onion.Controllers
             return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
         }
 
-        [HttpPost("{id}/close")]
+        [HttpPost("{id:int}/close")]
         public async Task<IActionResult> Close(int id, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CloseCashRegisterRequest? request)
         {
             request ??= new CloseCashRegisterRequest();

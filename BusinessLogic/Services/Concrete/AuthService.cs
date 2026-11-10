@@ -623,29 +623,12 @@ namespace Onion.BussinesLogic.Services.Concrete
             }
 
             if (user.IsSuperUser ||
-                string.Equals(user.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(user.Role, "Administrador", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(user.Role, "Owner", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(user.Role, "Dueño", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(user.Role, "Dueno", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(user.Role, "Gerente", StringComparison.OrdinalIgnoreCase))
+                string.Equals(user.Role, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
             {
                 return new[] { "*" };
             }
 
-            if (string.Equals(user.Role, "Supervisor", StringComparison.OrdinalIgnoreCase))
-                return new[] { "dashboard", "sales", "cashregister", "inventory", "customers", "audit", "reports", "users" };
-
-            if (string.Equals(user.Role, "Cajero", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(user.Role, "Cashier", StringComparison.OrdinalIgnoreCase))
-                return new[] { "dashboard", "sales", "cashregister", "customers", "products.detail_sales" };
-
-            if (string.Equals(user.Role, "Vendedor", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(user.Role, "Seller", StringComparison.OrdinalIgnoreCase))
-                return new[] { "dashboard", "sales", "inventory", "customers" };
-
-            return new[] { "dashboard", "sales", "cashregister", "customers" };
+            return Array.Empty<string>();
         }
 
         private static UserResponseDto ToUserResponse(User user, IReadOnlyCollection<string> modules) =>

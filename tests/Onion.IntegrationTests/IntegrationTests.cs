@@ -48,7 +48,10 @@ namespace Onion.IntegrationTests
                         ["ApplyMigrationsOnStartup"] = "true",
                         ["Usm:ValidateOnStartup"] = "false",
                         ["Usm:BaseUrl"] = "http://localhost:3000",
-                        ["Authorization:BypassRoleAndModuleChecks"] = "true",
+                        ["Authorization:BypassRoleAndModuleChecks"] = "false",
+                        ["Jwt:Key"] = "integration-only-test-key-32-characters-minimum!",
+                        ["Jwt:Issuer"] = "onion-api",
+                        ["Jwt:Audience"] = "onion-api-audience",
                         ["Cors:AllowedOrigins"] = "http://localhost"
                     });
                 });
@@ -155,6 +158,134 @@ namespace Onion.IntegrationTests
                 System.Net.HttpStatusCode.Unauthorized,
                 System.Net.HttpStatusCode.Forbidden);
 
+        }
+
+        [Fact]
+        public async Task ConcurrentInventoryReductions_ShouldAllowOnlyOneReductionOfLastUnit()
+        {
+            var companyId = Random.Shared.Next(100000, 900000);
+            var productId = Random.Shared.Next(100000, 900000);
+            var warehouseId = Random.Shared.Next(100000, 900000);
+
+            await using (var setup = await OpenTestConnectionAsync())
+            await using (var command = setup.CreateCommand())
+            {
+                command.CommandText = @"
+                    INSERT INTO ""Inventories"" (""ProductId"", ""WarehouseId"", ""Quantity"", ""CompanyId"", ""CreationDate"", ""Active"", ""IsDeleted"", ""CreateBy"", ""ModifiedBy"")
+                    VALUES (@productId, @warehouseId, 1, @companyId, now(), true, false, 'integration-test', 'integration-test')";
+                command.Parameters.AddWithValue("productId", productId);
+                command.Parameters.AddWithValue("warehouseId", warehouseId);
+                command.Parameters.AddWithValue("companyId", companyId);
+                await command.ExecuteNonQueryAsync();
+            }
+
+            async Task<bool> ReduceAsync()
+            {
+                await using var connection = await OpenTestConnectionAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = @"
+                    UPDATE ""Inventories""
+                    SET ""Quantity"" = ""Quantity"" - 1
+                    WHERE ""ProductId"" = @productId AND ""WarehouseId"" = @warehouseId
+                      AND ""CompanyId"" = @companyId AND ""Quantity"" >= 1";
+                command.Parameters.AddWithValue("productId", productId);
+                command.Parameters.AddWithValue("warehouseId", warehouseId);
+                command.Parameters.AddWithValue("companyId", companyId);
+                return await command.ExecuteNonQueryAsync() == 1;
+            }
+
+            var results = await Task.WhenAll(ReduceAsync(), ReduceAsync());
+
+            results.Count(result => result).Should().Be(1);
+            results.Count(result => !result).Should().Be(1);
+
+            await using var verify = await OpenTestConnectionAsync();
+            await using var verifyCommand = verify.CreateCommand();
+            verifyCommand.CommandText = "SELECT \"Quantity\" FROM \"Inventories\" WHERE \"ProductId\" = @productId AND \"WarehouseId\" = @warehouseId AND \"CompanyId\" = @companyId";
+            verifyCommand.Parameters.AddWithValue("productId", productId);
+            verifyCommand.Parameters.AddWithValue("warehouseId", warehouseId);
+            verifyCommand.Parameters.AddWithValue("companyId", companyId);
+            (await verifyCommand.ExecuteScalarAsync()).Should().BeOfType<decimal>().Which.Should().Be(0m);
+        }
+
+        [Fact]
+        public async Task ConcurrentCashRegisterClosures_ShouldPersistOnlyOneClosure()
+        {
+            var companyId = Random.Shared.Next(100000, 900000);
+
+            await using (var setup = await OpenTestConnectionAsync())
+            await using (var command = setup.CreateCommand())
+            {
+                command.CommandText = @"
+                    INSERT INTO ""CashRegisters"" (""OpeningAmount"", ""InitialAmount"", ""OpenedAt"", ""CompanyId"", ""IsOpen"", ""Status"", ""IsImmutable"", ""RowVersion"", ""CreationDate"", ""Active"", ""IsDeleted"", ""CreateBy"", ""ModifiedBy"")
+                    VALUES (100, 100, now(), @companyId, true, 0, false, decode(repeat('00', 8), 'hex'), now(), true, false, 'integration-test', 'integration-test')
+                    RETURNING ""Id""";
+                command.Parameters.AddWithValue("companyId", companyId);
+                var registerId = (int)(await command.ExecuteScalarAsync())!;
+
+                async Task<bool> CloseAsync()
+                {
+                    await using var connection = await OpenTestConnectionAsync();
+                    await using var close = connection.CreateCommand();
+                    close.CommandText = @"
+                        UPDATE ""CashRegisters""
+                        SET ""ClosingAmount"" = 100, ""ClosedAt"" = now(), ""IsOpen"" = false, ""Status"" = 2, ""IsImmutable"" = true
+                        WHERE ""Id"" = @id AND ""Status"" <> 2 AND ""IsImmutable"" = false";
+                    close.Parameters.AddWithValue("id", registerId);
+                    return await close.ExecuteNonQueryAsync() == 1;
+                }
+
+                var results = await Task.WhenAll(CloseAsync(), CloseAsync());
+                results.Count(result => result).Should().Be(1);
+                results.Count(result => !result).Should().Be(1);
+            }
+        }
+
+        [Fact]
+        public async Task ConcurrentDuplicateIdempotencyRequests_ShouldPersistOnlyOneRequest()
+        {
+            var companyId = Random.Shared.Next(100000, 900000);
+            var key = "itest-" + Guid.NewGuid().ToString("N");
+            const string requestPath = "/v1/integration/idempotency";
+
+            async Task<bool> InsertAsync()
+            {
+                try
+                {
+                    await using var connection = await OpenTestConnectionAsync();
+                    await using var command = connection.CreateCommand();
+                    command.CommandText = @"
+                        INSERT INTO ""ProcessedRequests"" (""CompanyId"", ""IdempotencyKey"", ""RequestPath"", ""StatusCode"", ""ResponseJson"", ""CreatedAtUtc"", ""ExpiresAtUtc"")
+                        VALUES (@companyId, @key, @path, 200, '{}', now(), now() + interval '1 hour')";
+                    command.Parameters.AddWithValue("companyId", companyId);
+                    command.Parameters.AddWithValue("key", key);
+                    command.Parameters.AddWithValue("path", requestPath);
+                    await command.ExecuteNonQueryAsync();
+                    return true;
+                }
+                catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+                {
+                    return false;
+                }
+            }
+
+            var results = await Task.WhenAll(InsertAsync(), InsertAsync());
+
+            results.Count(result => result).Should().Be(1);
+            results.Count(result => !result).Should().Be(1);
+        }
+
+        private async Task<NpgsqlConnection> OpenTestConnectionAsync()
+        {
+            var baseConnection = Environment.GetEnvironmentVariable("ConnectionStrings__OnionCrud");
+            baseConnection.Should().NotBeNullOrWhiteSpace();
+            var builder = new NpgsqlConnectionStringBuilder(baseConnection)
+            {
+                Database = _databaseName
+            };
+            var connection = new NpgsqlConnection(builder.ConnectionString);
+            await connection.OpenAsync();
+            return connection;
         }
 
         // Test-only output formatter used to avoid TestServer PipeWriter issues.

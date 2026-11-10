@@ -518,25 +518,12 @@ namespace Onion.BussinesLogic.Services.Concrete
                 }
             }
 
-            if (isSuperUser ||
-                string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(role, "Administrador", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(role, "Owner", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(role, "Dueño", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(role, "Dueno", StringComparison.OrdinalIgnoreCase))
+            if (isSuperUser || string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
             {
                 return new List<string> { ModuleCodes.All };
             }
 
-            if (string.Equals(role, "Supervisor", StringComparison.OrdinalIgnoreCase))
-                return new List<string> { "dashboard", "sales", "cashregister", "inventory", "customers", "audit", "reports", "users" };
-            if (string.Equals(role, "Cajero", StringComparison.OrdinalIgnoreCase) || string.Equals(role, "Cashier", StringComparison.OrdinalIgnoreCase))
-                return new List<string> { "dashboard", "sales", "cashregister", "customers", "products.detail_sales" };
-            if (string.Equals(role, "Vendedor", StringComparison.OrdinalIgnoreCase) || string.Equals(role, "Seller", StringComparison.OrdinalIgnoreCase))
-                return new List<string> { "dashboard", "sales", "inventory", "customers" };
-
-            return new List<string> { "dashboard", "sales", "cashregister", "customers" };
+            return new List<string>();
         }
     }
 }

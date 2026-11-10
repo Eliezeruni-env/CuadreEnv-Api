@@ -53,11 +53,6 @@ public sealed class CompanyEntitlementService : ICompanyEntitlementService
         if (companyId > 0) _cache.Remove($"company-entitlements:{companyId}");
     }
 
-        private static readonly HashSet<string> DefaultModules = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "SALES", "POS", "CASHREGISTER", "INVENTORY", "BILLING", "RECEIVABLES", "CUSTOMERS", "PURCHASES", "REPORTS", "AUDIT", "COMPANY"
-    };
-
     private async Task<CompanyEntitlements> LoadAsync(int companyId, CancellationToken cancellationToken)
     {
         var baseUrl = _configuration["Usm:BaseUrl"];
@@ -97,15 +92,15 @@ public sealed class CompanyEntitlementService : ICompanyEntitlementService
             }
             catch (Exception ex) when (ex is HttpRequestException or JsonException)
             {
-                _logger.LogError(ex, "USM entitlement lookup failed for company {CompanyId}; falling back to default modules", companyId);
-                return new CompanyEntitlements(DefaultModules, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                _logger.LogError(ex, "USM entitlement lookup failed for company {CompanyId}; denying module access", companyId);
+                return Empty;
             }
         }
 
         if (_configuration.GetValue("Usm:UseLocalDatabase", false))
             return await LoadLocalAsync(companyId, cancellationToken);
 
-        return new CompanyEntitlements(DefaultModules, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        return Empty;
     }
 
     private static IReadOnlyCollection<string> ReadModuleEntitlements(JsonElement payload)
@@ -222,7 +217,7 @@ public sealed class CompanyEntitlementService : ICompanyEntitlementService
     private async Task<CompanyEntitlements> LoadLocalAsync(int companyId, CancellationToken cancellationToken)
     {
         var connectionString = _configuration.GetConnectionString("Usm") ?? _configuration.GetConnectionString("OnionCrud");
-        if (string.IsNullOrWhiteSpace(connectionString)) return new CompanyEntitlements(DefaultModules, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        if (string.IsNullOrWhiteSpace(connectionString)) return Empty;
         var modules = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var projects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         await using var connection = new NpgsqlConnection(connectionString);
@@ -240,10 +235,6 @@ public sealed class CompanyEntitlementService : ICompanyEntitlementService
             command.Parameters.Add(new NpgsqlParameter("companyId", companyId));
             try { await using var reader = await command.ExecuteReaderAsync(cancellationToken); while (await reader.ReadAsync(cancellationToken)) projects.Add(reader.GetString(0)); }
             catch (PostgresException ex) when (ex.SqlState == "42P01") { }
-        }
-        if (modules.Count == 0)
-        {
-            modules = new HashSet<string>(DefaultModules, StringComparer.OrdinalIgnoreCase);
         }
         return new CompanyEntitlements(modules, projects);
     }

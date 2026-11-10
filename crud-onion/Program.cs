@@ -196,7 +196,7 @@ builder.Services.AddAuthentication(options =>
          options.TokenValidationParameters = new TokenValidationParameters
          {
              ValidateIssuerSigningKey = true,
-               IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtKey ?? "dev-local-key-please-change-in-production-32chars!")),
+                IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(jwtKey ?? string.Empty)),
              ValidateIssuer = true, ValidIssuer = jwtIssuer,
              ValidateAudience = !string.IsNullOrWhiteSpace(jwtAudience), ValidAudience = jwtAudience,
              ValidateLifetime = true, ClockSkew = TimeSpan.FromMinutes(1),

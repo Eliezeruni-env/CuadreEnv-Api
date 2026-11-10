@@ -26,7 +26,6 @@ namespace Onion.Controllers
 
         [HttpGet("cashiers")]
         [HttpGet("/v1/users/cashiers")]
-        [HttpGet("/v1/user/cashiers")]
         public async Task<IActionResult> GetCashiers()
         {
             var users = await _service.GetCashiersAsync();
@@ -52,7 +51,7 @@ namespace Onion.Controllers
         }
 
         // Change role (Admin only)
-        [HttpPut("{id}/role")]
+        [HttpPut("{id:int}/role")]
         [Onion.Common.Authorization.RequireRole("Admin")]
         public async Task<IActionResult> ChangeRole(int id, [FromBody] ChangeRoleRequest req)
         {
@@ -63,7 +62,7 @@ namespace Onion.Controllers
             return NoContent();
         }
 
-        [HttpPost("{id}/deactivate")]
+        [HttpPost("{id:int}/deactivate")]
         [Onion.Common.Authorization.RequireRole("Admin")]
         public async Task<IActionResult> Deactivate(int id)
         {
@@ -71,7 +70,7 @@ namespace Onion.Controllers
             return NoContent();
         }
 
-        [HttpPost("{id}/reactivate")]
+        [HttpPost("{id:int}/reactivate")]
         [Onion.Common.Authorization.RequireRole("Admin")]
         public async Task<IActionResult> Reactivate(int id)
         {
@@ -79,7 +78,7 @@ namespace Onion.Controllers
             return NoContent();
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id)
         {
             var item = await _service.GetByIdAsync(id);
@@ -116,7 +115,7 @@ namespace Onion.Controllers
             return NoContent();
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:int}")]
         [Onion.Common.Authorization.RequireRole("Admin")]
         public async Task<IActionResult> Delete(int id)
         {

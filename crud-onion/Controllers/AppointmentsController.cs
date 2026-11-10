@@ -38,7 +38,7 @@ namespace Onion.Controllers
             return await _svc.ListAsync();
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id)
         {
             if (!await EnsureFeatureAsync()) return NotFound();
@@ -62,7 +62,7 @@ namespace Onion.Controllers
             }
         }
 
-        [HttpPut("{id}")]
+        [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateAppointmentDto dto)
         {
             if (!await EnsureFeatureAsync()) return NotFound();
@@ -82,7 +82,7 @@ namespace Onion.Controllers
             }
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
             if (!await EnsureFeatureAsync()) return NotFound();
