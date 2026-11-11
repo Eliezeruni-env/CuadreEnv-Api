@@ -128,17 +128,28 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             if (dto is null) throw new ArgumentNullException(nameof(dto));
 
-            var w = new Warehouse { Name = dto.Name?.Trim() ?? string.Empty, CompanyId = companyId };
+            var w = new Warehouse
+            {
+                Name = dto.Name?.Trim() ?? string.Empty,
+                Code = dto.Code?.Trim() ?? string.Empty,
+                CompanyId = companyId
+            };
             await _uow.Warehouses.AddAsync(w);
             await _uow.SaveChangesAsync();
-            return new WarehouseDto(w.Id, w.Name, w.CompanyId);
+            if (string.IsNullOrWhiteSpace(w.Code))
+            {
+                w.Code = $"WH-{w.Id}";
+                await _uow.SaveChangesAsync();
+            }
+
+            return new WarehouseDto(w.Id, w.Name, w.CompanyId, w.Code);
         }
 
         public async Task<IEnumerable<WarehouseDto>> GetAllAsync(int companyId)
         {
             return await _uow.Warehouses.Query()
                 .Where(w => w.CompanyId == companyId)
-                .Select(w => new WarehouseDto(w.Id, w.Name, w.CompanyId))
+                .Select(w => new WarehouseDto(w.Id, w.Name, w.CompanyId, w.Code))
                 .ToListAsync();
         }
 
@@ -148,7 +159,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             var ps = Math.Clamp(pageSize, 1, 100);
             var list = _uow.Warehouses.Query()
                 .Where(w => w.CompanyId == companyId)
-                .Select(w => new WarehouseDto(w.Id, w.Name, w.CompanyId));
+                .Select(w => new WarehouseDto(w.Id, w.Name, w.CompanyId, w.Code));
             return await _paginationService.ToPagedListAsync(list, pn, ps);
         }
 
@@ -185,35 +196,24 @@ namespace Onion.BussinesLogic.Services.Concrete
             var effectiveCompanyId = wh.CompanyId;
             var effectiveWarehouseId = wh.Id;
 
-            var inv = await _uow.Inventories.GetByProductAndWarehouseAsync(req.ProductId, effectiveWarehouseId);
-            if (inv == null)
-            {
-                inv = new Inventory 
-                { 
-                    ProductId = req.ProductId, 
-                    WarehouseId = effectiveWarehouseId, 
-                    Quantity = effectiveQuantity, 
-                    CompanyId = effectiveCompanyId,
-                    CreateBy = performedBy,
-                    ModifiedBy = performedBy
-                };
-                await _uow.Inventories.AddAsync(inv);
-            }
-            else
-            {
-                inv.Quantity += effectiveQuantity;
-                inv.ModifiedBy = performedBy;
-                _uow.Inventories.Update(inv);
-            }
+            var inventoryUpdated = await _uow.Inventories.TryIncreaseStockAsync(
+                req.ProductId, effectiveWarehouseId, effectiveCompanyId, effectiveQuantity, performedBy);
+            if (!inventoryUpdated)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error
+                {
+                    Code = "PRODUCT_NOT_FOUND",
+                    Message = "The product does not exist in the current company.",
+                    Language = "EN"
+                });
 
             // Sync product master stock
-            var product = await _uow.Products.GetByIdAsync(req.ProductId);
-            if (product != null)
-            {
-                product.Stock += effectiveQuantity;
-                product.ModifiedBy = performedBy;
-                _uow.Products.Update(product);
-            }
+            if (!await _uow.Products.TryIncreaseStockAsync(req.ProductId, effectiveQuantity))
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error
+                {
+                    Code = "PRODUCT_NOT_FOUND",
+                    Message = "The product does not exist in the current company.",
+                    Language = "EN"
+                });
 
             var mv = new Movement 
             { 

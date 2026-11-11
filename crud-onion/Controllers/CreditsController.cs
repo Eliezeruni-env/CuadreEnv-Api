@@ -31,7 +31,7 @@ namespace CrudOnion.Controllers
             return Ok(list);
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id)
         {
             var e = await _svc.GetByIdAsync(id);

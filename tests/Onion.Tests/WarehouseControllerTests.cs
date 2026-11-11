@@ -35,7 +35,7 @@ namespace Onion.Tests
             public Task<WarehouseDto> CreateWarehouseAsync(CreateWarehouseDto dto, int companyId)
             {
                 CreatedCompanyId = companyId;
-                return Task.FromResult(new WarehouseDto(123, dto.Name, companyId));
+                return Task.FromResult(new WarehouseDto(123, dto.Name, companyId, dto.Code ?? "WH-123"));
             }
 
             public Task<MovementDto> AddStockAsync(MovementRequestDto req, string performedBy) => Task.FromResult(new MovementDto(1, req.ProductId, null, req.WarehouseId, req.Quantity, "Inbound"));
@@ -78,6 +78,26 @@ namespace Onion.Tests
             var result = await ctrl.Create(new CreateWarehouseDto("MyW"));
             var created = Assert.IsType<CreatedAtActionResult>(result);
             Assert.NotNull(created.Value);
+        }
+
+        [Fact]
+        public async Task Create_Returns_WarehousePayload_WithIdNameCodeAndCompanyId()
+        {
+            var svc = new FakeWarehouseService();
+            var ctrl = new Onion.Controllers.WarehouseController(svc, null!, new AuthorizationService());
+            ctrl.ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = CreateUser("Employee", 7) }
+            };
+
+            var result = await ctrl.Create(new CreateWarehouseDto("Main", "WH-MAIN"));
+            var created = Assert.IsType<CreatedAtActionResult>(result);
+            var response = Assert.IsType<Onion.Common.Models.ApiResponse<WarehouseDto>>(created.Value);
+
+            Assert.Equal(123, response.Data!.Id);
+            Assert.Equal("Main", response.Data.Name);
+            Assert.Equal("WH-MAIN", response.Data.Code);
+            Assert.Equal(7, response.Data.CompanyId);
         }
 
         [Fact]

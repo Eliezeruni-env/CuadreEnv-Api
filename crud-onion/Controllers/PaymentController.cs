@@ -134,7 +134,7 @@ namespace Onion.Controllers
             }
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id)
         {
             var item = await _uow.Payments.GetByIdAsync(id);
@@ -165,7 +165,7 @@ namespace Onion.Controllers
             return NoContent();
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
             var existing = await _uow.Payments.GetByIdAsync(id);

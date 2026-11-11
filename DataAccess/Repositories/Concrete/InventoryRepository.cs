@@ -14,6 +14,25 @@ namespace Onion.DataAccess.Repositories.Concrete
             return await _context.Set<Inventory>().AsNoTracking().FirstOrDefaultAsync(i => i.ProductId == productId && i.WarehouseId == warehouseId);
         }
 
+        public async Task<bool> TryIncreaseStockAsync(int productId, int warehouseId, int companyId, decimal quantity, string performedBy)
+        {
+            var productExists = await _context.Products.AnyAsync(p => p.Id == productId && p.CompanyId == companyId);
+            if (!productExists)
+                return false;
+
+            await _context.Database.ExecuteSqlInterpolatedAsync($@"
+                INSERT INTO ""Inventories""
+                    (""ProductId"", ""WarehouseId"", ""Quantity"", ""CompanyId"", ""CreationDate"", ""Active"", ""IsDeleted"", ""CreateBy"", ""ModifiedBy"")
+                VALUES ({productId}, {warehouseId}, {quantity}, {companyId}, CURRENT_TIMESTAMP, TRUE, FALSE, {performedBy}, {performedBy})
+                ON CONFLICT (""CompanyId"", ""ProductId"", ""WarehouseId"")
+                DO UPDATE SET
+                    ""Quantity"" = ""Inventories"".""Quantity"" + EXCLUDED.""Quantity"",
+                    ""ModificationDate"" = CURRENT_TIMESTAMP,
+                    ""ModifiedBy"" = EXCLUDED.""ModifiedBy"";");
+
+            return true;
+        }
+
         public async Task<bool> TryReduceStockAsync(int productId, int warehouseId, decimal quantity, bool allowNegativeStock = false)
         {
             var query = _context.Set<Inventory>()

@@ -77,7 +77,7 @@ namespace Onion.Controllers
             return CreatedAtAction(nameof(Get), new { id = created.Id }, Onion.Common.Models.ApiResponse<object>.Ok(created));
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id)
         {
             var sale = await _saleService.GetByIdAsync(id);

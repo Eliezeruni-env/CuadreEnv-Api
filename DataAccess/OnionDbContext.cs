@@ -458,6 +458,14 @@ namespace Onion.DataAccess
 
             // Ensure tenant query filters are applied for warehouse-related and invitation entities
             modelBuilder.Entity<Onion.Domain.Warehouses.Warehouse>()
+                .HasIndex(e => new { e.CompanyId, e.Code })
+                .IsUnique();
+
+            modelBuilder.Entity<Onion.Domain.Warehouses.Inventory>()
+                .HasIndex(e => new { e.CompanyId, e.ProductId, e.WarehouseId })
+                .IsUnique();
+
+            modelBuilder.Entity<Onion.Domain.Warehouses.Warehouse>()
                 .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             modelBuilder.Entity<Onion.Domain.Warehouses.Inventory>()

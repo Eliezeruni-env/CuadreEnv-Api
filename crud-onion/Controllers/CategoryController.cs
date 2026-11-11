@@ -26,7 +26,7 @@ namespace Onion.Controllers
             return Ok(Onion.Common.Models.ApiResponse<object>.Ok(items));
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id)
         {
             var item = await _categoryService.GetByIdAsync(id);
@@ -42,7 +42,7 @@ namespace Onion.Controllers
             return Created(string.Empty, Onion.Common.Models.ApiResponse<object>.Ok(categoryDto, "Category created"));
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
             _logger.LogInformation("Delete Category {Id}", id);

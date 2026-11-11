@@ -82,7 +82,7 @@ namespace Onion.Controllers
             }
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id)
         {
             var item = await _service.GetByIdAsync(id);
@@ -354,7 +354,7 @@ namespace Onion.Controllers
             return NoContent();
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
             await _service.DeleteAsync(id);

@@ -44,7 +44,7 @@ namespace Onion.Controllers
             return Ok(Onion.Common.Models.ApiResponse<List<UnitOfMeasurementDto>>.Ok(_units));
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public IActionResult GetById(int id)
         {
             var unit = _units.FirstOrDefault(u => u.Id == id);
@@ -61,7 +61,7 @@ namespace Onion.Controllers
             return Ok(Onion.Common.Models.ApiResponse<UnitOfMeasurementDto>.Ok(dto, "Unidad creada"));
         }
 
-        [HttpPut("{id}")]
+        [HttpPut("{id:int}")]
         public IActionResult Update(int id, [FromBody] UnitOfMeasurementDto dto)
         {
             var existing = _units.FirstOrDefault(u => u.Id == id);
@@ -73,7 +73,7 @@ namespace Onion.Controllers
             return Ok(Onion.Common.Models.ApiResponse<UnitOfMeasurementDto>.Ok(existing, "Unidad actualizada"));
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:int}")]
         public IActionResult Delete(int id)
         {
             var existing = _units.FirstOrDefault(u => u.Id == id);

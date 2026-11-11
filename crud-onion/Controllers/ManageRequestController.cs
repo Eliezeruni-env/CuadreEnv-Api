@@ -56,7 +56,7 @@ namespace Onion.Controllers
             return CreatedAtAction(nameof(Get), new { id = req.Id }, req);
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id)
         {
             var item = await _uow.ManageRequests.GetByIdAsync(id);

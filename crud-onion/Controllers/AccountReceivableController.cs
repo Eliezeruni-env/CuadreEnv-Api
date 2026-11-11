@@ -100,7 +100,7 @@ namespace Onion.Controllers
             return Ok(items);
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
             var ar = await _uow.AccountReceivables.GetByIdAsync(id);

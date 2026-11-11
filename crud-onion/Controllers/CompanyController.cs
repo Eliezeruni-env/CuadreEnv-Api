@@ -38,7 +38,7 @@ namespace Onion.Controllers
             return Task.FromResult<IActionResult>(StatusCode(501, Onion.Common.Models.ApiResponse<object>.Fail("Endpoint disabled until platform admin roles are implemented")));
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         [Onion.Common.Authorization.RequirePermission(new[] { Onion.Common.Authorization.RolesConstants.SuperAdmin }, null, "id")]
         public async Task<IActionResult> Get(int id)
         {
@@ -74,7 +74,7 @@ namespace Onion.Controllers
             return NoContent();
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:int}")]
         [Authorize]
         public async Task<IActionResult> Delete(int id)
         {

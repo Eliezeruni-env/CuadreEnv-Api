@@ -1,7 +1,7 @@
 namespace Onion.BussinesLogic.Dtos
 {
-    public record WarehouseDto(int Id, string Name, int CompanyId);
-    public record CreateWarehouseDto(string Name);
+    public record WarehouseDto(int Id, string Name, int CompanyId, string Code = "");
+    public record CreateWarehouseDto(string Name, string? Code = null);
 
     public record InventoryDto(int ProductId, int WarehouseId, decimal Quantity);
 

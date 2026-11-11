@@ -54,7 +54,7 @@ namespace Onion.Controllers
             return Ok(Onion.Common.Models.ApiResponse<object>.Ok(services));
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id)
         {
             _logger.LogInformation("Get Product By Id: {Id}", id);
@@ -126,7 +126,7 @@ namespace Onion.Controllers
             }
         }
 
-        [HttpDelete("{id}")]
+        [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
             _logger.LogInformation("Delete Product");
