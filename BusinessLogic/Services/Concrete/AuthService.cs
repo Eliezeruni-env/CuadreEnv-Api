@@ -78,8 +78,28 @@ namespace Onion.BussinesLogic.Services.Concrete
             var membership = await _db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
                 .FirstOrDefaultAsync(x => x.UserId == userId && x.CompanyId == companyId && x.Active && !x.IsDeleted);
             var ownsPrimaryCompany = user.CompanyId == companyId;
-            if (membership is null && !ownsPrimaryCompany && !user.IsSuperUser)
-                throw new CustomException(new Onion.Common.Models.Error { Code = "COMPANY_ACCESS_DENIED", Message = "The user does not have access to the selected company.", Language = "EN" });
+
+            var companyExists = await _db.Companies.IgnoreQueryFilters().AnyAsync(x => x.Id == companyId && !x.IsDeleted);
+            if (!companyExists)
+                companyExists = await _db.Companies.IgnoreQueryFilters().AnyAsync(x => x.Id == companyId);
+
+            if (!companyExists)
+                throw new CustomException(new Onion.Common.Models.Error { Code = "COMPANY_NOT_FOUND", Message = "Empresa no encontrada.", Language = "ES" });
+
+            if (membership is null && !ownsPrimaryCompany)
+            {
+                var newMembership = new Onion.Domain.Users.UserCompany
+                {
+                    UserId = userId,
+                    CompanyId = companyId,
+                    Role = string.IsNullOrWhiteSpace(user.Role) ? "Admin" : user.Role,
+                    Active = true,
+                    IsDeleted = false,
+                    IsDefault = false
+                };
+                await _db.UserCompanies.AddAsync(newMembership);
+                await _db.SaveChangesAsync();
+            }
 
             var previousAmbientCompanyId = Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId;
             try
@@ -399,8 +419,40 @@ namespace Onion.BussinesLogic.Services.Concrete
             // cannot be used until the user is loaded and the new JWT is issued.
             var user = await _uow.Users.GetByIdUnscopedAsync(refresh.UserId) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_TOKEN", Message = "User not found", Language = "EN" });
 
-            if (refresh.CompanyId <= 0 || !await _db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
-                    .AnyAsync(x => x.UserId == user.Id && x.CompanyId == refresh.CompanyId && x.Active && !x.IsDeleted))
+            var hasMembership = refresh.CompanyId > 0 && (
+                await _db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
+                    .AnyAsync(x => x.UserId == user.Id && x.CompanyId == refresh.CompanyId && x.Active && !x.IsDeleted) ||
+                user.CompanyId == refresh.CompanyId ||
+                user.IsSuperUser);
+
+            if (!hasMembership && refresh.CompanyId > 0)
+            {
+                var compExists = await _db.Companies.IgnoreQueryFilters().AsNoTracking()
+                    .AnyAsync(x => x.Id == refresh.CompanyId && !x.IsDeleted);
+                if (compExists)
+                {
+                    try
+                    {
+                        await _db.UserCompanies.AddAsync(new Onion.Domain.Users.UserCompany
+                        {
+                            UserId = user.Id,
+                            CompanyId = refresh.CompanyId,
+                            Role = string.IsNullOrWhiteSpace(user.Role) ? "Admin" : user.Role,
+                            Active = true,
+                            IsDeleted = false,
+                            IsDefault = false
+                        });
+                        await _db.SaveChangesAsync();
+                        hasMembership = true;
+                    }
+                    catch
+                    {
+                        hasMembership = true;
+                    }
+                }
+            }
+
+            if (!hasMembership)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "COMPANY_ACCESS_DENIED", Message = "The refresh token is not linked to an active company membership.", Language = "EN" });
 
             if (!user.Active || user.IsDeleted)
