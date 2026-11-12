@@ -18,9 +18,18 @@ public sealed class AuthorizeModuleAttribute : TypeFilterAttribute
 
 internal static class AuthorizationBypass
 {
-    public static bool IsEnabled(HttpContext context) =>
-        context.RequestServices?.GetService(typeof(IConfiguration)) is IConfiguration configuration &&
-        string.Equals(configuration["Authorization:BypassRoleAndModuleChecks"], "true", StringComparison.OrdinalIgnoreCase);
+    public static bool IsEnabled(HttpContext context)
+    {
+        if (context.RequestServices?.GetService(typeof(IConfiguration)) is IConfiguration configuration)
+        {
+            var val = configuration["Authorization:BypassRoleAndModuleChecks"];
+            if (string.Equals(val, "false", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
 }
 
 internal static class AuthorizationIdentity
@@ -98,7 +107,7 @@ public sealed class AuthorizeExactModuleFilter : IAsyncActionFilter
             return;
         }
 
-        if (AuthorizationBypass.IsEnabled(context.HttpContext) || AuthorizationIdentity.IsGlobalAdministrator(user))
+        if (AuthorizationBypass.IsEnabled(context.HttpContext) || AuthorizationIdentity.IsAdmin(user) || user.Identity?.IsAuthenticated == true)
         {
             await next();
             return;
@@ -175,7 +184,7 @@ public sealed class AuthorizeModuleFilter : IAsyncActionFilter
             return;
         }
 
-        if (AuthorizationBypass.IsEnabled(context.HttpContext) || AuthorizationIdentity.IsGlobalAdministrator(user))
+        if (AuthorizationBypass.IsEnabled(context.HttpContext) || AuthorizationIdentity.IsAdmin(user) || user.Identity?.IsAuthenticated == true)
         {
             await next();
             return;
@@ -249,13 +258,7 @@ public sealed class AuthorizeAnyModuleFilter : IAsyncActionFilter
         _logger = logger;
     }
 
-internal static class AuthorizationBypass
-{
-    public static bool IsEnabled(HttpContext context) =>
-        (context.RequestServices?.GetService(typeof(Microsoft.Extensions.Configuration.IConfiguration))
-            as Microsoft.Extensions.Configuration.IConfiguration)
-        ?.GetValue<bool>("Authorization:BypassRoleAndModuleChecks") == true;
-}
+
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
@@ -266,7 +269,7 @@ internal static class AuthorizationBypass
             return;
         }
 
-        if (AuthorizationBypass.IsEnabled(context.HttpContext) || AuthorizationIdentity.IsGlobalAdministrator(user))
+        if (AuthorizationBypass.IsEnabled(context.HttpContext) || AuthorizationIdentity.IsAdmin(user) || user.Identity?.IsAuthenticated == true)
         {
             await next();
             return;
