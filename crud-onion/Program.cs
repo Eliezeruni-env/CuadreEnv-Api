@@ -159,10 +159,16 @@ if (builder.Environment.IsProduction() && string.IsNullOrWhiteSpace(builder.Conf
     throw new InvalidOperationException("Internal:ApiKey must be configured in Production.");
 
 var jwtKey = builder.Configuration["Jwt:Key"];
-if (string.IsNullOrWhiteSpace(jwtKey) && builder.Environment.IsProduction())
-    throw new InvalidOperationException("Jwt:Key must be configured in Production.");
-if (builder.Environment.IsProduction() && jwtKey!.Length < 32)
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    if (builder.Environment.IsProduction())
+        throw new InvalidOperationException("Jwt:Key must be configured in Production.");
+    jwtKey = "dev-local-key-please-change-in-production-32chars!";
+}
+else if (builder.Environment.IsProduction() && jwtKey.Length < 32)
+{
     throw new InvalidOperationException("Jwt:Key must contain at least 32 characters in Production.");
+}
 var internalApiKey = builder.Configuration["Internal:ApiKey"];
 if (builder.Environment.IsProduction() && internalApiKey!.Length < 32)
     throw new InvalidOperationException("Internal:ApiKey must contain at least 32 characters in Production.");
