@@ -32,6 +32,32 @@ namespace Onion.BussinesLogic.Dtos
         public int CustomerId { get; set; }
         public string? Reason { get; set; }
         public List<CreateCreditNoteDetail> Details { get; set; } = new List<CreateCreditNoteDetail>();
+
+        [System.Text.Json.Serialization.JsonPropertyName("creditNoteDetails")]
+        public List<CreateCreditNoteDetail>? CreditNoteDetails
+        {
+            get => Details;
+            set
+            {
+                if (value != null && value.Count > 0)
+                {
+                    Details = value;
+                }
+            }
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("items")]
+        public List<CreateCreditNoteDetail>? Items
+        {
+            get => Details;
+            set
+            {
+                if (value != null && value.Count > 0 && (Details == null || Details.Count == 0))
+                {
+                    Details = value;
+                }
+            }
+        }
     }
 
     public class CreateCreditNoteDetail
@@ -40,5 +66,12 @@ namespace Onion.BussinesLogic.Dtos
         public decimal Quantity { get; set; }
         public decimal UnitPrice { get; set; }
         public int? WarehouseId { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("price")]
+        public decimal? Price
+        {
+            get => UnitPrice;
+            set { if (value.HasValue && UnitPrice == 0) UnitPrice = value.Value; }
+        }
     }
 }

@@ -21,6 +21,8 @@ namespace Onion.Controllers
         }
 
         [Authorize]
+        [HttpPost("/v1/auth/switch-company")]
+        [HttpPost("/api/v1/auth/switch-company")]
         [HttpPost("switch-company")]
         public async Task<IActionResult> SwitchCompany([FromBody] SwitchCompanyRequest request)
         {
@@ -71,19 +73,6 @@ namespace Onion.Controllers
                     .FirstOrDefaultAsync();
                 if (primary is not null)
                     memberships.Add(new { primary.Id, primary.Name, primary.Rnc, Role = "Primary", IsDefault = true });
-            }
-
-            var allCompanies = await db.Companies.IgnoreQueryFilters().AsNoTracking()
-                .Where(x => x.Active && !x.IsDeleted)
-                .Select(x => new { x.Id, x.Name, x.Rnc })
-                .ToListAsync();
-
-            foreach (var comp in allCompanies)
-            {
-                if (!memberships.Any(x => x.Id == comp.Id))
-                {
-                    memberships.Add(new { comp.Id, comp.Name, comp.Rnc, Role = "Admin", IsDefault = false });
-                }
             }
 
             return Ok(memberships.OrderByDescending(x => x.IsDefault).ThenBy(x => x.Name));

@@ -39,7 +39,7 @@ namespace Onion.Controllers
         }
 
         [HttpGet("{id:int}")]
-        [Onion.Common.Authorization.RequirePermission(new[] { Onion.Common.Authorization.RolesConstants.SuperAdmin }, null, "id")]
+        [Authorize]
         public async Task<IActionResult> Get(int id)
         {
             var item = await _service.GetByIdAsync(id);
