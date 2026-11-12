@@ -69,8 +69,8 @@ namespace Onion.BussinesLogic.Services.Concrete
             }
             if (!string.IsNullOrWhiteSpace(type)) q = q.Where(m => m.Type.ToString().Equals(type, StringComparison.OrdinalIgnoreCase));
 
-            var products = (await _uow.Products.ListAsync()).ToDictionary(p => p.Id);
-            var warehouses = (await _uow.Warehouses.ListAsync()).ToDictionary(w => w.Id);
+            var products = (await _uow.Products.ListAsync()).GroupBy(p => p.Id).ToDictionary(g => g.Key, g => g.First());
+            var warehouses = (await _uow.Warehouses.ListAsync()).GroupBy(w => w.Id).ToDictionary(g => g.Key, g => g.First());
             return q.Select(m => ToMovementDto(m, products, warehouses)).ToList();
         }
 
@@ -88,8 +88,8 @@ namespace Onion.BussinesLogic.Services.Concrete
             }
             if (!string.IsNullOrWhiteSpace(type)) q = q.Where(m => m.Type.ToString().Equals(type, StringComparison.OrdinalIgnoreCase));
 
-            var products = (await _uow.Products.ListAsync()).ToDictionary(p => p.Id);
-            var warehouses = (await _uow.Warehouses.ListAsync()).ToDictionary(w => w.Id);
+            var products = (await _uow.Products.ListAsync()).GroupBy(p => p.Id).ToDictionary(g => g.Key, g => g.First());
+            var warehouses = (await _uow.Warehouses.ListAsync()).GroupBy(w => w.Id).ToDictionary(g => g.Key, g => g.First());
             var dtoQuery = q.Select(m => ToMovementDto(m, products, warehouses)).AsQueryable();
             var pn = Math.Max(1, pageNumber);
             var ps = Math.Clamp(pageSize, 1, 100);

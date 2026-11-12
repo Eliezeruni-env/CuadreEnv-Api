@@ -385,5 +385,23 @@ if ((app.Environment.IsEnvironment("IntegrationTesting") || app.Environment.IsDe
     }
 }
 
+// Ensure critical schema elements exist for PostgreSQL runtime compatibility
+try
+{
+    using var startupScope = app.Services.CreateScope();
+    var db = startupScope.ServiceProvider.GetRequiredService<Onion.DataAccess.OnionDbContext>();
+    db.Database.ExecuteSqlRaw(@"
+        ALTER TABLE IF EXISTS ""Warehouses"" ADD COLUMN IF NOT EXISTS ""Code"" text NOT NULL DEFAULT '';
+        UPDATE ""Warehouses"" SET ""Code"" = 'WH-' || ""Id"" WHERE ""Code"" = '' OR ""Code"" IS NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Warehouses_CompanyId_Code"" ON ""Warehouses"" (""CompanyId"", ""Code"");
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Inventories_CompanyId_ProductId_WarehouseId"" ON ""Inventories"" (""CompanyId"", ""ProductId"", ""WarehouseId"");
+    ");
+}
+catch (Exception ex)
+{
+    var logger = app.Services.GetService<ILogger<Program>>();
+    logger?.LogWarning(ex, "Non-fatal: Database startup schema check encountered an issue.");
+}
+
 app.Run();
 

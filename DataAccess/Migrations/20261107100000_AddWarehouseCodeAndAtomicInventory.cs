@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 #nullable disable
 
 namespace Onion.DataAccess.Migrations
 {
+    [DbContext(typeof(OnionDbContext))]
+    [Migration("20261107100000_AddWarehouseCodeAndAtomicInventory")]
     public partial class AddWarehouseCodeAndAtomicInventory : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
