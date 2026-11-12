@@ -39,8 +39,16 @@ namespace Onion.BussinesLogic.Services.Concrete
             try
             {
                 // Create credit note entity
-                if (request.Details == null || request.Details.Count == 0)
+                var activeDetails = (request.Details != null && request.Details.Count > 0)
+                    ? request.Details
+                    : (request.CreditNoteDetails != null && request.CreditNoteDetails.Count > 0)
+                        ? request.CreditNoteDetails
+                        : request.Items;
+
+                if (activeDetails == null || activeDetails.Count == 0)
                     throw new InvalidOperationException("La nota de crédito debe tener al menos un detalle.");
+
+                request.Details = activeDetails;
 
                 if (request.Details.Any(d => d.Quantity <= 0))
                     throw new InvalidOperationException("La cantidad devuelta debe ser mayor que cero.");

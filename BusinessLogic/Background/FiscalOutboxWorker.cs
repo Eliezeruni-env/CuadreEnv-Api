@@ -48,6 +48,11 @@ public sealed class FiscalOutboxWorker : BackgroundService
 
     private async Task ProcessBatchAsync(CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(_configuration.GetConnectionString("OnionCrud")))
+        {
+            return;
+        }
+
         await using var scope = _scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<OnionDbContext>();
         var now = DateTime.UtcNow;

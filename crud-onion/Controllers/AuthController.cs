@@ -21,7 +21,6 @@ namespace Onion.Controllers
         }
 
         [Authorize]
-        [HttpPost("/v1/auth/switch-company")]
         [HttpPost("/api/v1/auth/switch-company")]
         [HttpPost("switch-company")]
         public async Task<IActionResult> SwitchCompany([FromBody] SwitchCompanyRequest request)
@@ -35,8 +34,7 @@ namespace Onion.Controllers
 
         [Authorize]
         [HttpGet("/v1/users/my-companies")]
-        [HttpGet("/v1/auth/user-companies")]
-        [HttpGet("/v1/auth/my-companies")]
+        [HttpGet("/api/v1/auth/user-companies")]
         [HttpGet("user-companies")]
         [HttpGet("my-companies")]
         public async Task<IActionResult> MyCompanies([FromServices] Onion.DataAccess.OnionDbContext db)

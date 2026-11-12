@@ -79,6 +79,7 @@ builder.Services.AddSwaggerGen(c =>
     // Avoid schema name collisions when DTOs share the same class name
     // across different namespaces or nested controller types.
     c.CustomSchemaIds(type => type.FullName!.Replace('+', '.'));
+    c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
