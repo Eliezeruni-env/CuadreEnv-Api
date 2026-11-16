@@ -64,12 +64,13 @@ namespace Onion.Controllers
                 else if (dto.PaymentMethod.Contains("Tarj", StringComparison.OrdinalIgnoreCase) || dto.PaymentMethod.Contains("Card", StringComparison.OrdinalIgnoreCase))
                     method = PaymentMethod.CARD;
 
-                var totalSale = sale.Details.Sum(d => d.Quantity * d.UnitPrice);
                 paymentLines.Add(new Payment
                 {
-                    Amount = totalSale,
+                    Amount = 0m,
                     PaymentMethod = method,
-                    Reference = dto.PaymentReference ?? dto.PaymentMethod
+                    Reference = dto.PaymentReference ?? dto.PaymentMethod,
+                    AmountReceived = dto.AmountReceived,
+                    ChangeAmount = dto.ChangeAmount
                 });
             }
 

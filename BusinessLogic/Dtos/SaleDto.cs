@@ -22,6 +22,8 @@ namespace Onion.BussinesLogic.Dtos
         public string? OriginChannel { get; set; }
         public string? PaymentMethod { get; set; }
         public string? PaymentReference { get; set; }
+        public decimal? AmountReceived { get; set; }
+        public decimal? ChangeAmount { get; set; }
         public List<SaleItemDto> Items { get; set; } = new List<SaleItemDto>();
     }
 }

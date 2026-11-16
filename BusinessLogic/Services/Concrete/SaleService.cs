@@ -294,19 +294,30 @@ namespace Onion.BussinesLogic.Services.Concrete
             var paymentTotal = 0m;
             foreach (var payment in paymentLines)
             {
-                if (paymentLines.Count == 1 && payment.Amount <= 0)
+                if (paymentLines.Count == 1 && (payment.Amount <= 0 || payment.Amount > sale.Total))
                     payment.Amount = sale.Total;
                 if (payment.Amount <= 0)
                     throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_PAYMENT_AMOUNT", Message = "Payment amount must be greater than zero.", Language = "EN" });
                 if (payment.PaymentMethod == PaymentMethod.CASH && payment.AmountReceived.HasValue && payment.AmountReceived.Value < payment.Amount)
                     throw new CustomException(new Onion.Common.Models.Error { Code = "INSUFFICIENT_AMOUNT_RECEIVED", Message = "Cash received cannot be less than the payment amount.", Language = "EN" });
-                if (payment.PaymentMethod == PaymentMethod.CASH && payment.AmountReceived.HasValue && !payment.ChangeAmount.HasValue)
+                if (payment.PaymentMethod == PaymentMethod.CASH && payment.AmountReceived.HasValue && (!payment.ChangeAmount.HasValue || payment.ChangeAmount.Value < 0))
                     payment.ChangeAmount = payment.AmountReceived.Value - payment.Amount;
                 paymentTotal += payment.Amount;
             }
 
             if (paymentLines.Count > 0 && paymentTotal > sale.Total && sale.PaymentType != PaymentType.CREDIT)
-                throw new CustomException(new Onion.Common.Models.Error { Code = "PAYMENT_EXCEEDS_SALE", Message = "Payment total cannot exceed the sale total.", Language = "EN" });
+            {
+                if (paymentTotal - sale.Total <= 0.50m)
+                {
+                    var excess = paymentTotal - sale.Total;
+                    paymentLines.Last().Amount -= excess;
+                    paymentTotal = sale.Total;
+                }
+                else
+                {
+                    throw new CustomException(new Onion.Common.Models.Error { Code = "PAYMENT_EXCEEDS_SALE", Message = "Payment total cannot exceed the sale total.", Language = "EN" });
+                }
+            }
 
             if (paymentLines.Count > 0)
                 sale.PaidAmount = paymentTotal;
