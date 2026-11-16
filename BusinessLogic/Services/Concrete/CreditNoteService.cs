@@ -38,12 +38,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             await using var tx = await _db.Database.BeginTransactionAsync();
             try
             {
-                // Create credit note entity
-                var activeDetails = (request.Details != null && request.Details.Count > 0)
-                    ? request.Details
-                    : (request.CreditNoteDetails != null && request.CreditNoteDetails.Count > 0)
-                        ? request.CreditNoteDetails
-                        : request.Items;
+                var activeDetails = request.GetResolvedDetails();
 
                 if (activeDetails == null || activeDetails.Count == 0)
                     throw new InvalidOperationException("La nota de crédito debe tener al menos un detalle.");
@@ -53,15 +48,34 @@ namespace Onion.BussinesLogic.Services.Concrete
                 if (request.Details.Any(d => d.Quantity <= 0))
                     throw new InvalidOperationException("La cantidad devuelta debe ser mayor que cero.");
 
-                var sale = request.SaleId.HasValue
+                var targetSaleId = request.SaleId ?? request.BillingId;
+                var sale = targetSaleId.HasValue
                     ? await _db.Sales.Include(s => s.Details)
-                        .FirstOrDefaultAsync(s => s.Id == request.SaleId.Value && s.CompanyId == companyId)
+                        .FirstOrDefaultAsync(s => s.Id == targetSaleId.Value && s.CompanyId == companyId)
                     : null;
 
-                if (request.SaleId.HasValue && sale == null)
+                if (targetSaleId.HasValue && sale == null)
                     throw new InvalidOperationException("La venta asociada no existe para esta compañía.");
 
-                var stockReturns = BuildStockReturns(request, sale);
+                // Validar que cada producto pertenezca a la venta original si se especificó factura
+                if (sale != null)
+                {
+                    foreach (var d in request.Details)
+                    {
+                        var saleProduct = sale.Details.FirstOrDefault(sd => sd.ProductId == d.ProductId);
+                        if (saleProduct == null)
+                            throw new InvalidOperationException($"El producto {d.ProductId} no pertenece a la venta original.");
+
+                        var totalSold = sale.Details.Where(sd => sd.ProductId == d.ProductId).Sum(sd => sd.Quantity);
+                        if (d.Quantity > totalSold)
+                            throw new InvalidOperationException($"La cantidad ({d.Quantity}) del producto {d.ProductId} supera la cantidad vendida original ({totalSold}).");
+                    }
+                }
+
+                // Generar reingresos de almacén solo si no es ajuste de precio (CreditNoteType != 3)
+                var isPriceAdjustment = request.CreditNoteType.HasValue && request.CreditNoteType.Value == 3;
+                var stockReturns = !isPriceAdjustment ? BuildStockReturns(request, sale) : new List<StockReturn>();
+
                 var note = new CreditNote
                 {
                     CompanyId = companyId,
@@ -89,15 +103,21 @@ namespace Onion.BussinesLogic.Services.Concrete
                 await _creditNoteRepo.AddAsync(note);
                 await _db.SaveChangesAsync();
 
-                // Return each product to the warehouse from which it was sold.
-                foreach (var stockReturn in stockReturns)
+                // Reingresar stock a almacén si aplica
+                if (!isPriceAdjustment)
                 {
-                    var performedBy = _currentUserService?.UserId?.ToString() ?? "system";
-                    await AddStockInTransactionAsync(stockReturn.ProductId, stockReturn.WarehouseId, stockReturn.Quantity, companyId, performedBy, note.Number);
+                    foreach (var stockReturn in stockReturns)
+                    {
+                        var performedBy = _currentUserService?.UserId?.ToString() ?? "system";
+                        await AddStockInTransactionAsync(stockReturn.ProductId, stockReturn.WarehouseId, stockReturn.Quantity, companyId, performedBy, note.Number);
+                    }
                 }
 
-                // Cash egress: if amount > 0, register a cash movement (egress)
-                if (note.TotalAmount > 0)
+                // Movimiento de caja: aplicar egreso si el método de reembolso es en efectivo (CASH)
+                var isCashRefund = string.Equals(request.RefundMethod, "CASH", StringComparison.OrdinalIgnoreCase) ||
+                                   string.Equals(request.RefundMethod, "EFECTIVO", StringComparison.OrdinalIgnoreCase);
+
+                if (isCashRefund && note.TotalAmount > 0)
                 {
                     var cashRegisters = await _cashRegisterService.GetAllAsync();
                     var openRegister = cashRegisters.FirstOrDefault(r => r.CompanyId == companyId && r.IsOpen);
@@ -106,7 +126,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                         var movement = new Onion.Domain.CashMovement
                         {
                             CashRegisterId = openRegister.Id,
-                            Description = $"Credit note refund {note.Number}",
+                            Description = $"Reembolso nota de crédito {note.Number}",
                             Amount = -note.TotalAmount,
                             CompanyId = companyId
                         };
@@ -164,7 +184,20 @@ namespace Onion.BussinesLogic.Services.Concrete
                 if (sale != null)
                 {
                     if (saleDetails == null || saleDetails.Count == 0)
+                    {
+                        var fallbackWarehouseId = detail.WarehouseId ?? request.WarehouseId;
+                        if (!fallbackWarehouseId.HasValue || fallbackWarehouseId.Value <= 0)
+                        {
+                            var defaultWarehouse = _db.Warehouses.FirstOrDefault(w => w.CompanyId == sale.CompanyId && w.Active && !w.IsDeleted);
+                            fallbackWarehouseId = defaultWarehouse?.Id;
+                        }
+                        if (fallbackWarehouseId.HasValue && fallbackWarehouseId.Value > 0)
+                        {
+                            result.Add(new StockReturn(detail.ProductId, fallbackWarehouseId.Value, detail.Quantity));
+                            continue;
+                        }
                         throw new InvalidOperationException($"La venta no tiene almacén definido para el producto {detail.ProductId}.");
+                    }
 
                     foreach (var saleDetail in saleDetails)
                     {

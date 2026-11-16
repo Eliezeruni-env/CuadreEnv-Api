@@ -31,32 +31,27 @@ namespace Onion.BussinesLogic.Dtos
         public string? BillingNumber { get; set; }
         public int CustomerId { get; set; }
         public string? Reason { get; set; }
-        public List<CreateCreditNoteDetail> Details { get; set; } = new List<CreateCreditNoteDetail>();
+        public string? RefundMethod { get; set; }
+        public int? CreditNoteType { get; set; }
+        public int? WarehouseId { get; set; }
+
+        public List<CreateCreditNoteDetail>? Details { get; set; }
 
         [System.Text.Json.Serialization.JsonPropertyName("creditNoteDetails")]
-        public List<CreateCreditNoteDetail>? CreditNoteDetails
-        {
-            get => Details;
-            set
-            {
-                if (value != null && value.Count > 0)
-                {
-                    Details = value;
-                }
-            }
-        }
+        public List<CreateCreditNoteDetail>? CreditNoteDetails { get; set; }
 
         [System.Text.Json.Serialization.JsonPropertyName("items")]
-        public List<CreateCreditNoteDetail>? Items
+        public List<CreateCreditNoteDetail>? Items { get; set; }
+
+        public List<CreateCreditNoteDetail> GetResolvedDetails()
         {
-            get => Details;
-            set
-            {
-                if (value != null && value.Count > 0 && (Details == null || Details.Count == 0))
-                {
-                    Details = value;
-                }
-            }
+            if (Details != null && Details.Count > 0)
+                return Details;
+            if (CreditNoteDetails != null && CreditNoteDetails.Count > 0)
+                return CreditNoteDetails;
+            if (Items != null && Items.Count > 0)
+                return Items;
+            return new List<CreateCreditNoteDetail>();
         }
     }
 

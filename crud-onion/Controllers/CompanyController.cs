@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Onion.BussinesLogic.Services.Abstract;
 using Onion.Domain;
 using Onion.Common.Services;
@@ -52,15 +53,45 @@ namespace Onion.Controllers
         // Create company and assign the creating user as owner
         [HttpPost]
         [Authorize]
-        public async Task<IActionResult> Post([FromBody] Onion.BussinesLogic.Dtos.CreateCompanyRequest request)
+        public async Task<IActionResult> Post(
+            [FromBody] Onion.BussinesLogic.Dtos.CreateCompanyRequest request,
+            [FromServices] Onion.DataAccess.OnionDbContext db)
         {
-            var userIdClaim = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var userIdClaim = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                ?? User?.FindFirst("sub")?.Value;
             if (!int.TryParse(userIdClaim, out var userId))
                 return Unauthorized(Onion.Common.Models.ApiResponse<string>.Fail("Authenticated user is required."));
 
             var created = await _service.CreateAsync(request);
 
-            await _userService.AssignCompanyAsync(userId, created.Id);
+            // Asignar membresía activa al creador en UserCompanies
+            var existingMembership = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.FirstOrDefaultAsync(
+                db.UserCompanies.IgnoreQueryFilters(),
+                x => x.UserId == userId && x.CompanyId == created.Id);
+
+            if (existingMembership == null)
+            {
+                await db.UserCompanies.AddAsync(new Onion.Domain.Users.UserCompany
+                {
+                    UserId = userId,
+                    CompanyId = created.Id,
+                    Role = "Admin",
+                    Active = true,
+                    IsDeleted = false,
+                    IsDefault = false
+                });
+                await db.SaveChangesAsync();
+            }
+
+            try
+            {
+                await _userService.AssignCompanyAsync(userId, created.Id);
+            }
+            catch
+            {
+                // Si el usuario ya tenía empresa primaria asignada, no bloquear la creación
+            }
+
             var tokens = await _authService.IssueTokensForUserAsync(userId);
             return CreatedAtAction(nameof(Get), new { id = created.Id },
                 Onion.Common.Models.ApiResponse<object>.Ok(new { company = created, tokens }, "Company created; tokens issued"));

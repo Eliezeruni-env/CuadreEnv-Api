@@ -86,19 +86,14 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (!companyExists)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "COMPANY_NOT_FOUND", Message = "Empresa no encontrada.", Language = "ES" });
 
-            if (membership is null && !ownsPrimaryCompany)
+            if (membership is null && !ownsPrimaryCompany && !user.IsSuperUser)
             {
-                var newMembership = new Onion.Domain.Users.UserCompany
+                throw new CustomException(new Onion.Common.Models.Error
                 {
-                    UserId = userId,
-                    CompanyId = companyId,
-                    Role = string.IsNullOrWhiteSpace(user.Role) ? "Admin" : user.Role,
-                    Active = true,
-                    IsDeleted = false,
-                    IsDefault = false
-                };
-                await _db.UserCompanies.AddAsync(newMembership);
-                await _db.SaveChangesAsync();
+                    Code = "FORBIDDEN",
+                    Message = "No tiene autorización para acceder a esta empresa.",
+                    Language = "ES"
+                });
             }
 
             var previousAmbientCompanyId = Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId;
@@ -427,29 +422,12 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             if (!hasMembership && refresh.CompanyId > 0)
             {
-                var compExists = await _db.Companies.IgnoreQueryFilters().AsNoTracking()
-                    .AnyAsync(x => x.Id == refresh.CompanyId && !x.IsDeleted);
-                if (compExists)
+                throw new CustomException(new Onion.Common.Models.Error
                 {
-                    try
-                    {
-                        await _db.UserCompanies.AddAsync(new Onion.Domain.Users.UserCompany
-                        {
-                            UserId = user.Id,
-                            CompanyId = refresh.CompanyId,
-                            Role = string.IsNullOrWhiteSpace(user.Role) ? "Admin" : user.Role,
-                            Active = true,
-                            IsDeleted = false,
-                            IsDefault = false
-                        });
-                        await _db.SaveChangesAsync();
-                        hasMembership = true;
-                    }
-                    catch
-                    {
-                        hasMembership = true;
-                    }
-                }
+                    Code = "FORBIDDEN",
+                    Message = "No tiene autorización para operar en la empresa del token solicitado.",
+                    Language = "ES"
+                });
             }
 
             if (!hasMembership)

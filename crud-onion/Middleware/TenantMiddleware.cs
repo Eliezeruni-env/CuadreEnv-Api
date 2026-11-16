@@ -77,32 +77,9 @@ namespace Onion.Controllers.Middleware
                         .AnyAsync(x => x.UserId == userId && x.CompanyId == resolvedCompanyId.Value && x.Active && !x.IsDeleted)) ||
                     IsGlobalAdministratorClaim(user);
 
-                if (!hasCompanyAccess && companyExists && userRecord != null)
-                {
-                    try
-                    {
-                        var newMembership = new Onion.Domain.Users.UserCompany
-                        {
-                            UserId = userId,
-                            CompanyId = resolvedCompanyId.Value,
-                            Role = string.IsNullOrWhiteSpace(userRecord.Role) ? "Admin" : userRecord.Role,
-                            Active = true,
-                            IsDeleted = false,
-                            IsDefault = false
-                        };
-                        await db.UserCompanies.AddAsync(newMembership);
-                        await db.SaveChangesAsync();
-                        hasCompanyAccess = true;
-                    }
-                    catch
-                    {
-                        hasCompanyAccess = true;
-                    }
-                }
-
                 if (!hasCompanyAccess)
                 {
-                    await WriteCompanyRequiredAsync(context);
+                    await WriteForbiddenAsync(context);
                     return;
                 }
 
@@ -152,6 +129,18 @@ namespace Onion.Controllers.Middleware
 
             return string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(role, "SysAdmin", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static async Task WriteForbiddenAsync(HttpContext context)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            context.Response.ContentType = "application/json";
+            var response = new
+            {
+                errorCode = "FORBIDDEN",
+                message = "Acceso denegado: no tiene membresía activa en la empresa solicitada.",
+            };
+            await context.Response.WriteAsync(JsonSerializer.Serialize(response));
         }
 
         private static async Task WriteCompanyRequiredAsync(HttpContext context)
