@@ -60,6 +60,9 @@ namespace Onion.BussinesLogic.Services.Concrete
                 if (sale == null)
                     throw new InvalidOperationException("La venta asociada no existe para esta compañía.");
 
+                if (sale.Status == SaleStatus.CANCELLED || (sale.Notes != null && sale.Notes.Contains("[DEVUELTA CON NOTA DE CRÉDITO")))
+                    throw new InvalidOperationException($"Esta factura o venta (#{sale.Id}) ya fue devuelta en su totalidad mediante nota de crédito.");
+
                 // Validar que cada producto pertenezca a la venta original si se especificó factura
                 if (sale != null)
                 {
@@ -112,6 +115,36 @@ namespace Onion.BussinesLogic.Services.Concrete
                 note.TotalAmount = note.Details.Sum(x => x.LineTotal);
 
                 await _creditNoteRepo.AddAsync(note);
+
+                // Update sale status and notes based on returned quantities
+                if (sale != null)
+                {
+                    var totalSoldUnits = sale.Details.Sum(sd => sd.Quantity);
+                    var returnedByProduct = await _db.CreditNotes
+                        .Where(x => x.CompanyId == companyId && x.SaleId == sale.Id && !x.IsDeleted)
+                        .SelectMany(x => x.Details)
+                        .GroupBy(x => x.ProductId)
+                        .ToDictionaryAsync(x => x.Key, x => x.Sum(d => d.Quantity));
+                    var totalReturnedUnits = returnedByProduct.Values.Sum() + request.Details.Sum(d => d.Quantity);
+
+                    if (totalReturnedUnits >= totalSoldUnits)
+                    {
+                        sale.Status = SaleStatus.CANCELLED;
+                        sale.CancellationReason = $"Devuelta mediante Nota de Crédito {note.Number}";
+                        sale.CancelledAt = DateTime.UtcNow;
+                        sale.Notes = string.IsNullOrWhiteSpace(sale.Notes)
+                            ? $"[DEVUELTA CON NOTA DE CRÉDITO {note.Number}]"
+                            : $"{sale.Notes} [DEVUELTA CON NOTA DE CRÉDITO {note.Number}]";
+                    }
+                    else
+                    {
+                        sale.Notes = string.IsNullOrWhiteSpace(sale.Notes)
+                            ? $"[DEVOLUCIÓN PARCIAL CON NOTA DE CRÉDITO {note.Number}]"
+                            : $"{sale.Notes} [DEVOLUCIÓN PARCIAL CON NOTA DE CRÉDITO {note.Number}]";
+                    }
+                    _db.Sales.Update(sale);
+                }
+
                 await _db.SaveChangesAsync();
 
                 // Reingresar stock a almacén si aplica
@@ -230,7 +263,18 @@ namespace Onion.BussinesLogic.Services.Concrete
                     }
 
                     if (remaining > 0)
-                        throw new InvalidOperationException($"La cantidad devuelta del producto {detail.ProductId} supera la cantidad vendida.");
+                    {
+                        var fallbackWarehouse = _db.Warehouses.FirstOrDefault(w => w.CompanyId == sale.CompanyId && w.Active && !w.IsDeleted);
+                        if (fallbackWarehouse != null)
+                        {
+                            result.Add(new StockReturn(detail.ProductId, fallbackWarehouse.Id, remaining));
+                            remaining = 0;
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException($"La cantidad devuelta del producto {detail.ProductId} supera la cantidad vendida.");
+                        }
+                    }
                 }
                 else
                 {
