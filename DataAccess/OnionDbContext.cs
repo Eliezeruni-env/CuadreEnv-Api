@@ -31,6 +31,12 @@ namespace Onion.DataAccess
         {
             get
             {
+                if (Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId.HasValue &&
+                    Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId.Value > 0)
+                {
+                    return Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId.Value;
+                }
+
                 var userCompany = _currentUserService?.CompanyId;
                 if (userCompany.HasValue) return userCompany;
 
@@ -392,7 +398,6 @@ namespace Onion.DataAccess
              modelBuilder.Entity<Product>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
              modelBuilder.Entity<Onion.Domain.Products.ProductType>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery || EF.Property<int>(e, "CompanyId") == 0);
              modelBuilder.Entity<Onion.Domain.CreditNote>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
-             modelBuilder.Entity<Onion.Domain.CreditNoteDetail>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
              modelBuilder.Entity<Customer>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
              modelBuilder.Entity<Supplier>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
@@ -638,19 +643,23 @@ namespace Onion.DataAccess
                     var tenantId = this.TenantCompanyId;
                     var prop = entry.Properties.FirstOrDefault(p => string.Equals(p.Metadata.Name, "CompanyId", StringComparison.OrdinalIgnoreCase));
 
+                    var isUserEntity = entry.Entity is User;
+                    var isRefreshToken = entry.Entity is Onion.Domain.Users.RefreshToken;
+
                     if (prop != null && tenantId.HasValue && tenantId.Value > 0)
                     {
-                        if (prop.CurrentValue is int requestedCompanyId && requestedCompanyId > 0 && requestedCompanyId != tenantId.Value)
-                            throw new InvalidOperationException($"Tenant isolation violation: entity {entry.Metadata.ClrType.Name} belongs to company {requestedCompanyId}, current company is {tenantId.Value}.");
+                        if (!isUserEntity && !isRefreshToken)
+                        {
+                            if (prop.CurrentValue is int requestedCompanyId && requestedCompanyId > 0 && requestedCompanyId != tenantId.Value)
+                                throw new InvalidOperationException($"Tenant isolation violation: entity {entry.Metadata.ClrType.Name} belongs to company {requestedCompanyId}, current company is {tenantId.Value}.");
 
-                        if (prop.CurrentValue == null || (prop.CurrentValue is int currentCompanyId && currentCompanyId == 0))
-                            prop.CurrentValue = tenantId.Value;
+                            if (prop.CurrentValue == null || (prop.CurrentValue is int currentCompanyId && currentCompanyId == 0))
+                                prop.CurrentValue = tenantId.Value;
+                        }
                     }
                     else if (prop != null)
                     {
                         // Users without a company are allowed during registration; a user already assigned to a company requires tenant context.
-                        var isUserEntity = entry.Entity is User;
-                        var isRefreshToken = entry.Entity is Onion.Domain.Users.RefreshToken;
                         var userCompanyId = isUserEntity ? (entry.Entity as User)?.CompanyId : null;
                         if (((!isUserEntity && !isRefreshToken) ||
                              (isUserEntity && userCompanyId is > 0)) &&
