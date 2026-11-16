@@ -53,7 +53,7 @@ namespace Onion.Controllers
 
         [HttpPost("preview/{entity}")]
         [Consumes("multipart/form-data")]
-        public async Task<IActionResult> PreviewImport(string entity, [FromForm] IFormFile file, [FromForm] ImportMode mode = ImportMode.CreateAndUpdate)
+        public async Task<IActionResult> PreviewImport(string entity, IFormFile file, [FromForm] ImportMode mode = ImportMode.CreateAndUpdate)
         {
             if (file == null || file.Length == 0)
             {
