@@ -208,7 +208,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                     if (saleDetails == null || saleDetails.Count == 0)
                     {
                         var fallbackWarehouseId = detail.WarehouseId ?? request.WarehouseId;
-                        if (!fallbackWarehouseId.HasValue || fallbackWarehouseId.Value <= 0)
+                        if (!fallbackWarehouseId.HasValue || fallbackWarehouseId.Value <= 0 || !_db.Warehouses.Any(w => w.Id == fallbackWarehouseId.Value && w.CompanyId == sale.CompanyId && w.Active && !w.IsDeleted))
                         {
                             var defaultWarehouse = _db.Warehouses.FirstOrDefault(w => w.CompanyId == sale.CompanyId && w.Active && !w.IsDeleted);
                             fallbackWarehouseId = defaultWarehouse?.Id;
@@ -218,7 +218,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                             result.Add(new StockReturn(detail.ProductId, fallbackWarehouseId.Value, detail.Quantity));
                             continue;
                         }
-                        throw new InvalidOperationException($"La venta no tiene almacén definido para el producto {detail.ProductId}.");
+                        throw new InvalidOperationException($"La compañía {sale.CompanyId} no tiene un almacén activo disponible para el producto {detail.ProductId}.");
                     }
 
                     foreach (var saleDetail in saleDetails)
@@ -251,7 +251,18 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var warehouse = await _db.Warehouses.FirstOrDefaultAsync(w => w.Id == warehouseId && w.CompanyId == companyId && w.Active && !w.IsDeleted);
             if (warehouse == null)
-                throw new InvalidOperationException($"El almacén {warehouseId} no pertenece a la compañía o está inactivo.");
+            {
+                var defaultWarehouse = await _db.Warehouses.FirstOrDefaultAsync(w => w.CompanyId == companyId && w.Active && !w.IsDeleted);
+                if (defaultWarehouse != null)
+                {
+                    warehouse = defaultWarehouse;
+                    warehouseId = defaultWarehouse.Id;
+                }
+                else
+                {
+                    throw new InvalidOperationException($"El almacén {warehouseId} no pertenece a la compañía o está inactivo.");
+                }
+            }
 
             var inventory = await _db.Inventories.FirstOrDefaultAsync(i => i.ProductId == productId && i.WarehouseId == warehouseId && i.CompanyId == companyId);
             if (inventory == null)
