@@ -259,7 +259,7 @@ namespace Onion.Controllers
                     UnitPrice = d.UnitPrice,
                     Discount = d.Discount,
                     Tax = d.Tax,
-                    WarehouseId = d.WarehouseId
+                    WarehouseId = d.WarehouseId ?? dto.WarehouseId
                 });
             }
 

@@ -252,7 +252,10 @@ namespace Onion.BussinesLogic.Services.Concrete
                 sale.IdempotencyKey = normalizedKey;
                 var existing = (await _uow.Sales.FindAsync(s => s.IdempotencyKey == normalizedKey && !s.IsDeleted))?.FirstOrDefault();
                 if (existing != null)
-                    return existing;
+                {
+                    var fullExisting = await _uow.Sales.GetByIdWithDetailsAsync(existing.Id);
+                    return fullExisting ?? existing;
+                }
             }
 
             // Basic business rules for a retail store (papelería):
@@ -337,9 +340,35 @@ namespace Onion.BussinesLogic.Services.Concrete
                 var companySettingsList = await _uow.CompanySettingsRepo.FindAsync(cs => cs.CompanyId == sale.CompanyId);
                 var companySettings = companySettingsList.FirstOrDefault();
                 var allowNegativeStock = companySettings?.AllowNegativeStock ?? false;
+
+                // 1. Resolve active default warehouse for company if any line is missing WarehouseId
+                var companyWarehouses = await _uow.Warehouses.FindAsync(w => w.CompanyId == sale.CompanyId && w.Active && !w.IsDeleted);
+                var fallbackWarehouse = companyWarehouses.FirstOrDefault();
+                if (fallbackWarehouse == null)
+                {
+                    fallbackWarehouse = new Onion.Domain.Warehouses.Warehouse
+                    {
+                        Name = "Almacén Principal",
+                        Code = "MAIN",
+                        CompanyId = sale.CompanyId,
+                        Active = true,
+                        IsDeleted = false
+                    };
+                    await _uow.Warehouses.AddAsync(fallbackWarehouse);
+                    await _uow.SaveChangesAsync();
+                }
+
+                foreach (var d in sale.Details)
+                {
+                    if (!d.WarehouseId.HasValue || d.WarehouseId.Value <= 0)
+                    {
+                        d.WarehouseId = fallbackWarehouse.Id;
+                    }
+                }
+
                 var deductions = new List<(int productId, decimal quantity, int warehouseId, decimal balanceStock)>();
                 foreach (var group in sale.Details
-                    .GroupBy(d => (d.ProductId, WarehouseId: d.WarehouseId.GetValueOrDefault()))
+                    .GroupBy(d => (d.ProductId, WarehouseId: d.WarehouseId.Value))
                     .Select(g => (g.Key.ProductId, g.Key.WarehouseId, Quantity: g.Sum(d => d.Quantity))))
                 {
                     var product = await _uow.Products.GetByIdAsync(group.ProductId)
@@ -360,31 +389,40 @@ namespace Onion.BussinesLogic.Services.Concrete
                         continue;
 
                     var warehouseId = group.WarehouseId;
-                    decimal availableStock;
-                    bool deducted;
+                    var inventory = await _uow.Inventories.GetByProductAndWarehouseAsync(group.ProductId, warehouseId);
 
-                    if (warehouseId > 0)
+                    // Auto-seed / sync warehouse inventory if it's missing but master product has stock
+                    if (inventory == null && product.Stock > 0)
                     {
-                        var inventory = await _uow.Inventories.GetByProductAndWarehouseAsync(group.ProductId, warehouseId);
-                        availableStock = inventory?.Quantity ?? 0m;
-                        deducted = await _uow.Inventories.TryReduceStockAsync(group.ProductId, warehouseId, group.Quantity);
-                    }
-                    else
-                    {
-                        availableStock = product.Stock;
-                        deducted = await _uow.Products.TryReduceStockAsync(group.ProductId, group.Quantity);
+                        await _uow.Inventories.TryIncreaseStockAsync(group.ProductId, warehouseId, sale.CompanyId, product.Stock, "System Auto-Sync");
+                        inventory = await _uow.Inventories.GetByProductAndWarehouseAsync(group.ProductId, warehouseId);
                     }
 
-                    if (!deducted)
+                    var availableStock = inventory?.Quantity ?? product.Stock;
+
+                    // Deduct warehouse inventory
+                    var deductedWarehouse = await _uow.Inventories.TryReduceStockAsync(group.ProductId, warehouseId, group.Quantity, allowNegativeStock);
+                    // Deduct master product stock atomically
+                    var deductedProduct = await _uow.Products.TryReduceStockAsync(group.ProductId, group.Quantity, allowNegativeStock);
+
+                    if (!deductedWarehouse || !deductedProduct)
                     {
-                        var currentStock = warehouseId > 0
-                            ? (await _uow.Inventories.GetByProductAndWarehouseAsync(group.ProductId, warehouseId))?.Quantity ?? 0m
-                            : (await _uow.Products.GetByIdAsync(group.ProductId))?.Stock ?? availableStock;
+                        // Rollback partial deduction if one succeeded and the other failed
+                        if (deductedWarehouse && !deductedProduct)
+                        {
+                            await _uow.Inventories.TryIncreaseStockAsync(group.ProductId, warehouseId, sale.CompanyId, group.Quantity, "System Rollback");
+                        }
+                        else if (!deductedWarehouse && deductedProduct)
+                        {
+                            await _uow.Products.TryIncreaseStockAsync(group.ProductId, group.Quantity);
+                        }
+
+                        var currentStock = (await _uow.Inventories.GetByProductAndWarehouseAsync(group.ProductId, warehouseId))?.Quantity ?? 0m;
 
                         throw new CustomException(new Onion.Common.Models.Error
                         {
                             Code = "PRODUCT_OUT_OF_STOCK",
-                            Message = $"El producto '{product.Description}' (ID: {product.Id}) no cuenta con disponibilidad en inventario. Stock actual: {currentStock}, solicitado: {group.Quantity}.",
+                            Message = $"El producto '{product.Description}' (ID: {product.Id}) no cuenta con disponibilidad en inventario. Stock actual en almacén: {currentStock}, solicitado: {group.Quantity}.",
                             Language = "ES",
                             ProductId = product.Id,
                             AvailableStock = currentStock,
@@ -398,7 +436,8 @@ namespace Onion.BussinesLogic.Services.Concrete
                         });
                     }
 
-                    deductions.Add((group.ProductId, group.Quantity, warehouseId, Math.Max(0m, availableStock - group.Quantity)));
+                    var balanceStock = (await _uow.Inventories.GetByProductAndWarehouseAsync(group.ProductId, warehouseId))?.Quantity ?? Math.Max(0m, availableStock - group.Quantity);
+                    deductions.Add((group.ProductId, group.Quantity, warehouseId, balanceStock));
                 }
 
                 if (!sale.CashSessionId.HasValue || !sale.CashRegisterId.HasValue)
@@ -497,8 +536,8 @@ namespace Onion.BussinesLogic.Services.Concrete
                         WarehouseId = deduction.warehouseId,
                         BalanceStock = deduction.balanceStock,
                         PerformedByUserId = performedBy,
-                        Reference = sale.InvoiceFolio,
-                        Comment = "Sale deduction."
+                        Reference = !string.IsNullOrEmpty(sale.InvoiceFolio) ? sale.InvoiceFolio : $"Venta #{sale.Id}",
+                        Comment = $"Deducción de venta #{sale.Id} - Almacén {deduction.warehouseId}"
                     });
                 }
 
@@ -551,22 +590,18 @@ namespace Onion.BussinesLogic.Services.Concrete
                     // Reverse stock for each sale detail
                     if (sale.Details != null)
                     {
+                        var companyWarehouses = await _uow.Warehouses.FindAsync(w => w.CompanyId == sale.CompanyId && w.Active && !w.IsDeleted);
+                        var defaultWarehouseId = companyWarehouses.FirstOrDefault()?.Id ?? 1;
+
                         foreach (var d in sale.Details)
                         {
-                            var warehouseId = d.WarehouseId.HasValue && d.WarehouseId.Value > 0 ? d.WarehouseId.Value : 0;
-                            if (warehouseId > 0)
-                            {
-                                var inv = await _uow.Inventories.GetByProductAndWarehouseAsync(d.ProductId, warehouseId);
-                                if (inv != null)
-                                {
-                                    inv.Quantity += d.Quantity;
-                                    _uow.Inventories.Update(inv);
-                                }
-                            }
-                            else
-                            {
-                                await _uow.Products.TryIncreaseStockAsync(d.ProductId, d.Quantity);
-                            }
+                            var warehouseId = d.WarehouseId.HasValue && d.WarehouseId.Value > 0 ? d.WarehouseId.Value : defaultWarehouseId;
+
+                            await _uow.Inventories.TryIncreaseStockAsync(d.ProductId, warehouseId, sale.CompanyId, d.Quantity, "Sale Cancellation");
+                            await _uow.Products.TryIncreaseStockAsync(d.ProductId, d.Quantity);
+
+                            var inv = await _uow.Inventories.GetByProductAndWarehouseAsync(d.ProductId, warehouseId);
+                            var balanceStock = inv?.Quantity ?? 0m;
 
                             var mv = new Onion.Domain.Inventory.InventoryMovement
                             {
@@ -575,8 +610,9 @@ namespace Onion.BussinesLogic.Services.Concrete
                                 ProductId = d.ProductId,
                                 Quantity = d.Quantity,
                                 WarehouseId = warehouseId,
+                                BalanceStock = balanceStock,
                                 PerformedByUserId = 0,
-                                Reference = sale.Id.ToString(),
+                                Reference = !string.IsNullOrEmpty(sale.InvoiceFolio) ? sale.InvoiceFolio : sale.Id.ToString(),
                                 Comment = $"Sale cancelled: {reason}"
                             };
                             await _uow.InventoryMovements.AddAsync(mv);

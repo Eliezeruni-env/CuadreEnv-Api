@@ -20,6 +20,7 @@ namespace Onion.BussinesLogic.Dtos
         public decimal PaidAmount { get; set; }
         public int? CashRegisterId { get; set; }
         public int? CashSessionId { get; set; }
+        public int? WarehouseId { get; set; }
         public Onion.Domain.SaleOriginChannel OriginChannel { get; set; } = Onion.Domain.SaleOriginChannel.ADMINISTRATIVO;
         public Onion.Domain.Invoices.VoucherType VoucherType { get; set; } = Onion.Domain.Invoices.VoucherType.B02;
         public Onion.Domain.PaymentType PaymentType { get; set; } = Onion.Domain.PaymentType.CASH;

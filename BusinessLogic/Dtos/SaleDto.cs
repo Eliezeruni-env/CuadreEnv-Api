@@ -8,6 +8,7 @@ namespace Onion.BussinesLogic.Dtos
         public int ProductId { get; set; }
         public decimal Quantity { get; set; }
         public decimal UnitPrice { get; set; }
+        public int? WarehouseId { get; set; }
     }
 
     public class SaleDto
@@ -19,6 +20,7 @@ namespace Onion.BussinesLogic.Dtos
         public string? CreateBy { get; set; }
         public int? CashRegisterId { get; set; }
         public int? CashSessionId { get; set; }
+        public int? WarehouseId { get; set; }
         public string? OriginChannel { get; set; }
         public string? PaymentMethod { get; set; }
         public string? PaymentReference { get; set; }

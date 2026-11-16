@@ -50,7 +50,14 @@ namespace Onion.Controllers
             };
             foreach (var it in dto.Items)
             {
-                sale.Details.Add(new Onion.Domain.SaleDetail { ProductId = it.ProductId, Quantity = it.Quantity, UnitPrice = it.UnitPrice });
+                var itemWarehouse = it.WarehouseId ?? dto.WarehouseId;
+                sale.Details.Add(new Onion.Domain.SaleDetail 
+                { 
+                    ProductId = it.ProductId, 
+                    Quantity = it.Quantity, 
+                    UnitPrice = it.UnitPrice,
+                    WarehouseId = itemWarehouse
+                });
             }
 
             var paymentLines = new List<Payment>();
