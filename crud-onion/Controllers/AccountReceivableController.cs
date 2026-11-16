@@ -239,27 +239,49 @@ namespace Onion.Controllers
             // Optionally record CashMovement if method is cash
             if (req.Method != null && req.Method.Equals("CASH", StringComparison.OrdinalIgnoreCase) && req.Amount > 0)
             {
-                if (req.CashRegisterId is not > 0)
-                    throw new CustomException(new Error { Code = "CASH_REGISTER_REQUIRED", Message = "A cash register is required for cash installment payments.", Language = "EN" });
-                var register = await _uow.CashRegisters.GetByIdAsync(req.CashRegisterId.Value);
-                if (register is null || register.CompanyId != receivable.CompanyId || !register.IsOpen)
-                    throw new CustomException(new Error { Code = "CASH_REGISTER_NOT_FOUND", Message = "The selected cash register is not open for this company.", Language = "EN" });
-                var session = (await _uow.CashSessions.FindAsync(s => s.CashRegisterId == register.Id && s.Status == CashSessionStatus.Open)).FirstOrDefault();
-                if (session is null)
-                    throw new CustomException(new Error { Code = "CASH_SESSION_REQUIRED", Message = "An open cash session is required for cash installment payments.", Language = "EN" });
-                var cm = new Onion.Domain.CashMovement
+                int? cashRegisterId = req.CashRegisterId;
+                CashSession? session = null;
+                CashRegister? register = null;
+
+                if (cashRegisterId is > 0)
                 {
-                    CompanyId = receivable.CompanyId,
-                    CashRegisterId = register.Id,
-                    CashSessionId = session.Id,
-                    Type = CashMovementType.ReceivablePayment,
-                    Amount = req.Amount,
-                    Reason = $"Pago de cuota {installmentId}",
-                    Description = $"Installment payment {installmentId}",
-                    CreateBy = _currentUser.UserId?.ToString() ?? "system"
-                };
-                await _uow.CashMovements.AddAsync(cm);
-                await _uow.SaveChangesAsync();
+                    register = await _uow.CashRegisters.GetByIdAsync(cashRegisterId.Value);
+                    if (register != null && register.CompanyId == receivable.CompanyId && register.IsOpen)
+                    {
+                        session = (await _uow.CashSessions.FindAsync(s => s.CashRegisterId == register.Id && s.Status == CashSessionStatus.Open)).FirstOrDefault();
+                    }
+                }
+
+                if (session == null)
+                {
+                    var openSessions = await _uow.CashSessions.FindAsync(s => s.CompanyId == receivable.CompanyId && s.Status == CashSessionStatus.Open);
+                    session = openSessions.OrderByDescending(s => s.OpenedAt).FirstOrDefault();
+                    if (session != null)
+                    {
+                        register = await _uow.CashRegisters.GetByIdAsync(session.CashRegisterId);
+                    }
+                }
+
+                if (session != null && register != null)
+                {
+                    var cm = new Onion.Domain.CashMovement
+                    {
+                        CompanyId = receivable.CompanyId,
+                        CashRegisterId = register.Id,
+                        CashSessionId = session.Id,
+                        Type = CashMovementType.ReceivablePayment,
+                        Amount = req.Amount,
+                        Reason = $"Pago de cuota {installmentId}",
+                        Description = $"Installment payment {installmentId}",
+                        CreateBy = _currentUser.UserId?.ToString() ?? "system"
+                    };
+                    await _uow.CashMovements.AddAsync(cm);
+                    await _uow.SaveChangesAsync();
+                }
+                else
+                {
+                    throw new CustomException(new Error { Code = "CASH_SESSION_REQUIRED", Message = "No hay un turno de caja abierto para registrar este cobro en efectivo. Por favor abra la caja.", Language = "ES" });
+                }
             }
 
             await transaction.CommitAsync();
@@ -338,27 +360,49 @@ namespace Onion.Controllers
             // Record cash movement for cash payments only when a valid open session exists.
             if (req.Method != null && req.Method.Equals("CASH", StringComparison.OrdinalIgnoreCase))
             {
-                if (req.CashRegisterId is not > 0)
-                    throw new CustomException(new Error { Code = "CASH_REGISTER_REQUIRED", Message = "A cash register is required for cash payments.", Language = "EN" });
-                var register = await _uow.CashRegisters.GetByIdAsync(req.CashRegisterId.Value);
-                if (register is null || register.CompanyId != ar.CompanyId || !register.IsOpen)
-                    throw new CustomException(new Error { Code = "CASH_REGISTER_NOT_FOUND", Message = "The selected cash register is not open for this company.", Language = "EN" });
-                var session = (await _uow.CashSessions.FindAsync(s => s.CashRegisterId == register.Id && s.Status == CashSessionStatus.Open)).FirstOrDefault();
-                if (session is null)
-                    throw new CustomException(new Error { Code = "CASH_SESSION_REQUIRED", Message = "An open cash session is required for cash payments.", Language = "EN" });
-                var cm = new Onion.Domain.CashMovement
+                int? cashRegisterId = req.CashRegisterId;
+                CashSession? session = null;
+                CashRegister? register = null;
+
+                if (cashRegisterId is > 0)
                 {
-                    CashRegisterId = register.Id,
-                    CashSessionId = session.Id,
-                    Amount = req.Amount,
-                    Description = $"Cobro Deuda AR #{ar.Id}",
-                    Reason = $"Cobro Deuda AR #{ar.Id}",
-                    Type = Onion.Domain.Finance.CashMovementType.ReceivablePayment,
-                    CompanyId = ar.CompanyId,
-                    CreateBy = _currentUser.UserId?.ToString() ?? "system"
-                };
-                await _uow.CashMovements.AddAsync(cm);
-                await _uow.SaveChangesAsync();
+                    register = await _uow.CashRegisters.GetByIdAsync(cashRegisterId.Value);
+                    if (register != null && register.CompanyId == ar.CompanyId && register.IsOpen)
+                    {
+                        session = (await _uow.CashSessions.FindAsync(s => s.CashRegisterId == register.Id && s.Status == CashSessionStatus.Open)).FirstOrDefault();
+                    }
+                }
+
+                if (session == null)
+                {
+                    var openSessions = await _uow.CashSessions.FindAsync(s => s.CompanyId == ar.CompanyId && s.Status == CashSessionStatus.Open);
+                    session = openSessions.OrderByDescending(s => s.OpenedAt).FirstOrDefault();
+                    if (session != null)
+                    {
+                        register = await _uow.CashRegisters.GetByIdAsync(session.CashRegisterId);
+                    }
+                }
+
+                if (session != null && register != null)
+                {
+                    var cm = new Onion.Domain.CashMovement
+                    {
+                        CashRegisterId = register.Id,
+                        CashSessionId = session.Id,
+                        Amount = req.Amount,
+                        Description = $"Cobro Deuda AR #{ar.Id}",
+                        Reason = $"Cobro Deuda AR #{ar.Id}",
+                        Type = Onion.Domain.Finance.CashMovementType.ReceivablePayment,
+                        CompanyId = ar.CompanyId,
+                        CreateBy = _currentUser.UserId?.ToString() ?? "system"
+                    };
+                    await _uow.CashMovements.AddAsync(cm);
+                    await _uow.SaveChangesAsync();
+                }
+                else
+                {
+                    throw new CustomException(new Error { Code = "CASH_SESSION_REQUIRED", Message = "No hay un turno de caja abierto para registrar este cobro en efectivo. Por favor abra la caja.", Language = "ES" });
+                }
             }
 
             await transaction.CommitAsync();

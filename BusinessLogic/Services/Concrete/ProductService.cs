@@ -266,6 +266,65 @@ namespace Onion.BussinesLogic.Services.Concrete
             try
             {
                 await _uow.SaveChangesAsync();
+
+                if (product.Stock > 0)
+                {
+                    try
+                    {
+                        var companyWarehouses = await _uow.Warehouses.FindAsync(w => w.CompanyId == product.CompanyId && w.Active && !w.IsDeleted);
+                        var defaultWarehouse = companyWarehouses.FirstOrDefault();
+                        if (defaultWarehouse == null)
+                        {
+                            defaultWarehouse = new Onion.Domain.Warehouses.Warehouse
+                            {
+                                Name = "Almacén Principal",
+                                Code = "MAIN",
+                                CompanyId = product.CompanyId,
+                                Active = true,
+                                IsDeleted = false
+                            };
+                            await _uow.Warehouses.AddAsync(defaultWarehouse);
+                            await _uow.SaveChangesAsync();
+                        }
+
+                        var existingInv = (await _uow.Inventories.FindAsync(i => i.ProductId == product.Id && i.WarehouseId == defaultWarehouse.Id && i.CompanyId == product.CompanyId)).FirstOrDefault();
+                        if (existingInv == null)
+                        {
+                            var inv = new Onion.Domain.Warehouses.Inventory
+                            {
+                                ProductId = product.Id,
+                                WarehouseId = defaultWarehouse.Id,
+                                CompanyId = product.CompanyId,
+                                Quantity = product.Stock,
+                                CreateBy = _currentUserService.UserId?.ToString() ?? "system",
+                                ModifiedBy = _currentUserService.UserId?.ToString() ?? "system"
+                            };
+                            await _uow.Inventories.AddAsync(inv);
+                        }
+                        else
+                        {
+                            existingInv.Quantity = product.Stock;
+                            _uow.Inventories.Update(existingInv);
+                        }
+
+                        await _uow.Movements.AddAsync(new Onion.Domain.Warehouses.Movement
+                        {
+                            ProductId = product.Id,
+                            ToWarehouseId = defaultWarehouse.Id,
+                            Quantity = product.Stock,
+                            Type = Onion.Domain.Warehouses.MovementType.Inbound,
+                            CompanyId = product.CompanyId,
+                            CreatedBy = _currentUserService.UserId?.ToString() ?? "system",
+                            CreateBy = _currentUserService.UserId?.ToString() ?? "system"
+                        });
+
+                        await _uow.SaveChangesAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Failed to initialize warehouse inventory for newly created product {ProductId}", product.Id);
+                    }
+                }
             }
             catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
             {

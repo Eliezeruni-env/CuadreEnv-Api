@@ -75,7 +75,8 @@ namespace Onion.Domain
         TARJETA = CARD,
         MULTIPLE = 3,
         CREDIT = 4,
-        OTHER = 5
+        OTHER = 5,
+        CREDIT_NOTE = 6
     }
     public enum SaleOriginChannel
     {

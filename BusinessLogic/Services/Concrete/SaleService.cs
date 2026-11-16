@@ -297,6 +297,13 @@ namespace Onion.BussinesLogic.Services.Concrete
             var paymentTotal = 0m;
             foreach (var payment in paymentLines)
             {
+                if (payment.PaymentMethod == PaymentMethod.CASH && payment.Amount > sale.Total)
+                {
+                    if (!payment.AmountReceived.HasValue || payment.AmountReceived.Value <= 0)
+                        payment.AmountReceived = payment.Amount;
+                    if (paymentLines.Count == 1)
+                        payment.Amount = sale.Total;
+                }
                 if (paymentLines.Count == 1 && (payment.Amount <= 0 || payment.Amount > sale.Total))
                     payment.Amount = sale.Total;
                 if (payment.Amount <= 0)
@@ -318,7 +325,18 @@ namespace Onion.BussinesLogic.Services.Concrete
                 }
                 else
                 {
-                    throw new CustomException(new Onion.Common.Models.Error { Code = "PAYMENT_EXCEEDS_SALE", Message = "Payment total cannot exceed the sale total.", Language = "EN" });
+                    var cashLine = paymentLines.FirstOrDefault(p => p.PaymentMethod == PaymentMethod.CASH);
+                    if (cashLine != null && paymentLines.Count == 1)
+                    {
+                        cashLine.AmountReceived ??= cashLine.Amount;
+                        cashLine.Amount = sale.Total;
+                        cashLine.ChangeAmount = cashLine.AmountReceived - cashLine.Amount;
+                        paymentTotal = sale.Total;
+                    }
+                    else
+                    {
+                        throw new CustomException(new Onion.Common.Models.Error { Code = "PAYMENT_EXCEEDS_SALE", Message = "Payment total cannot exceed the sale total.", Language = "EN" });
+                    }
                 }
             }
 
@@ -476,18 +494,40 @@ namespace Onion.BussinesLogic.Services.Concrete
                     }
                 }
 
-                if (sale.PaymentType == PaymentType.CREDIT)
+                if (sale.PaymentType == PaymentType.CREDIT || sale.PaidAmount < sale.Total)
                 {
-                    await _uow.AccountReceivables.AddAsync(new AccountReceivable
+                    if (!sale.CustomerId.HasValue || sale.CustomerId.Value <= 0)
                     {
-                        CompanyId = sale.CompanyId,
-                        CustomerId = sale.CustomerId,
-                        SaleId = sale.Id,
-                        TotalAmount = sale.Total,
-                        PaidAmount = sale.PaidAmount,
-                        DueDate = sale.DueDate ?? sale.Date.AddDays(30),
-                        Status = sale.PaidAmount >= sale.Total ? ReceivableStatus.Paid : ReceivableStatus.Open
-                    });
+                        var defaultCust = (await _uow.Customers.FindAsync(c => c.CompanyId == sale.CompanyId && c.Active && !c.IsDeleted)).FirstOrDefault();
+                        if (defaultCust == null)
+                        {
+                            defaultCust = new Customer
+                            {
+                                Name = "Cliente General",
+                                CompanyId = sale.CompanyId,
+                                Active = true,
+                                IsDeleted = false
+                            };
+                            await _uow.Customers.AddAsync(defaultCust);
+                            await _uow.SaveChangesAsync();
+                        }
+                        sale.CustomerId = defaultCust.Id;
+                    }
+
+                    var existingAr = await _uow.AccountReceivables.FindAsync(a => a.SaleId == sale.Id && a.CompanyId == sale.CompanyId && a.Active && !a.IsDeleted);
+                    if (!existingAr.Any())
+                    {
+                        await _uow.AccountReceivables.AddAsync(new AccountReceivable
+                        {
+                            CompanyId = sale.CompanyId,
+                            CustomerId = sale.CustomerId,
+                            SaleId = sale.Id,
+                            TotalAmount = sale.Total,
+                            PaidAmount = sale.PaidAmount,
+                            DueDate = sale.DueDate ?? sale.Date.AddDays(30),
+                            Status = sale.PaidAmount >= sale.Total ? ReceivableStatus.Paid : ReceivableStatus.Open
+                        });
+                    }
                 }
 
                 string? ncf = null;

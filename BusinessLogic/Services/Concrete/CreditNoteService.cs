@@ -157,11 +157,40 @@ namespace Onion.BussinesLogic.Services.Concrete
                     }
                 }
 
+                // Si la factura original tenía deuda pendiente en Cuentas por Cobrar,
+                // la nota de crédito se aplica primero a cancelar o reducir el saldo deudor.
+                var ar = await _db.AccountReceivables
+                    .FirstOrDefaultAsync(a => a.SaleId == sale.Id && a.CompanyId == companyId && a.Active && !a.IsDeleted);
+
+                decimal debtReduction = 0m;
+                if (ar != null && ar.Balance > 0)
+                {
+                    debtReduction = Math.Min(ar.Balance, note.TotalAmount);
+                    ar.PaidAmount += debtReduction;
+                    if (ar.PaidAmount >= ar.TotalAmount)
+                    {
+                        ar.Status = Onion.Domain.Finance.ReceivableStatus.Paid;
+                    }
+                    _db.AccountReceivables.Update(ar);
+
+                    await _db.Payments.AddAsync(new Payment
+                    {
+                        SaleId = sale.Id,
+                        CompanyId = companyId,
+                        Amount = debtReduction,
+                        PaymentMethod = PaymentMethod.CREDIT_NOTE,
+                        Reference = note.Number
+                    });
+                }
+
+                // El remanente después de saldar la deuda pendiente es lo que puede reembolsarse en efectivo
+                var remainingCredit = note.TotalAmount - debtReduction;
+
                 // Movimiento de caja: aplicar egreso si el método de reembolso es en efectivo (CASH)
                 var isCashRefund = string.Equals(request.RefundMethod, "CASH", StringComparison.OrdinalIgnoreCase) ||
                                    string.Equals(request.RefundMethod, "EFECTIVO", StringComparison.OrdinalIgnoreCase);
 
-                if (isCashRefund && note.TotalAmount > 0)
+                if (isCashRefund && remainingCredit > 0)
                 {
                     var openRegister = await _db.CashRegisters
                         .FirstOrDefaultAsync(r => r.CompanyId == companyId && r.IsOpen && r.Active && !r.IsDeleted);
@@ -174,14 +203,14 @@ namespace Onion.BussinesLogic.Services.Concrete
                     if (openSession == null)
                         throw new InvalidOperationException("Se requiere una sesión de caja abierta para reembolsar en efectivo.");
 
-                    openSession.ApplyMovement(Onion.Domain.Finance.CashMovementType.CashOut, note.TotalAmount);
+                    openSession.ApplyMovement(Onion.Domain.Finance.CashMovementType.CashOut, remainingCredit);
                     await _db.CashMovements.AddAsync(new Onion.Domain.CashMovement
                     {
                         CashRegisterId = openRegister.Id,
                         CashSessionId = openSession.Id,
                         Description = $"Reembolso nota de crédito {note.Number}",
                         Reason = $"Reembolso nota de crédito {note.Number}",
-                        Amount = note.TotalAmount,
+                        Amount = remainingCredit,
                         Type = Onion.Domain.Finance.CashMovementType.CashOut,
                         CompanyId = companyId,
                         ApprovedByUserId = _currentUserService.UserId
