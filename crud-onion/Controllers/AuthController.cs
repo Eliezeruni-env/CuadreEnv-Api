@@ -22,7 +22,7 @@ namespace Onion.Controllers
 
         [Authorize]
         [HttpPost("/api/v1/auth/switch-company")]
-        [HttpPost("/v1/auth/switch-company")]
+        [HttpPost("/auth/switch-company")]
         [HttpPost("switch-company")]
         public async Task<IActionResult> SwitchCompany([FromBody] SwitchCompanyRequest request)
         {
