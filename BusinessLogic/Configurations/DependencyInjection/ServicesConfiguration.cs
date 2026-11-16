@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Microsoft.Extensions.DependencyInjection;
 using Onion.BusinessLogic.Mapping;
 using Onion.BusinessLogic.Profiles;
