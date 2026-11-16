@@ -43,6 +43,8 @@ namespace Onion.Controllers
             if (!int.TryParse(idValue, out var userId) || userId <= 0)
                 return Unauthorized();
 
+            // Regla multi-tenant estricta: devolver ÚNICA Y EXCLUSIVAMENTE las empresas
+            // donde el usuario posea un registro activo y no eliminado en UserCompanies.
             var memberships = await db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
                 .Where(x => x.UserId == userId && x.Active && !x.IsDeleted)
                 .Join(db.Companies.IgnoreQueryFilters().AsNoTracking().Where(x => x.Active && !x.IsDeleted),
@@ -58,23 +60,30 @@ namespace Onion.Controllers
                     })
                 .ToListAsync();
 
-            var primaryCompanyId = await db.Users.IgnoreQueryFilters().AsNoTracking()
-                .Where(x => x.Id == userId)
-                .Select(x => x.CompanyId)
-                .FirstOrDefaultAsync();
-
-            if (primaryCompanyId is > 0 && !memberships.Any(x => x.Id == primaryCompanyId.Value))
-            {
-                var primary = await db.Companies.IgnoreQueryFilters().AsNoTracking()
-                    .Where(x => x.Id == primaryCompanyId.Value && x.Active && !x.IsDeleted)
-                    .Select(x => new { x.Id, x.Name, x.Rnc })
-                    .FirstOrDefaultAsync();
-                if (primary is not null)
-                    memberships.Add(new { primary.Id, primary.Name, primary.Rnc, Role = "Primary", IsDefault = true });
-            }
-
             return Ok(memberships.OrderByDescending(x => x.IsDefault).ThenBy(x => x.Name));
         }
+
+        [Authorize]
+        [HttpPost("/api/v1/auth/revoke-tenant-session")]
+        [HttpPost("revoke-tenant-session")]
+        public async Task<IActionResult> RevokeTenantSession([FromBody] RevokeTenantSessionRequest request)
+        {
+            var idValue = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(idValue, out var callerId) || callerId <= 0)
+                return Unauthorized();
+
+            var isSuperUser = User.IsInRole("SuperAdmin") || User.HasClaim("isSuperUser", "true");
+            var targetUserId = request.UserId > 0 ? request.UserId : callerId;
+
+            // Sólo el propio usuario o un SuperUser pueden revocar sesiones de un usuario
+            if (targetUserId != callerId && !isSuperUser)
+                return Forbid();
+
+            await _auth.RevokeUserTenantTokensAsync(targetUserId, request.CompanyId);
+            return Ok(new { success = true, message = "Sesiones de empresa revocadas exitosamente." });
+        }
+
+        public sealed record RevokeTenantSessionRequest(int CompanyId, int UserId = 0);
 
         [HttpPost("register")]
         [AllowAnonymous]

@@ -1160,6 +1160,9 @@ namespace Onion.DataAccess.Migrations
                     b.Property<string>("Reason")
                         .HasColumnType("text");
 
+                    b.Property<int?>("SaleId")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("TotalAmount")
                         .HasColumnType("numeric");
 

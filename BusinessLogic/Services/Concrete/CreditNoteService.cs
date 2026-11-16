@@ -14,26 +14,28 @@ namespace Onion.BussinesLogic.Services.Concrete
     {
         private readonly IRepository<CreditNote> _creditNoteRepo;
         private readonly OnionDbContext _db;
-        private readonly Onion.BussinesLogic.Services.Abstract.ICashMovementService _cashMovementService;
-        private readonly Onion.BussinesLogic.Services.Abstract.ICashRegisterService _cashRegisterService;
         private readonly Onion.Common.Services.ICurrentUserService _currentUserService;
+        private readonly Onion.DataAccess.Tenant.ITenantMembershipValidator _membershipValidator;
 
         public CreditNoteService(
             IRepository<CreditNote> creditNoteRepo,
             OnionDbContext db,
-            Onion.BussinesLogic.Services.Abstract.ICashMovementService cashMovementService,
-            Onion.BussinesLogic.Services.Abstract.ICashRegisterService cashRegisterService,
-            Onion.Common.Services.ICurrentUserService currentUserService)
+            Onion.Common.Services.ICurrentUserService currentUserService,
+            Onion.DataAccess.Tenant.ITenantMembershipValidator membershipValidator)
         {
             _creditNoteRepo = creditNoteRepo;
             _db = db;
-            _cashMovementService = cashMovementService;
-            _cashRegisterService = cashRegisterService;
             _currentUserService = currentUserService;
+            _membershipValidator = membershipValidator;
         }
 
         public async Task<CreditNoteDto> CreateAsync(int companyId, CreateCreditNoteRequest request)
         {
+            if (_currentUserService.UserId is not > 0 ||
+                !_currentUserService.IsAuthenticated ||
+                !await _membershipValidator.HasActiveAccessAsync(_currentUserService.UserId.Value, companyId))
+                throw new UnauthorizedAccessException("El usuario no tiene una membresía activa en la compañía solicitada.");
+
             // Use DB transaction to ensure atomicity of note, stock reintegration and cash movement
             await using var tx = await _db.Database.BeginTransactionAsync();
             try
@@ -45,30 +47,38 @@ namespace Onion.BussinesLogic.Services.Concrete
 
                 request.Details = activeDetails;
 
+                var targetSaleId = request.SaleId ?? request.BillingId;
+                if (targetSaleId is not > 0)
+                    throw new InvalidOperationException("La factura original es requerida para procesar la devolución.");
+
                 if (request.Details.Any(d => d.Quantity <= 0))
                     throw new InvalidOperationException("La cantidad devuelta debe ser mayor que cero.");
 
-                var targetSaleId = request.SaleId ?? request.BillingId;
-                var sale = targetSaleId.HasValue
-                    ? await _db.Sales.Include(s => s.Details)
-                        .FirstOrDefaultAsync(s => s.Id == targetSaleId.Value && s.CompanyId == companyId)
-                    : null;
+                var sale = await _db.Sales.Include(s => s.Details)
+                    .FirstOrDefaultAsync(s => s.Id == targetSaleId.Value && s.CompanyId == companyId);
 
-                if (targetSaleId.HasValue && sale == null)
+                if (sale == null)
                     throw new InvalidOperationException("La venta asociada no existe para esta compañía.");
 
                 // Validar que cada producto pertenezca a la venta original si se especificó factura
                 if (sale != null)
                 {
-                    foreach (var d in request.Details)
+                    var returnedByProduct = await _db.CreditNotes
+                        .Where(x => x.CompanyId == companyId && x.SaleId == sale.Id && !x.IsDeleted)
+                        .SelectMany(x => x.Details)
+                        .GroupBy(x => x.ProductId)
+                        .ToDictionaryAsync(x => x.Key, x => x.Sum(d => d.Quantity));
+
+                    foreach (var d in request.Details.GroupBy(x => x.ProductId).Select(x => new { ProductId = x.Key, Quantity = x.Sum(y => y.Quantity) }))
                     {
                         var saleProduct = sale.Details.FirstOrDefault(sd => sd.ProductId == d.ProductId);
                         if (saleProduct == null)
                             throw new InvalidOperationException($"El producto {d.ProductId} no pertenece a la venta original.");
 
                         var totalSold = sale.Details.Where(sd => sd.ProductId == d.ProductId).Sum(sd => sd.Quantity);
-                        if (d.Quantity > totalSold)
-                            throw new InvalidOperationException($"La cantidad ({d.Quantity}) del producto {d.ProductId} supera la cantidad vendida original ({totalSold}).");
+                        var alreadyReturned = returnedByProduct.GetValueOrDefault(d.ProductId);
+                        if (d.Quantity + alreadyReturned > totalSold)
+                            throw new InvalidOperationException($"La cantidad devuelta ({d.Quantity + alreadyReturned}) del producto {d.ProductId} supera la cantidad vendida original ({totalSold}).");
                     }
                 }
 
@@ -79,6 +89,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 var note = new CreditNote
                 {
                     CompanyId = companyId,
+                    SaleId = sale.Id,
                     CustomerId = request.CustomerId,
                     Date = DateTime.UtcNow,
                     Reason = request.Reason
@@ -119,19 +130,30 @@ namespace Onion.BussinesLogic.Services.Concrete
 
                 if (isCashRefund && note.TotalAmount > 0)
                 {
-                    var cashRegisters = await _cashRegisterService.GetAllAsync();
-                    var openRegister = cashRegisters.FirstOrDefault(r => r.CompanyId == companyId && r.IsOpen);
-                    if (openRegister != null)
+                    var openRegister = await _db.CashRegisters
+                        .FirstOrDefaultAsync(r => r.CompanyId == companyId && r.IsOpen && r.Active && !r.IsDeleted);
+                    if (openRegister == null)
+                        throw new InvalidOperationException("Se requiere una caja abierta para reembolsar en efectivo.");
+
+                    var openSession = await _db.CashSessions
+                        .FirstOrDefaultAsync(s => s.CompanyId == companyId && s.CashRegisterId == openRegister.Id &&
+                                                  s.Status == Onion.Domain.Finance.CashSessionStatus.Open);
+                    if (openSession == null)
+                        throw new InvalidOperationException("Se requiere una sesión de caja abierta para reembolsar en efectivo.");
+
+                    openSession.ApplyMovement(Onion.Domain.Finance.CashMovementType.CashOut, note.TotalAmount);
+                    await _db.CashMovements.AddAsync(new Onion.Domain.CashMovement
                     {
-                        var movement = new Onion.Domain.CashMovement
-                        {
-                            CashRegisterId = openRegister.Id,
-                            Description = $"Reembolso nota de crédito {note.Number}",
-                            Amount = -note.TotalAmount,
-                            CompanyId = companyId
-                        };
-                        await _cashMovementService.AddAsync(movement);
-                    }
+                        CashRegisterId = openRegister.Id,
+                        CashSessionId = openSession.Id,
+                        Description = $"Reembolso nota de crédito {note.Number}",
+                        Reason = $"Reembolso nota de crédito {note.Number}",
+                        Amount = note.TotalAmount,
+                        Type = Onion.Domain.Finance.CashMovementType.CashOut,
+                        CompanyId = companyId,
+                        ApprovedByUserId = _currentUserService.UserId
+                    });
+                    await _db.SaveChangesAsync();
                 }
 
                 await tx.CommitAsync();
@@ -231,7 +253,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (warehouse == null)
                 throw new InvalidOperationException($"El almacén {warehouseId} no pertenece a la compañía o está inactivo.");
 
-            var inventory = await _db.Inventories.FirstOrDefaultAsync(i => i.ProductId == productId && i.WarehouseId == warehouseId);
+            var inventory = await _db.Inventories.FirstOrDefaultAsync(i => i.ProductId == productId && i.WarehouseId == warehouseId && i.CompanyId == companyId);
             if (inventory == null)
             {
                 inventory = new Onion.Domain.Warehouses.Inventory

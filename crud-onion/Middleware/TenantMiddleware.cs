@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Onion.Common.Models;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Onion.DataAccess.Tenant;
 
 namespace Onion.Controllers.Middleware
 {
@@ -12,10 +13,12 @@ namespace Onion.Controllers.Middleware
     public class TenantMiddleware
     {
         private readonly RequestDelegate _next;
+        private readonly ITenantMembershipValidator? _membershipValidator;
 
-        public TenantMiddleware(RequestDelegate next)
+        public TenantMiddleware(RequestDelegate next, ITenantMembershipValidator? membershipValidator = null)
         {
             _next = next;
+            _membershipValidator = membershipValidator;
         }
 
         public async Task InvokeAsync(HttpContext context)
@@ -53,10 +56,11 @@ namespace Onion.Controllers.Middleware
                 }
 
                 var db = context.RequestServices.GetRequiredService<Onion.DataAccess.OnionDbContext>();
-                var userRecord = userId > 0
-                    ? await db.Users.IgnoreQueryFilters().AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId)
-                    : null;
-                var resolvedCompanyId = requestedCompanyId ?? userRecord?.CompanyId;
+                var primaryCompanyId = await db.Users.IgnoreQueryFilters().AsNoTracking()
+                    .Where(x => x.Id == userId && x.Active && !x.IsDeleted)
+                    .Select(x => x.CompanyId)
+                    .FirstOrDefaultAsync();
+                var resolvedCompanyId = requestedCompanyId ?? primaryCompanyId;
 
                 if (resolvedCompanyId is not > 0)
                 {
@@ -64,18 +68,9 @@ namespace Onion.Controllers.Middleware
                     return;
                 }
 
-                var companyExists = await db.Companies.IgnoreQueryFilters().AsNoTracking()
-                    .AnyAsync(x => x.Id == resolvedCompanyId.Value && x.Active && !x.IsDeleted);
-                if (!companyExists)
-                {
-                    await WriteCompanyRequiredAsync(context);
-                    return;
-                }
-
-                var hasCompanyAccess = (userRecord != null && userRecord.CompanyId == resolvedCompanyId.Value) ||
-                    (userId > 0 && await db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
-                        .AnyAsync(x => x.UserId == userId && x.CompanyId == resolvedCompanyId.Value && x.Active && !x.IsDeleted)) ||
-                    IsGlobalAdministratorClaim(user);
+                var membershipValidator = _membershipValidator ??
+                    new TenantMembershipValidator(db);
+                var hasCompanyAccess = await membershipValidator.HasActiveAccessAsync(userId, resolvedCompanyId.Value);
 
                 if (!hasCompanyAccess)
                 {
@@ -114,21 +109,6 @@ namespace Onion.Controllers.Middleware
         private static bool TryParseCompanyId(object? value, out int companyId)
         {
             return int.TryParse(value?.ToString(), out companyId) && companyId > 0;
-        }
-
-        private static bool IsGlobalAdministratorClaim(System.Security.Claims.ClaimsPrincipal user)
-        {
-            var isSuperUser = user.Claims.Any(c =>
-                string.Equals(c.Type, "isSuperUser", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(c.Value, "true", StringComparison.OrdinalIgnoreCase));
-
-            if (isSuperUser) return true;
-
-            var role = user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value
-                ?? user.FindFirst("role")?.Value;
-
-            return string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(role, "SysAdmin", StringComparison.OrdinalIgnoreCase);
         }
 
         private static async Task WriteForbiddenAsync(HttpContext context)

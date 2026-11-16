@@ -8,6 +8,7 @@ namespace Onion.Domain
         public string Number { get; set; } = string.Empty;
         public DateTime Date { get; set; } = DateTime.UtcNow;
         public int CompanyId { get; set; }
+        public int? SaleId { get; set; }
         public int CustomerId { get; set; }
         public decimal TotalAmount { get; set; }
         public string? Reason { get; set; }

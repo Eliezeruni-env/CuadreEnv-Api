@@ -125,6 +125,7 @@ builder.Services.AddSwaggerGen(c =>
 // ----------------------------------------------------------
 
 builder.Services.AddRepositories(builder.Configuration);
+builder.Services.AddScoped<Onion.DataAccess.Tenant.ITenantMembershipValidator, Onion.DataAccess.Tenant.TenantMembershipValidator>();
 // Register Caja module
 builder.Services.AddCajaModule();
 builder.Services.AddHealthChecks()

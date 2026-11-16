@@ -17,5 +17,7 @@ namespace Onion.BussinesLogic.Services.Abstract
         // Issue a fresh access + refresh token pair for an existing user (useful after assigning company)
         Task<TokenResponseDto> IssueTokensForUserAsync(int userId, string? deviceId = null);
         Task<TokenResponseDto> SwitchCompanyAsync(int userId, int companyId, string? deviceId = null);
+        // Revoke all refresh tokens for a specific user within a specific tenant/company
+        Task RevokeUserTenantTokensAsync(int userId, int companyId);
     }
 }

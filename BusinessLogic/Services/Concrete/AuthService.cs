@@ -77,7 +77,6 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             var membership = await _db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
                 .FirstOrDefaultAsync(x => x.UserId == userId && x.CompanyId == companyId && x.Active && !x.IsDeleted);
-            var ownsPrimaryCompany = user.CompanyId == companyId;
 
             var companyExists = await _db.Companies.IgnoreQueryFilters().AnyAsync(x => x.Id == companyId && !x.IsDeleted);
             if (!companyExists)
@@ -86,12 +85,13 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (!companyExists)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "COMPANY_NOT_FOUND", Message = "Empresa no encontrada.", Language = "ES" });
 
-            if (membership is null && !ownsPrimaryCompany && !user.IsSuperUser)
+            // Regla multi-tenant: el usuario debe poseer registro explícito, activo y no eliminado en UserCompanies
+            if (membership is null && !user.IsSuperUser)
             {
                 throw new CustomException(new Onion.Common.Models.Error
                 {
                     Code = "FORBIDDEN",
-                    Message = "No tiene autorización para acceder a esta empresa.",
+                    Message = "No posee una membresía activa asignada en la empresa solicitada.",
                     Language = "ES"
                 });
             }
@@ -322,21 +322,38 @@ namespace Onion.BussinesLogic.Services.Concrete
             IReadOnlyCollection<string>? modules = null)
         {
             if (user == null) throw new ArgumentNullException(nameof(user));
-            if (user.CompanyId is not > 0)
+
+            // Validar que la empresa actual del usuario posea membresía activa y no eliminada en UserCompanies
+            var activeMembership = user.CompanyId is > 0
+                ? await _db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.UserId == user.Id && x.CompanyId == user.CompanyId.Value && x.Active && !x.IsDeleted)
+                : null;
+
+            if (activeMembership is null && !user.IsSuperUser)
             {
                 var defaultMembership = await _db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
                     .Where(x => x.UserId == user.Id && x.Active && !x.IsDeleted)
                     .OrderByDescending(x => x.IsDefault)
                     .ThenBy(x => x.Id)
                     .FirstOrDefaultAsync();
+
                 if (defaultMembership is not null)
                 {
                     user.CompanyId = defaultMembership.CompanyId;
                     _uow.Users.Update(user);
                     await _uow.SaveChangesAsync();
                 }
+                else
+                {
+                    throw new CustomException(new Onion.Common.Models.Error
+                    {
+                        Code = "NO_ACTIVE_MEMBERSHIP",
+                        Message = "El usuario no posee membresías activas asignadas a ninguna empresa.",
+                        Language = "ES"
+                    });
+                }
             }
-            if (user.CompanyId is not > 0)
+            if (user.CompanyId is not > 0 && !user.IsSuperUser)
                 throw new TenantRequiredException("A valid active company is required to issue a refresh token.");
 
             // Cleanup old revoked tokens on login activity to keep table bounded
@@ -414,24 +431,25 @@ namespace Onion.BussinesLogic.Services.Concrete
             // cannot be used until the user is loaded and the new JWT is issued.
             var user = await _uow.Users.GetByIdUnscopedAsync(refresh.UserId) ?? throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_TOKEN", Message = "User not found", Language = "EN" });
 
+            // Regla multi-tenant estricta: verificar membresía activa y no eliminada en UserCompanies
             var hasMembership = refresh.CompanyId > 0 && (
                 await _db.UserCompanies.IgnoreQueryFilters().AsNoTracking()
                     .AnyAsync(x => x.UserId == user.Id && x.CompanyId == refresh.CompanyId && x.Active && !x.IsDeleted) ||
-                user.CompanyId == refresh.CompanyId ||
                 user.IsSuperUser);
 
-            if (!hasMembership && refresh.CompanyId > 0)
+            if (!hasMembership)
             {
+                refresh.IsRevoked = true;
+                _uow.RefreshTokens.Update(refresh);
+                await _uow.SaveChangesAsync();
+                _logger?.LogWarning("Refresh token rejected: user {UserId} lacks active membership in company {CompanyId}", user.Id, refresh.CompanyId);
                 throw new CustomException(new Onion.Common.Models.Error
                 {
-                    Code = "FORBIDDEN",
-                    Message = "No tiene autorización para operar en la empresa del token solicitado.",
+                    Code = "COMPANY_ACCESS_DENIED",
+                    Message = "No posee una membresía activa asignada en la empresa del token solicitado.",
                     Language = "ES"
                 });
             }
-
-            if (!hasMembership)
-                throw new CustomException(new Onion.Common.Models.Error { Code = "COMPANY_ACCESS_DENIED", Message = "The refresh token is not linked to an active company membership.", Language = "EN" });
 
             if (!user.Active || user.IsDeleted)
                 throw new CustomException(new Onion.Common.Models.Error { Code = "ACCOUNT_SUSPENDED", Message = "Su cuenta se encuentra suspendida o deshabilitada. Comuníquese con la administración de CuadreEnv.", Language = "ES" });
@@ -514,6 +532,19 @@ namespace Onion.BussinesLogic.Services.Concrete
                 _uow.RefreshTokens.Update(t);
             }
             await _uow.SaveChangesAsync();
+        }
+
+        public async Task RevokeUserTenantTokensAsync(int userId, int companyId)
+        {
+            var list = await _uow.RefreshTokens.FindAsync(x => x.UserId == userId && x.CompanyId == companyId && !x.IsRevoked);
+            foreach (var t in list)
+            {
+                t.IsRevoked = true;
+                t.LastUsedAt = DateTime.UtcNow;
+                _uow.RefreshTokens.Update(t);
+            }
+            await _uow.SaveChangesAsync();
+            _logger?.LogInformation("Revoked all refresh tokens for user {UserId} in company {CompanyId}", userId, companyId);
         }
 
         public async Task<TokenResponseDto> IssueTokensForUserAsync(int userId, string? deviceId = null)
