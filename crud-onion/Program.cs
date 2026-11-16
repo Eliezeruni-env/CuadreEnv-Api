@@ -403,6 +403,8 @@ try
         UPDATE ""Warehouses"" SET ""Code"" = 'WH-' || ""Id"" WHERE ""Code"" = '' OR ""Code"" IS NULL;
         CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Warehouses_CompanyId_Code"" ON ""Warehouses"" (""CompanyId"", ""Code"");
         CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Inventories_CompanyId_ProductId_WarehouseId"" ON ""Inventories"" (""CompanyId"", ""ProductId"", ""WarehouseId"");
+        ALTER TABLE IF EXISTS ""CreditNotes"" ADD COLUMN IF NOT EXISTS ""SaleId"" integer NULL;
+        CREATE INDEX IF NOT EXISTS ""IX_CreditNotes_CompanyId_SaleId"" ON ""CreditNotes"" (""CompanyId"", ""SaleId"");
     ");
 }
 catch (Exception ex)

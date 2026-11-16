@@ -28,13 +28,42 @@ namespace Onion.Controllers
             {
                 _logger.LogInformation("Applying pending EF Core migrations (requested via internal endpoint)");
                 await _db.Database.MigrateAsync();
+                await _db.Database.ExecuteSqlRawAsync(@"
+                    ALTER TABLE IF EXISTS ""Warehouses"" ADD COLUMN IF NOT EXISTS ""Code"" text NOT NULL DEFAULT '';
+                    UPDATE ""Warehouses"" SET ""Code"" = 'WH-' || ""Id"" WHERE ""Code"" = '' OR ""Code"" IS NULL;
+                    CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Warehouses_CompanyId_Code"" ON ""Warehouses"" (""CompanyId"", ""Code"");
+                    CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Inventories_CompanyId_ProductId_WarehouseId"" ON ""Inventories"" (""CompanyId"", ""ProductId"", ""WarehouseId"");
+                    ALTER TABLE IF EXISTS ""CreditNotes"" ADD COLUMN IF NOT EXISTS ""SaleId"" integer NULL;
+                    CREATE INDEX IF NOT EXISTS ""IX_CreditNotes_CompanyId_SaleId"" ON ""CreditNotes"" (""CompanyId"", ""SaleId"");
+                ");
                 _logger.LogInformation("Migrations applied successfully");
-                return Ok(new { result = "ok", message = "Migrations applied" });
+                return Ok(new { result = "ok", message = "Migrations applied and schema verified" });
             }
             catch (System.Exception ex)
             {
                 _logger.LogError(ex, "Failed to apply migrations");
                 return StatusCode(500, new { result = "error", message = "Failed to apply migrations", detail = ex.Message });
+            }
+        }
+
+        [HttpPost("ensure-schema")]
+        public async Task<IActionResult> EnsureSchema()
+        {
+            try
+            {
+                await _db.Database.ExecuteSqlRawAsync(@"
+                    ALTER TABLE IF EXISTS ""Warehouses"" ADD COLUMN IF NOT EXISTS ""Code"" text NOT NULL DEFAULT '';
+                    UPDATE ""Warehouses"" SET ""Code"" = 'WH-' || ""Id"" WHERE ""Code"" = '' OR ""Code"" IS NULL;
+                    CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Warehouses_CompanyId_Code"" ON ""Warehouses"" (""CompanyId"", ""Code"");
+                    CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Inventories_CompanyId_ProductId_WarehouseId"" ON ""Inventories"" (""CompanyId"", ""ProductId"", ""WarehouseId"");
+                    ALTER TABLE IF EXISTS ""CreditNotes"" ADD COLUMN IF NOT EXISTS ""SaleId"" integer NULL;
+                    CREATE INDEX IF NOT EXISTS ""IX_CreditNotes_CompanyId_SaleId"" ON ""CreditNotes"" (""CompanyId"", ""SaleId"");
+                ");
+                return Ok(new { result = "ok", message = "Schema verified and updated successfully" });
+            }
+            catch (System.Exception ex)
+            {
+                return StatusCode(500, new { result = "error", message = ex.Message });
             }
         }
 
