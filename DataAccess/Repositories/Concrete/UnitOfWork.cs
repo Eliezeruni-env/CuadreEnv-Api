@@ -43,6 +43,8 @@ namespace Onion.DataAccess.Repositories.Concrete
         IWarehouseRepository Warehouses { get; }
         IInventoryRepository Inventories { get; }
         IMovementRepository Movements { get; }
+        IRepository<Onion.Domain.DataExchange.ImportBatch> ImportBatches { get; }
+        IRepository<Onion.Domain.DataExchange.DataExchangeLog> DataExchangeLogs { get; }
 
         Task<int> SaveChangesAsync();
         Task<IDbContextTransaction> BeginTransactionAsync();
@@ -87,6 +89,8 @@ namespace Onion.DataAccess.Repositories.Concrete
         public IMovementRepository Movements { get; }
         public IRepository<Onion.Domain.Finance.PaymentPlan> PaymentPlans { get; }
         public IRepository<Onion.Domain.Finance.Installment> Installments { get; }
+        public IRepository<Onion.Domain.DataExchange.ImportBatch> ImportBatches { get; }
+        public IRepository<Onion.Domain.DataExchange.DataExchangeLog> DataExchangeLogs { get; }
 
         public UnitOfWork(OnionDbContext context, ILogger<UnitOfWork>? logger = null)
         {
@@ -124,6 +128,8 @@ namespace Onion.DataAccess.Repositories.Concrete
             Warehouses = new WarehouseRepository(context);
             Inventories = new InventoryRepository(context);
             Movements = new MovementRepository(context);
+            ImportBatches = new GenericRepository<Onion.Domain.DataExchange.ImportBatch>(context);
+            DataExchangeLogs = new GenericRepository<Onion.Domain.DataExchange.DataExchangeLog>(context);
         }
 
                 public Task<TResult> ExecuteStrategyAsync<TResult>(Func<Task<TResult>> operation)

@@ -26,6 +26,7 @@ public static class ServicesConfiguration
         services.AddScoped<Onion.BussinesLogic.Services.Abstract.ICompanySettingsService, Onion.BussinesLogic.Services.Concrete.CompanySettingsService >();
         services.AddScoped<Onion.BussinesLogic.Services.Abstract.ICreditNoteService, Onion.BussinesLogic.Services.Concrete.CreditNoteService>();
         services.AddScoped<Onion.BussinesLogic.Services.Abstract.IAccountReceivableService, Onion.BussinesLogic.Services.Concrete.AccountReceivableService>();
+        services.AddScoped<IDataExchangeService, DataExchangeService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IProductTypeService, ProductTypeService>();

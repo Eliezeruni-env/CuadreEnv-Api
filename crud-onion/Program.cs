@@ -404,7 +404,64 @@ try
         CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Warehouses_CompanyId_Code"" ON ""Warehouses"" (""CompanyId"", ""Code"");
         CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Inventories_CompanyId_ProductId_WarehouseId"" ON ""Inventories"" (""CompanyId"", ""ProductId"", ""WarehouseId"");
         ALTER TABLE IF EXISTS ""CreditNotes"" ADD COLUMN IF NOT EXISTS ""SaleId"" integer NULL;
-        CREATE INDEX IF NOT EXISTS ""IX_CreditNotes_CompanyId_SaleId"" ON ""CreditNotes"" (""CompanyId"", ""SaleId"");
+        CREATE INDEX IF NOT EXISTS ""IX_CreditNotes"" ON ""CreditNotes"" (""CompanyId"", ""SaleId"");
+
+        -- Data Exchange and Product Reference
+        ALTER TABLE IF EXISTS ""Products"" ADD COLUMN IF NOT EXISTS ""Reference"" text NULL;
+        CREATE INDEX IF NOT EXISTS ""IX_Products_CompanyId_Reference"" ON ""Products"" (""CompanyId"", ""Reference"");
+
+        CREATE TABLE IF NOT EXISTS ""ImportBatches"" (
+            ""Id"" serial PRIMARY KEY,
+            ""BatchId"" uuid NOT NULL,
+            ""CompanyId"" integer NOT NULL,
+            ""EntityType"" text NOT NULL,
+            ""Mode"" integer NOT NULL DEFAULT 0,
+            ""OriginalFileName"" text NOT NULL DEFAULT '',
+            ""FileHashSha256"" text NOT NULL DEFAULT '',
+            ""Status"" integer NOT NULL DEFAULT 0,
+            ""TotalRows"" integer NOT NULL DEFAULT 0,
+            ""RowsToInsert"" integer NOT NULL DEFAULT 0,
+            ""RowsToUpdate"" integer NOT NULL DEFAULT 0,
+            ""RowsUnchanged"" integer NOT NULL DEFAULT 0,
+            ""RowsWithErrors"" integer NOT NULL DEFAULT 0,
+            ""StoredRowsJson"" text NOT NULL DEFAULT '',
+            ""ErrorsJson"" text NULL,
+            ""PreviewedByUserId"" text NOT NULL DEFAULT '',
+            ""ExpiresAt"" timestamp with time zone NOT NULL,
+            ""AppliedByUserId"" text NULL,
+            ""AppliedAt"" timestamp with time zone NULL,
+            ""ExecutionResultJson"" text NULL,
+            ""CreationDate"" timestamp with time zone NOT NULL DEFAULT (now() at time zone 'utc'),
+            ""ModificationDate"" timestamp with time zone NULL,
+            ""Active"" boolean NOT NULL DEFAULT true,
+            ""IsDeleted"" boolean NOT NULL DEFAULT false,
+            ""CreateBy"" text NOT NULL DEFAULT '',
+            ""ModifiedBy"" text NOT NULL DEFAULT ''
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS ""IX_ImportBatches_BatchId"" ON ""ImportBatches"" (""BatchId"");
+        CREATE INDEX IF NOT EXISTS ""IX_ImportBatches_CompanyId_EntityType"" ON ""ImportBatches"" (""CompanyId"", ""EntityType"");
+
+        CREATE TABLE IF NOT EXISTS ""DataExchangeLogs"" (
+            ""Id"" serial PRIMARY KEY,
+            ""CompanyId"" integer NOT NULL,
+            ""UserId"" text NOT NULL DEFAULT '',
+            ""UserEmail"" text NULL,
+            ""Action"" text NOT NULL DEFAULT '',
+            ""EntityType"" text NOT NULL DEFAULT '',
+            ""Format"" text NOT NULL DEFAULT 'XLSX',
+            ""BatchId"" uuid NULL,
+            ""ProcessedCount"" integer NOT NULL DEFAULT 0,
+            ""SuccessCount"" integer NOT NULL DEFAULT 0,
+            ""ErrorCount"" integer NOT NULL DEFAULT 0,
+            ""Details"" text NULL,
+            ""CreationDate"" timestamp with time zone NOT NULL DEFAULT (now() at time zone 'utc'),
+            ""ModificationDate"" timestamp with time zone NULL,
+            ""Active"" boolean NOT NULL DEFAULT true,
+            ""IsDeleted"" boolean NOT NULL DEFAULT false,
+            ""CreateBy"" text NOT NULL DEFAULT '',
+            ""ModifiedBy"" text NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS ""IX_DataExchangeLogs_CompanyId"" ON ""DataExchangeLogs"" (""CompanyId"");
     ");
 }
 catch (Exception ex)

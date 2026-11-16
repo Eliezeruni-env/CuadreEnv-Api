@@ -133,6 +133,8 @@ namespace Onion.DataAccess
         public DbSet<Onion.Domain.CreditNoteDetail> CreditNoteDetails { get; set; } = null!;
         public DbSet<Role> Roles { get; set; } = null!;
         public DbSet<Permission> Permissions { get; set; } = null!;
+        public DbSet<Onion.Domain.DataExchange.ImportBatch> ImportBatches { get; set; } = null!;
+        public DbSet<Onion.Domain.DataExchange.DataExchangeLog> DataExchangeLogs { get; set; } = null!;
         public DbSet<RolePermission> RolePermissions { get; set; } = null!;
         public DbSet<UserRole> UserRoles { get; set; } = null!;
         public DbSet<DeletionApprovalRequest> DeletionApprovalRequests { get; set; } = null!;
