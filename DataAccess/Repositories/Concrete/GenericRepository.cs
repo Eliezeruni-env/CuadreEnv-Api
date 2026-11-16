@@ -104,7 +104,27 @@ namespace Onion.DataAccess.Repositories.Concrete
                     throw new CustomException(new Error { Code = "FORBIDDEN", Message = "Access to resource from another company is forbidden", Language = "EN" });
             }
 
-            _dbSet.Update(entity);
+            var idProp = entity.GetType().GetProperty("Id");
+            if (idProp != null)
+            {
+                var idVal = idProp.GetValue(entity);
+                var local = _dbSet.Local.FirstOrDefault(e => idProp.GetValue(e)?.Equals(idVal) == true);
+                if (local != null && !ReferenceEquals(local, entity))
+                {
+                    _context.Entry(local).CurrentValues.SetValues(entity);
+                    return;
+                }
+            }
+
+            var entry = _context.Entry(entity);
+            if (entry.State == EntityState.Detached)
+            {
+                _dbSet.Update(entity);
+            }
+            else
+            {
+                entry.State = EntityState.Modified;
+            }
         }
 
         private bool HasGlobalTenantBypass() => _context.IsGlobalTenantAccess;

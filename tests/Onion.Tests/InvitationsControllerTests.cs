@@ -75,6 +75,8 @@ namespace Onion.Tests
             public Onion.DataAccess.Repositories.Abstract.IWarehouseRepository Warehouses => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IInventoryRepository Inventories => throw new System.NotImplementedException();
             public Onion.DataAccess.Repositories.Abstract.IMovementRepository Movements => throw new System.NotImplementedException();
+            public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.DataExchange.ImportBatch> ImportBatches => throw new System.NotImplementedException();
+            public Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.DataExchange.DataExchangeLog> DataExchangeLogs => throw new System.NotImplementedException();
         }
 
         private class FakeInvRepo : Onion.DataAccess.Repositories.Abstract.IRepository<Onion.Domain.Invitations.Invitation>

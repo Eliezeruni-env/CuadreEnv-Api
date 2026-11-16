@@ -239,14 +239,14 @@ namespace Onion.BussinesLogic.Services.Concrete
                 rowNumber++;
                 var rowErrors = new List<string>();
 
-                var barcode = GetField(dict, "codigobarras", "barcode", "codigo");
-                var code = GetField(dict, "referencia", "code", "ref", "referenciainterna");
-                var description = GetField(dict, "descripcion", "description", "nombre", "name");
-                var priceStr = GetField(dict, "precio", "price", "precioventa");
-                var costStr = GetField(dict, "costo", "cost", "costounitario");
-                var categoryStr = GetField(dict, "categoria", "category");
-                var typeStr = GetField(dict, "tipoproducto", "producttype", "tipo");
-                var minQtyStr = GetField(dict, "cantidadminima", "minimumquantity", "stockminimo");
+                var barcode = GetField(dict, "codigobarras", "codigobarra", "barcode", "codigo", "upc", "ean");
+                var code = GetField(dict, "referencia", "code", "ref", "referenciainterna", "sku", "codigoarticulo", "codigoproducto");
+                var description = GetField(dict, "descripcion", "description", "nombre", "name", "producto", "articulo", "detalle");
+                var priceStr = GetField(dict, "precio", "price", "precioventa", "pvp", "preciounitario", "preciounidad");
+                var costStr = GetField(dict, "costo", "cost", "costocompra", "costounitario", "costounidad");
+                var categoryStr = GetField(dict, "categoria", "category", "rubro", "departamento", "familia");
+                var typeStr = GetField(dict, "tipoproducto", "producttype", "tipo", "type");
+                var minQtyStr = GetField(dict, "cantidadminima", "minimumquantity", "stockminimo", "minimo", "cantminima");
 
                 // Validation 1: At least one stable key is required
                 if (string.IsNullOrWhiteSpace(barcode) && string.IsNullOrWhiteSpace(code))
