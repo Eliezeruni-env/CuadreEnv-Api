@@ -13,12 +13,10 @@ namespace Onion.Controllers.Middleware
     public class TenantMiddleware
     {
         private readonly RequestDelegate _next;
-        private readonly ITenantMembershipValidator? _membershipValidator;
 
-        public TenantMiddleware(RequestDelegate next, ITenantMembershipValidator? membershipValidator = null)
+        public TenantMiddleware(RequestDelegate next)
         {
             _next = next;
-            _membershipValidator = membershipValidator;
         }
 
         public async Task InvokeAsync(HttpContext context)
@@ -68,8 +66,8 @@ namespace Onion.Controllers.Middleware
                     return;
                 }
 
-                var membershipValidator = _membershipValidator ??
-                    new TenantMembershipValidator(db);
+                var membershipValidator = context.RequestServices
+                    .GetRequiredService<ITenantMembershipValidator>();
                 var hasCompanyAccess = await membershipValidator.HasActiveAccessAsync(userId, resolvedCompanyId.Value);
 
                 if (!hasCompanyAccess)
