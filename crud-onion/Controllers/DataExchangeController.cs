@@ -16,6 +16,8 @@ namespace Onion.Controllers
     [ApiController]
     [Route("data-exchange")]
     [Route("v1/data-exchange")]
+    [Route("api/import")]
+    [Route("api/data-exchange")]
     [Authorize]
     public class DataExchangeController : ControllerBase
     {
@@ -69,6 +71,7 @@ namespace Onion.Controllers
         }
 
         [HttpPost("confirm/{batchId}")]
+        [HttpPost("commit/{batchId}")]
         public async Task<IActionResult> ConfirmImport(Guid batchId)
         {
             var companyId = GetCurrentCompanyId();
