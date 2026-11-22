@@ -142,6 +142,8 @@ namespace Onion.DataAccess
         public DbSet<ClerkOrganization> ClerkOrganizations { get; set; } = null!;
         public DbSet<ClerkOrganizationMember> ClerkOrganizationMembers { get; set; } = null!;
         public DbSet<Proyecto> Proyectos { get; set; } = null!;
+        public DbSet<Onion.Domain.Quotations.Quotation> Quotations { get; set; } = null!;
+        public DbSet<Onion.Domain.Quotations.QuotationDetail> QuotationDetails { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -405,6 +407,7 @@ namespace Onion.DataAccess
              modelBuilder.Entity<Supplier>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
              modelBuilder.Entity<Purchase>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
              modelBuilder.Entity<Sale>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+             modelBuilder.Entity<Onion.Domain.Quotations.Quotation>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
              modelBuilder.Entity<Return>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
              modelBuilder.Entity<CashRegister>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
              modelBuilder.Entity<CashMovement>().HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
