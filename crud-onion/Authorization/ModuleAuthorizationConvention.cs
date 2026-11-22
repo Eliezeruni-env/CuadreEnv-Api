@@ -22,7 +22,8 @@ public sealed class ModuleAuthorizationConvention : IApplicationModelConvention
             ["WarehouseEntryController"] = "inventory", ["WarehouseOutletController"] = "inventory", ["WarehouseTransferController"] = "inventory",
             ["PasswordController"] = "company", ["UmProxyController"] = "company", ["SuperUsersController"] = "company", ["MetricsController"] = "reports",
             ["CashRegisterController"] = "cashregister", ["CashMovementController"] = "cashregister", ["CajaController"] = "cashregister", ["CashSessionController"] = "cashregister",
-            ["SaleController"] = "sales", ["TaxpayerController"] = "company", ["FiscalSequenceController"] = "billing", ["DgiiReportsController"] = "reports"
+            ["SaleController"] = "sales", ["TaxpayerController"] = "company", ["FiscalSequenceController"] = "billing", ["DgiiReportsController"] = "reports",
+            ["QuotationController"] = "sales", ["DistributionRoutesController"] = "sales", ["FraudGuardianController"] = "audit", ["BankReconciliationController"] = "sales"
         };
 
     public void Apply(ApplicationModel application)

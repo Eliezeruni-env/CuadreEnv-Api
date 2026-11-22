@@ -53,6 +53,42 @@ namespace Onion.Controllers
             return Ok(result);
         }
 
+        [HttpGet("corporate")]
+        public async Task<IActionResult> GetCorporate([FromQuery] string? search = null, [FromQuery] string? status = null)
+        {
+            var all = await _service.GetAllAsync();
+            var query = all.Where(c => c.IsCorporate || c.CreditLimit > 0);
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.Trim().ToLowerInvariant();
+                query = query.Where(c => (c.Name != null && c.Name.ToLowerInvariant().Contains(s)) ||
+                                         (c.Identification != null && c.Identification.ToLowerInvariant().Contains(s)) ||
+                                         (c.ContactPerson != null && c.ContactPerson.ToLowerInvariant().Contains(s)));
+            }
+            if (!string.IsNullOrWhiteSpace(status) && !status.Equals("TODOS", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(c => string.Equals(c.CorporateStatus, status, StringComparison.OrdinalIgnoreCase));
+            }
+
+            var result = query.Select(c => new
+            {
+                id = c.Id,
+                companyName = c.Name,
+                rnc = c.Identification ?? "",
+                contactPerson = c.ContactPerson ?? c.Name,
+                phone = c.Phone ?? "",
+                email = c.Email ?? "",
+                creditLimit = c.CreditLimit,
+                creditDays = c.CreditDays > 0 ? c.CreditDays : 30,
+                currentBalance = c.CurrentDebt,
+                availableCredit = Math.Max(0, c.CreditLimit - c.CurrentDebt),
+                activeOrdersCount = 0,
+                status = string.IsNullOrWhiteSpace(c.CorporateStatus) ? "Activo" : c.CorporateStatus
+            }).ToList();
+
+            return Ok(new { success = true, data = result });
+        }
+
         [HttpGet("active")]
         public async Task<IActionResult> GetActive([FromQuery] int days = 30)
         {

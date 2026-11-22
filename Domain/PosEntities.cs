@@ -24,6 +24,12 @@ namespace Onion.Domain
         public bool IsGeneric { get; set; }
         public decimal CurrentDebt { get; set; }
         public int CompanyId { get; set; }
+        public decimal CreditLimit { get; set; }
+        public int CreditDays { get; set; } = 30;
+        public bool IsCorporate { get; set; }
+        public string? CorporateStatus { get; set; } = "Activo";
+        public string? ContactPerson { get; set; }
+        public string? CommercialRegister { get; set; }
     }
 
     public class Supplier : BaseEntity

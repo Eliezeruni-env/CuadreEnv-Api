@@ -236,6 +236,9 @@ builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IRoleService, O
 builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IPermissionService, Onion.BussinesLogic.Services.Concrete.PermissionService>();
 builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IDeletionApprovalService, Onion.BussinesLogic.Services.Concrete.DeletionApprovalService>();
 builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IQuotationService, Onion.BussinesLogic.Services.Concrete.QuotationService>();
+builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IDistributionRouteService, Onion.BussinesLogic.Services.Concrete.DistributionRouteService>();
+builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IFraudGuardianService, Onion.BussinesLogic.Services.Concrete.FraudGuardianService>();
+builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IBankReconciliationService, Onion.BussinesLogic.Services.Concrete.BankReconciliationService>();
 // Register email service (production default). Tests may replace this registration in WebApplicationFactory.
 builder.Services.AddTransient<IEmailService, SmtpEmailService>();
 // Rate limiting for sensitive endpoints (login / refresh)

@@ -144,6 +144,10 @@ namespace Onion.DataAccess
         public DbSet<Proyecto> Proyectos { get; set; } = null!;
         public DbSet<Onion.Domain.Quotations.Quotation> Quotations { get; set; } = null!;
         public DbSet<Onion.Domain.Quotations.QuotationDetail> QuotationDetails { get; set; } = null!;
+        public DbSet<Onion.Domain.Distribution.DistributionRoute> DistributionRoutes { get; set; } = null!;
+        public DbSet<Onion.Domain.Distribution.DistributionRouteItem> DistributionRouteItems { get; set; } = null!;
+        public DbSet<Onion.Domain.Audit.FraudGuardianIncident> FraudGuardianIncidents { get; set; } = null!;
+        public DbSet<Onion.Domain.Finance.BankReconciliationRecord> BankReconciliationRecords { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
