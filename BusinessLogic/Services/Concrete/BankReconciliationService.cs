@@ -37,83 +37,9 @@ namespace Onion.BussinesLogic.Services.Concrete
             return companyId.Value;
         }
 
-        private async Task EnsureDefaultRecordsAsync(int companyId, CancellationToken ct)
-        {
-            var exists = await _db.BankReconciliationRecords.AnyAsync(r => r.CompanyId == companyId, ct);
-            if (!exists)
-            {
-                var defaults = new List<BankReconciliationRecord>
-                {
-                    new BankReconciliationRecord
-                    {
-                        CompanyId = companyId,
-                        BankReference = "TRF-00083421",
-                        InvoiceNumber = "FAC-0158",
-                        CustomerName = "Comercial Norte, S.R.L.",
-                        TransactionDate = new DateTime(2025, 1, 15, 10, 30, 0, DateTimeKind.Utc),
-                        DestinationBank = "Banco Popular",
-                        RegisteredAmount = 6000m,
-                        StatementAmount = 6000m,
-                        DifferenceAmount = 0m,
-                        Status = "VERIFIED",
-                        VerifiedBy = "Auditoría Contable",
-                        VerifiedAt = DateTime.UtcNow.AddDays(-2)
-                    },
-                    new BankReconciliationRecord
-                    {
-                        CompanyId = companyId,
-                        BankReference = "TRF-00083422",
-                        InvoiceNumber = "FAC-0159",
-                        CustomerName = "Industrias del Caribe, S.A.",
-                        TransactionDate = new DateTime(2025, 1, 16, 14, 15, 0, DateTimeKind.Utc),
-                        DestinationBank = "Banco BHD",
-                        RegisteredAmount = 4000m,
-                        StatementAmount = 4000m,
-                        DifferenceAmount = 0m,
-                        Status = "VERIFIED",
-                        VerifiedBy = "Auditoría Contable",
-                        VerifiedAt = DateTime.UtcNow.AddDays(-1)
-                    },
-                    new BankReconciliationRecord
-                    {
-                        CompanyId = companyId,
-                        BankReference = "TRF-PEND-0160",
-                        InvoiceNumber = "FAC-0160",
-                        CustomerName = "Servicios Globales, S.R.L.",
-                        TransactionDate = new DateTime(2025, 1, 17, 9, 0, 0, DateTimeKind.Utc),
-                        DestinationBank = "Banco Popular",
-                        RegisteredAmount = 6000m,
-                        StatementAmount = null,
-                        DifferenceAmount = 0m,
-                        Status = "PENDING"
-                    },
-                    new BankReconciliationRecord
-                    {
-                        CompanyId = companyId,
-                        BankReference = "TRF-00083424",
-                        InvoiceNumber = "FAC-0161",
-                        CustomerName = "Distribuidora Caribe, S.A.",
-                        TransactionDate = new DateTime(2025, 1, 18, 11, 45, 0, DateTimeKind.Utc),
-                        DestinationBank = "Banco Santa Cruz",
-                        RegisteredAmount = 2500m,
-                        StatementAmount = 2000m,
-                        DifferenceAmount = 500m,
-                        Status = "DISCREPANT",
-                        DiscrepancyReason = "Comisión bancaria de RD$ 500 deducida en extracto sin registrar en venta",
-                        VerifiedBy = "Supervisor",
-                        VerifiedAt = DateTime.UtcNow.AddHours(-5)
-                    }
-                };
-
-                _db.BankReconciliationRecords.AddRange(defaults);
-                await _db.SaveChangesAsync(ct);
-            }
-        }
-
         public async Task<IEnumerable<BankTransferRecordDto>> GetRecordsAsync(string? bank, string? status, DateTime? fromDate, DateTime? toDate, string? search, CancellationToken ct = default)
         {
             var companyId = GetCompanyId();
-            await EnsureDefaultRecordsAsync(companyId, ct);
 
             var query = _db.BankReconciliationRecords.Where(r => r.CompanyId == companyId);
 
@@ -162,7 +88,6 @@ namespace Onion.BussinesLogic.Services.Concrete
         public async Task<BankReconciliationStatsDto> GetStatsAsync(CancellationToken ct = default)
         {
             var companyId = GetCompanyId();
-            await EnsureDefaultRecordsAsync(companyId, ct);
 
             var list = await _db.BankReconciliationRecords.Where(r => r.CompanyId == companyId).ToListAsync(ct);
 

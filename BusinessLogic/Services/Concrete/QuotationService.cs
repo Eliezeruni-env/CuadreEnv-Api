@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -30,7 +31,17 @@ namespace Onion.BussinesLogic.Services.Concrete
             _logger = logger;
         }
 
-        private int CurrentCompanyId => _currentUserService?.CompanyId ?? _db.TenantCompanyId ?? 1;
+        private int CurrentCompanyId
+        {
+            get
+            {
+                var companyId = _currentUserService?.CompanyId ?? _db.TenantCompanyId;
+                if (!companyId.HasValue || companyId.Value <= 0)
+                    throw new InvalidOperationException("Empresa no autenticada o inválida.");
+
+                return companyId.Value;
+            }
+        }
 
         public async Task<QuotationListResponseDto> GetPagedQuotationsAsync(
             string? status = null,
@@ -153,7 +164,8 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var companyId = CurrentCompanyId;
 
-            // Generate QuotationNumber: COT-00001
+            await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+
             var count = await _db.Quotations.CountAsync(q => q.CompanyId == companyId, cancellationToken);
             var quotationNumber = $"COT-{(count + 1):D5}";
 
@@ -220,6 +232,7 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             _db.Quotations.Add(quotation);
             await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
 
             return MapToDto(quotation);
         }

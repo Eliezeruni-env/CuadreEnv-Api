@@ -50,6 +50,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                     ?? throw new CustomException(new Onion.Common.Models.Error { Code = "NOT_FOUND", Message = "AccountReceivable not found", Language = "EN" });
             }
             if (amount <= 0) throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_AMOUNT", Message = "Amount must be greater than zero", Language = "EN" });
+            if (amount > ar.Balance) throw new CustomException(new Onion.Common.Models.Error { Code = "PAYMENT_EXCEEDS_BALANCE", Message = "Payment cannot exceed the account receivable balance", Language = "EN" });
 
             ar.PaidAmount += amount;
             if (ar.PaidAmount >= ar.TotalAmount)
@@ -105,6 +106,8 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             if (ar == null) throw new ArgumentNullException(nameof(ar));
 
+            await using var transaction = await _uow.BeginTransactionAsync();
+
             await _uow.AccountReceivables.AddAsync(ar);
             await _uow.SaveChangesAsync();
 
@@ -147,6 +150,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             }
 
             await _uow.SaveChangesAsync();
+            await transaction.CommitAsync();
             return ar;
         }
 

@@ -15,11 +15,13 @@ namespace Onion.Controllers
     {
         private readonly IUnitOfWork _uow;
         private readonly IGlobalizationService _globalizationService;
+        private readonly ICurrentUserService _currentUserService;
 
-        public ReturnController(IUnitOfWork uow, IGlobalizationService globalizationService)
+        public ReturnController(IUnitOfWork uow, IGlobalizationService globalizationService, ICurrentUserService currentUserService)
         {
             _uow = uow;
             _globalizationService = globalizationService;
+            _currentUserService = currentUserService;
         }
 
         [HttpGet]
@@ -57,6 +59,11 @@ namespace Onion.Controllers
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] Return @return)
         {
+            var companyId = _currentUserService.CompanyId;
+            if (!companyId.HasValue || companyId.Value <= 0)
+                return Unauthorized();
+
+            @return.CompanyId = companyId.Value;
             await _uow.Returns.AddAsync(@return);
             await _uow.SaveChangesAsync();
             return CreatedAtAction(nameof(Get), new { id = @return.Id }, @return);

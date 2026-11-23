@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -98,6 +99,10 @@ namespace Onion.BussinesLogic.Services.Concrete
         public async Task<DistributionRouteDto> CreateRouteAsync(CreateDistributionRouteRequest request, CancellationToken ct = default)
         {
             var companyId = GetCompanyId();
+            if (string.IsNullOrWhiteSpace(request.OriginWarehouse) && !request.OriginWarehouseId.HasValue)
+                throw new InvalidOperationException("Debe especificarse el almacén de origen.");
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
             var count = await _db.DistributionRoutes.CountAsync(r => r.CompanyId == companyId, ct);
             var code = $"RUT-{(count + 1).ToString("D4")}";
 
@@ -112,7 +117,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 VehicleName = request.VehicleName,
                 Date = DateTime.UtcNow,
                 Status = DistributionRouteStatus.CARGANDO,
-                OriginWarehouse = request.OriginWarehouse ?? "Almacén Principal",
+                OriginWarehouse = request.OriginWarehouse,
                 OriginWarehouseId = request.OriginWarehouseId,
                 TotalCollectedCash = 0,
                 TotalCollectedTransfer = 0,
@@ -141,6 +146,7 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             _db.DistributionRoutes.Add(route);
             await _db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
 
             return MapToDto(route);
         }
@@ -255,7 +261,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             route.CashDifference = route.ActualCash - route.ExpectedCash;
             route.CashRegisterId = request.CashRegisterId;
             route.DestinationWarehouseId = request.DestinationWarehouseId;
-            route.DestinationWarehouse = request.DestinationWarehouse ?? "Almacén Principal";
+            route.DestinationWarehouse = request.DestinationWarehouse;
             route.LiquidatedAt = DateTime.UtcNow;
 
             if (request.ReturnedItems != null)

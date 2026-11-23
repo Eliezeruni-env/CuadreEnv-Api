@@ -12,6 +12,7 @@ namespace Onion.Controllers
 {
     [Authorize]
     [Route("api/[controller]")]
+    [Route("quotation")]
     [ApiController]
     public class QuotationController : ControllerBase
     {

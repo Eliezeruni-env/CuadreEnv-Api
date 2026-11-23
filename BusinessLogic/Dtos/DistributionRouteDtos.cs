@@ -43,7 +43,7 @@ namespace Onion.BussinesLogic.Dtos
         public string DriverName { get; set; } = string.Empty;
         public string VehiclePlate { get; set; } = string.Empty;
         public string VehicleName { get; set; } = string.Empty;
-        public string OriginWarehouse { get; set; } = "Almacén Principal";
+        public string OriginWarehouse { get; set; } = string.Empty;
         public int? OriginWarehouseId { get; set; }
         public List<RouteLoadItemDto>? Items { get; set; }
     }
