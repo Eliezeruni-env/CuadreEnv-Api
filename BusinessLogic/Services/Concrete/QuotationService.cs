@@ -20,15 +20,18 @@ namespace Onion.BussinesLogic.Services.Concrete
         private readonly OnionDbContext _db;
         private readonly ICurrentUserService _currentUserService;
         private readonly ILogger<QuotationService> _logger;
+        private readonly ISaleService _saleService;
 
         public QuotationService(
             OnionDbContext db,
             ICurrentUserService currentUserService,
-            ILogger<QuotationService> logger)
+            ILogger<QuotationService> logger,
+            ISaleService saleService)
         {
             _db = db;
             _currentUserService = currentUserService;
             _logger = logger;
+            _saleService = saleService;
         }
 
         private int CurrentCompanyId
@@ -178,10 +181,14 @@ namespace Onion.BussinesLogic.Services.Concrete
                 QuotationNumber = quotationNumber,
                 CustomerId = dto.CustomerId,
                 CustomerName = dto.CustomerName,
+                CustomerEmail = dto.CustomerEmail,
+                CustomerPhone = dto.CustomerPhone,
                 IssueDate = issueDate.ToUniversalTime(),
                 ValidUntil = validUntil.ToUniversalTime(),
                 PaymentTerms = string.IsNullOrWhiteSpace(dto.PaymentTerms) ? "Contado" : dto.PaymentTerms,
                 Salesperson = dto.Salesperson,
+                SellerId = dto.SellerId,
+                WarehouseId = dto.WarehouseId,
                 Observations = dto.Observations,
                 Status = dto.Status,
                 CreatedAt = DateTime.UtcNow,
@@ -268,6 +275,12 @@ namespace Onion.BussinesLogic.Services.Concrete
                 throw new KeyNotFoundException($"Cotización con ID {id} no encontrada.");
             }
 
+            if (quotation.Status == QuotationStatus.CONVERTED && quotation.ConvertedSaleId.HasValue)
+                return await _saleService.GetByIdAsync(quotation.ConvertedSaleId.Value)
+                    ?? throw new InvalidOperationException("La cotización ya está convertida, pero su venta asociada no existe.");
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+
             // Create Sale from Quotation
             var sale = new Sale
             {
@@ -293,12 +306,12 @@ namespace Onion.BussinesLogic.Services.Concrete
                     Quantity = detail.Quantity,
                     UnitPrice = detail.UnitPrice,
                     Discount = Math.Round(detail.Subtotal * (detail.DiscountPercent / 100m), 2),
-                    Tax = detail.TaxAmount
+                    Tax = detail.TaxAmount,
+                    WarehouseId = quotation.WarehouseId
                 });
             }
 
-            _db.Sales.Add(sale);
-            await _db.SaveChangesAsync(cancellationToken);
+            sale = await _saleService.CreateAsync(sale);
 
             // Update Quotation status to CONVERTED
             quotation.Status = QuotationStatus.CONVERTED;
@@ -306,6 +319,7 @@ namespace Onion.BussinesLogic.Services.Concrete
             quotation.UpdatedAt = DateTime.UtcNow;
 
             await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
 
             return sale;
         }
@@ -332,10 +346,14 @@ namespace Onion.BussinesLogic.Services.Concrete
                 QuotationNumber = q.QuotationNumber,
                 CustomerId = q.CustomerId,
                 CustomerName = q.CustomerName,
+                CustomerEmail = q.CustomerEmail,
+                CustomerPhone = q.CustomerPhone,
                 IssueDate = q.IssueDate,
                 ValidUntil = q.ValidUntil,
                 PaymentTerms = q.PaymentTerms,
                 Salesperson = q.Salesperson,
+                SellerId = q.SellerId,
+                WarehouseId = q.WarehouseId,
                 Observations = q.Observations,
                 Status = q.Status,
                 Subtotal = q.Subtotal,
@@ -358,7 +376,8 @@ namespace Onion.BussinesLogic.Services.Concrete
                     Subtotal = d.Subtotal,
                     TaxPercent = d.TaxPercent,
                     TaxAmount = d.TaxAmount,
-                    Total = d.Total
+                    Total = d.Total,
+                    Notes = d.Notes
                 }).ToList()
             };
         }

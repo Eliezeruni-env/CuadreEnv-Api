@@ -55,6 +55,15 @@ namespace Onion.BussinesLogic.Services.Concrete
             return low;
         }
 
+        public async Task<IEnumerable<WarehouseStockDto>> GetWarehouseStockAsync(int warehouseId)
+        {
+            var warehouse = await GetWarehouseAsync(warehouseId);
+            return (await _uow.Inventories.Query()
+                    .Where(i => i.WarehouseId == warehouse.Id && i.CompanyId == warehouse.CompanyId && i.Quantity != 0)
+                    .Select(i => new WarehouseStockDto(i.ProductId, i.Quantity))
+                    .ToListAsync());
+        }
+
         public async Task<IEnumerable<MovementDto>> GetMovementHistoryAsync(int? productId = null, int? warehouseId = null, DateTime? from = null, DateTime? to = null, string? type = null)
         {
             var list = await _uow.Movements.ListAsync();
@@ -180,6 +189,9 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<MovementDto> AddStockAsync(MovementRequestDto req, string performedBy)
         {
+            await EnsureMovementIsUniqueAsync(req.MovementNumber);
+            var details = GetDetails(req.ProductDetails, req.Details);
+            if (details.Count > 0) return await AddStockBatchAsync(req, details, performedBy);
             if (req.WarehouseId <= 0) throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "WAREHOUSE_REQUIRED", Message = "A valid warehouse is required.", Language = "EN" });
             if (req.Quantity <= 0) throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "INVALID_QUANTITY", Message = "Quantity must be greater than zero.", Language = "EN" });
             await EnsureNotServiceAsync(req.ProductId);
@@ -234,6 +246,9 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<MovementDto> RemoveStockAsync(MovementRequestDto req, string performedBy)
         {
+            await EnsureMovementIsUniqueAsync(req.MovementNumber);
+            var details = GetDetails(req.ProductDetails, req.Details);
+            if (details.Count > 0) return await RemoveStockBatchAsync(req, details, performedBy);
             if (req.WarehouseId <= 0) throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "WAREHOUSE_REQUIRED", Message = "A valid warehouse is required.", Language = "EN" });
             if (req.Quantity <= 0) throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "INVALID_QUANTITY", Message = "Quantity must be greater than zero.", Language = "EN" });
             await EnsureNotServiceAsync(req.ProductId);
@@ -279,6 +294,9 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<MovementDto> TransferStockAsync(TransferRequestDto req, string performedBy)
         {
+            await EnsureMovementIsUniqueAsync(req.MovementNumber);
+            var details = GetDetails(req.ProductDetails, req.Details);
+            if (details.Count > 0) return await TransferStockBatchAsync(req, details, performedBy);
             if (req.FromWarehouseId <= 0 || req.ToWarehouseId <= 0)
                 throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "WAREHOUSE_REQUIRED", Message = "Valid source and destination warehouses are required.", Language = "EN" });
             if (req.Quantity <= 0)
@@ -342,6 +360,85 @@ namespace Onion.BussinesLogic.Services.Concrete
             await _uow.SaveChangesAsync();
             await tx.CommitAsync();
             return new MovementDto(mv.Id, mv.ProductId, mv.FromWarehouseId, mv.ToWarehouseId, mv.Quantity, mv.Type.ToString(), CreationDate: mv.CreationDate);
+        }
+
+        private static List<WarehouseMovementDetailDto> GetDetails(IEnumerable<WarehouseMovementDetailDto> primary, IEnumerable<WarehouseMovementDetailDto> secondary)
+            => (primary?.Any() == true ? primary : secondary ?? Array.Empty<WarehouseMovementDetailDto>()).Where(d => d.ProductId > 0 && d.Quantity > 0).ToList();
+
+        private async Task EnsureMovementIsUniqueAsync(string? movementNumber)
+        {
+            if (string.IsNullOrWhiteSpace(movementNumber)) return;
+            var exists = await _uow.Movements.Query().AnyAsync(m => m.MovementNumber == movementNumber);
+            if (exists)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error
+                {
+                    Code = "DUPLICATE_MOVEMENT",
+                    Message = "A movement with this idempotency key already exists.",
+                    Language = "EN"
+                });
+        }
+
+        private async Task<MovementDto> AddStockBatchAsync(MovementRequestDto req, List<WarehouseMovementDetailDto> details, string performedBy)
+        {
+            var wh = await GetWarehouseAsync(req.WarehouseId);
+            await using var tx = await _uow.BeginTransactionAsync();
+            var movement = new Movement { ProductId = details[0].ProductId, ToWarehouseId = wh.Id, Type = MovementType.Inbound, CompanyId = wh.CompanyId, CreatedBy = performedBy, CreateBy = performedBy, ModifiedBy = performedBy, MovementNumber = req.MovementNumber };
+            foreach (var detail in details)
+            {
+                await EnsureNotServiceAsync(detail.ProductId);
+                if (!await _uow.Inventories.TryIncreaseStockAsync(detail.ProductId, wh.Id, wh.CompanyId, detail.Quantity, performedBy) || !await _uow.Products.TryIncreaseStockAsync(detail.ProductId, detail.Quantity))
+                    throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "PRODUCT_NOT_FOUND", Message = "The product does not exist in the current company.", Language = "EN" });
+                movement.Quantity += detail.Quantity;
+                movement.TotalCost += detail.Cost > 0 ? detail.Cost : detail.Quantity * detail.UnitCost;
+                movement.Details.Add(new MovementDetail { ProductId = detail.ProductId, ProductName = detail.ProductName, BarCode = detail.BarCode, Quantity = detail.Quantity, UnitCost = detail.UnitCost, TotalCost = detail.Cost > 0 ? detail.Cost : detail.Quantity * detail.UnitCost });
+            }
+            movement.UnitCost = movement.Quantity == 0 ? 0 : movement.TotalCost / movement.Quantity;
+            await _uow.Movements.AddAsync(movement);
+            await _uow.SaveChangesAsync();
+            await tx.CommitAsync();
+            return new MovementDto(movement.Id, movement.ProductId, null, movement.ToWarehouseId, movement.Quantity, movement.Type.ToString(), CreationDate: movement.CreationDate, UnitCost: movement.UnitCost, TotalCost: movement.TotalCost, MovementNumber: movement.MovementNumber);
+        }
+
+        private async Task<MovementDto> RemoveStockBatchAsync(MovementRequestDto req, List<WarehouseMovementDetailDto> details, string performedBy)
+        {
+            var wh = await GetWarehouseAsync(req.WarehouseId);
+            await using var tx = await _uow.BeginTransactionAsync();
+            var movement = new Movement { ProductId = details[0].ProductId, FromWarehouseId = wh.Id, Type = MovementType.Outbound, CompanyId = wh.CompanyId, CreatedBy = performedBy, CreateBy = performedBy, ModifiedBy = performedBy, MovementNumber = req.MovementNumber };
+            foreach (var detail in details)
+            {
+                await EnsureNotServiceAsync(detail.ProductId);
+                var inventory = await _uow.Inventories.GetByProductAndWarehouseAsync(detail.ProductId, wh.Id);
+                if (inventory != null) { inventory.Quantity = Math.Max(0, inventory.Quantity - detail.Quantity); inventory.ModifiedBy = performedBy; _uow.Inventories.Update(inventory); }
+                var product = await _uow.Products.GetByIdAsync(detail.ProductId);
+                if (product != null) { product.Stock = Math.Max(0, product.Stock - detail.Quantity); product.ModifiedBy = performedBy; _uow.Products.Update(product); }
+                movement.Quantity += detail.Quantity;
+                movement.TotalCost += detail.Cost > 0 ? detail.Cost : detail.Quantity * detail.UnitCost;
+                movement.Details.Add(new MovementDetail { ProductId = detail.ProductId, ProductName = detail.ProductName, BarCode = detail.BarCode, Quantity = detail.Quantity, UnitCost = detail.UnitCost, TotalCost = detail.Cost > 0 ? detail.Cost : detail.Quantity * detail.UnitCost });
+            }
+            movement.UnitCost = movement.Quantity == 0 ? 0 : movement.TotalCost / movement.Quantity;
+            await _uow.Movements.AddAsync(movement); await _uow.SaveChangesAsync(); await tx.CommitAsync();
+            return new MovementDto(movement.Id, movement.ProductId, movement.FromWarehouseId, null, movement.Quantity, movement.Type.ToString(), CreationDate: movement.CreationDate, UnitCost: movement.UnitCost, TotalCost: movement.TotalCost, MovementNumber: movement.MovementNumber);
+        }
+
+        private async Task<MovementDto> TransferStockBatchAsync(TransferRequestDto req, List<WarehouseMovementDetailDto> details, string performedBy)
+        {
+            if (req.FromWarehouseId == req.ToWarehouseId) throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "INVALID_TRANSFER", Message = "Source and destination must differ", Language = "EN" });
+            var source = await GetWarehouseAsync(req.FromWarehouseId); var destination = await GetWarehouseAsync(req.ToWarehouseId);
+            if (source.CompanyId != destination.CompanyId) throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "WAREHOUSE_COMPANY_MISMATCH", Message = "Source and destination warehouses must belong to the same company.", Language = "EN" });
+            await using var tx = await _uow.BeginTransactionAsync();
+            var movement = new Movement { ProductId = details[0].ProductId, FromWarehouseId = source.Id, ToWarehouseId = destination.Id, Type = MovementType.Transfer, CompanyId = source.CompanyId, CreatedBy = performedBy, CreateBy = performedBy, ModifiedBy = performedBy, MovementNumber = req.MovementNumber };
+            foreach (var detail in details)
+            {
+                await EnsureNotServiceAsync(detail.ProductId);
+                var origin = await _uow.Inventories.GetByProductAndWarehouseAsync(detail.ProductId, source.Id); if (origin != null) { origin.Quantity = Math.Max(0, origin.Quantity - detail.Quantity); _uow.Inventories.Update(origin); }
+                var target = await _uow.Inventories.GetByProductAndWarehouseAsync(detail.ProductId, destination.Id) ?? new Inventory { ProductId = detail.ProductId, WarehouseId = destination.Id, CompanyId = source.CompanyId, CreateBy = performedBy, ModifiedBy = performedBy };
+                target.Quantity += detail.Quantity; if (target.Id == 0) await _uow.Inventories.AddAsync(target); else _uow.Inventories.Update(target);
+                movement.Quantity += detail.Quantity; movement.TotalCost += detail.Cost > 0 ? detail.Cost : detail.Quantity * detail.UnitCost;
+                movement.Details.Add(new MovementDetail { ProductId = detail.ProductId, ProductName = detail.ProductName, BarCode = detail.BarCode, Quantity = detail.Quantity, UnitCost = detail.UnitCost, TotalCost = detail.Cost > 0 ? detail.Cost : detail.Quantity * detail.UnitCost });
+            }
+            movement.UnitCost = movement.Quantity == 0 ? 0 : movement.TotalCost / movement.Quantity;
+            await _uow.Movements.AddAsync(movement); await _uow.SaveChangesAsync(); await tx.CommitAsync();
+            return new MovementDto(movement.Id, movement.ProductId, source.Id, destination.Id, movement.Quantity, movement.Type.ToString(), CreationDate: movement.CreationDate, UnitCost: movement.UnitCost, TotalCost: movement.TotalCost, MovementNumber: movement.MovementNumber);
         }
 
         private async Task EnsureNotServiceAsync(int productId)

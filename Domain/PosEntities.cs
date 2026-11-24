@@ -20,6 +20,7 @@ namespace Onion.Domain
         public string? Email { get; set; }
         public string? Address { get; set; }
         public string? Identification { get; set; }
+        public string? Rnc { get; set; }
         public string? Notes { get; set; }
         public bool IsGeneric { get; set; }
         public decimal CurrentDebt { get; set; }
@@ -69,7 +70,7 @@ namespace Onion.Domain
         }
     }
 
-    public enum SaleStatus { PENDING, PARTIAL, PAID, OVERDUE, CANCELLED }
+    public enum SaleStatus { PENDING, PARTIAL, PAID, OVERDUE, CANCELLED, PARTIALLY_CREDITED, CREDITED }
     public enum PaymentType { CASH, CREDIT }
     public enum PaymentMethod
     {
@@ -99,6 +100,8 @@ namespace Onion.Domain
         public DateTime Date { get; set; } = DateTime.UtcNow;
         public decimal Total { get; set; }
         public decimal PaidAmount { get; set; }
+        public bool HasPartialCreditNote { get; set; }
+        public string? CreditNoteStatus { get; set; }
         public SaleStatus Status { get; set; }
         public PaymentType PaymentType { get; set; }
         public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.CASH;
@@ -139,6 +142,10 @@ namespace Onion.Domain
         public int SaleId { get; set; }
         public int ProductId { get; set; }
         public decimal Quantity { get; set; }
+        public decimal OriginalQuantity { get; set; }
+        public decimal CreditedQuantity { get; set; }
+        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        public decimal NetQuantity => Math.Max(0m, (OriginalQuantity > 0 ? OriginalQuantity : Quantity) - CreditedQuantity);
         public decimal UnitPrice { get; set; }
         public decimal Discount { get; set; }
         public decimal Tax { get; set; }

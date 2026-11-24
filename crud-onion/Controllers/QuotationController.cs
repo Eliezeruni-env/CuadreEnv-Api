@@ -131,7 +131,7 @@ namespace Onion.Controllers
                 {
                     success = true,
                     message = $"Cotización convertida en Venta #{sale.Id} exitosamente.",
-                    data = new { saleId = sale.Id, total = sale.Total }
+                     data = new { saleId = sale.Id, saleCode = sale.InvoiceFolio, total = sale.Total }
                 });
             }
             catch (KeyNotFoundException)

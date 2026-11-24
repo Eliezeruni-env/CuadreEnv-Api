@@ -17,5 +17,7 @@ namespace Onion.BussinesLogic.Services.Abstract
         Task<IEnumerable<ProductDto>> GetLowStockAsync();
         Task<IEnumerable<MovementDto>> GetMovementHistoryAsync(int? productId = null, int? warehouseId = null, DateTime? from = null, DateTime? to = null, string? type = null);
         Task<IEnumerable<Onion.Domain.Inventory.InventoryMovement>> GetInventoryMovementsAsync(int? productId = null, int? warehouseId = null, DateTime? from = null, DateTime? to = null, string? type = null);
+        Task<IEnumerable<WarehouseStockDto>> GetWarehouseStockAsync(int warehouseId)
+            => throw new NotSupportedException("Warehouse stock lookup is not supported by this implementation.");
     }
 }

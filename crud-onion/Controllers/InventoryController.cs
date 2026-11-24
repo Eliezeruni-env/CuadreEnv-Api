@@ -64,6 +64,12 @@ namespace Onion.Controllers
             return Ok(items);
         }
 
+        [HttpGet("/Stock/warehouse/{warehouseId:int}")]
+        public async Task<IActionResult> GetWarehouseStock(int warehouseId)
+        {
+            return Ok(await _warehouseService.GetWarehouseStockAsync(warehouseId));
+        }
+
         [HttpGet("movements")]
         public async Task<IActionResult> GetMovements([FromQuery] int? productId = null, [FromQuery] int? warehouseId = null, [FromQuery] DateTime? from = null, [FromQuery] DateTime? to = null, [FromQuery] string? type = null, [FromQuery] int? pageNumber = null, [FromQuery] int? pageSize = null)
         {

@@ -12,6 +12,7 @@ namespace Onion.BussinesLogic.Dtos
         public int CustomerId { get; set; }
         public decimal TotalAmount { get; set; }
         public string? Reason { get; set; }
+        public bool ReturnToStock { get; set; }
         public List<CreditNoteDetailDto> Details { get; set; } = new List<CreditNoteDetailDto>();
     }
 
@@ -22,6 +23,8 @@ namespace Onion.BussinesLogic.Dtos
         public decimal Quantity { get; set; }
         public decimal UnitPrice { get; set; }
         public decimal LineTotal { get; set; }
+        public decimal OriginalQuantity { get; set; }
+        public decimal CreditedQuantity { get; set; }
     }
 
     public class CreateCreditNoteRequest
@@ -34,6 +37,7 @@ namespace Onion.BussinesLogic.Dtos
         public string? RefundMethod { get; set; }
         public int? CreditNoteType { get; set; }
         public int? WarehouseId { get; set; }
+        public bool ReturnToStock { get; set; } = true;
 
         public List<CreateCreditNoteDetail>? Details { get; set; }
 

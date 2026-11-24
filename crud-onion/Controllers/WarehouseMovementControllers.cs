@@ -30,6 +30,8 @@ namespace Onion.Controllers
         public async Task<IActionResult> Create([FromBody] MovementRequestDto dto)
         {
             if (dto == null) return BadRequest();
+            if (string.IsNullOrWhiteSpace(dto.MovementNumber) && Request.Headers.TryGetValue("Idempotency-Key", out var key))
+                dto = dto with { MovementNumber = key.ToString() };
             var movement = await _warehouseService.AddStockAsync(dto, User?.Identity?.Name ?? "system");
             return Ok(new { success = true, data = movement });
         }
@@ -60,6 +62,8 @@ namespace Onion.Controllers
         public async Task<IActionResult> Create([FromBody] MovementRequestDto dto)
         {
             if (dto == null) return BadRequest();
+            if (string.IsNullOrWhiteSpace(dto.MovementNumber) && Request.Headers.TryGetValue("Idempotency-Key", out var key))
+                dto = dto with { MovementNumber = key.ToString() };
             var movement = await _warehouseService.RemoveStockAsync(dto, User?.Identity?.Name ?? "system");
             return Ok(new { success = true, data = movement });
         }
@@ -90,6 +94,8 @@ namespace Onion.Controllers
         public async Task<IActionResult> Create([FromBody] TransferRequestDto dto)
         {
             if (dto == null) return BadRequest();
+            if (string.IsNullOrWhiteSpace(dto.MovementNumber) && Request.Headers.TryGetValue("Idempotency-Key", out var key))
+                dto = dto with { MovementNumber = key.ToString() };
             var movement = await _warehouseService.TransferStockAsync(dto, User?.Identity?.Name ?? "system");
             return Ok(new { success = true, data = movement });
         }

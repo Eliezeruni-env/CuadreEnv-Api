@@ -375,6 +375,118 @@ namespace Onion.DataAccess.Migrations
                     b.ToTable("AuditLogs");
                 });
 
+            modelBuilder.Entity("Onion.Domain.Audit.FraudGuardianIncident", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("CashRegisterId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CashRegisterName")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("CashierId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CashierName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("EvidenceAttached")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("IncidentCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ObservationRatio")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ObservedMetric")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Operator")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RegisterTime")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResolvedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ReviewResult")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SeverityCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SupervisorNotes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ThresholdLimit")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("FraudGuardianIncidents");
+                });
+
             modelBuilder.Entity("Onion.Domain.Authorization.DeletionApprovalRequest", b =>
                 {
                     b.Property<int>("Id")
@@ -1160,6 +1272,9 @@ namespace Onion.DataAccess.Migrations
                     b.Property<string>("Reason")
                         .HasColumnType("text");
 
+                    b.Property<bool>("ReturnToStock")
+                        .HasColumnType("boolean");
+
                     b.Property<int?>("SaleId")
                         .HasColumnType("integer");
 
@@ -1403,8 +1518,17 @@ namespace Onion.DataAccess.Migrations
                     b.Property<string>("Address")
                         .HasColumnType("text");
 
+                    b.Property<string>("CommercialRegister")
+                        .HasColumnType("text");
+
                     b.Property<int>("CompanyId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("ContactPerson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CorporateStatus")
+                        .HasColumnType("text");
 
                     b.Property<string>("CreateBy")
                         .IsRequired()
@@ -1412,6 +1536,12 @@ namespace Onion.DataAccess.Migrations
 
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CreditDays")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("CreditLimit")
+                        .HasColumnType("numeric");
 
                     b.Property<decimal>("CurrentDebt")
                         .HasColumnType("numeric");
@@ -1421,6 +1551,9 @@ namespace Onion.DataAccess.Migrations
 
                     b.Property<string>("Identification")
                         .HasColumnType("text");
+
+                    b.Property<bool>("IsCorporate")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
@@ -1445,9 +1578,353 @@ namespace Onion.DataAccess.Migrations
                     b.Property<string>("Phone")
                         .HasColumnType("text");
 
+                    b.Property<string>("Rnc")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.ToTable("Customers");
+                });
+
+            modelBuilder.Entity("Onion.Domain.DataExchange.DataExchangeLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Details")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("ErrorCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Format")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("ProcessedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SuccessCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserEmail")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DataExchangeLogs");
+                });
+
+            modelBuilder.Entity("Onion.Domain.DataExchange.ImportBatch", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("AppliedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AppliedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("BatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ErrorsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExecutionResultJson")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FileHashSha256")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Mode")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PreviewedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("RowsToInsert")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RowsToUpdate")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RowsUnchanged")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RowsWithErrors")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StoredRowsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("TotalRows")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ImportBatches");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Distribution.DistributionRoute", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("ActualCash")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("CashDifference")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("CashRegisterId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CoverageZone")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DestinationWarehouse")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("DestinationWarehouseId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DriverName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("ExpectedCash")
+                        .HasColumnType("numeric");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LiquidatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("OriginWarehouse")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("OriginWarehouseId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RouteCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RouteName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("TotalCollectedCash")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("TotalCollectedTransfer")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("TotalCreditSales")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("VehicleName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("VehiclePlate")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DistributionRoutes");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Distribution.DistributionRouteItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DistributionRouteId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("LoadedQuantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProductCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("ReturnedQuantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("SoldQuantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("TotalRemainingValue")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("TotalSoldAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DistributionRouteId");
+
+                    b.ToTable("DistributionRouteItems");
                 });
 
             modelBuilder.Entity("Onion.Domain.Finance.AccountPayable", b =>
@@ -1547,6 +2024,9 @@ namespace Onion.DataAccess.Migrations
                     b.Property<int?>("SaleId")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("SettledDate")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -1556,6 +2036,95 @@ namespace Onion.DataAccess.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("AccountReceivables");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Finance.BankReconciliationRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AccountLastFour")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("BankReference")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CustomerName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("DestinationBank")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("DifferenceAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("DiscrepancyReason")
+                        .HasColumnType("text");
+
+                    b.Property<string>("InvoiceNumber")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("RegisteredAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("SaleId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("StatementAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("TransactionDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("VerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VerifiedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("BankReconciliationRecords");
                 });
 
             modelBuilder.Entity("Onion.Domain.Finance.CashSession", b =>
@@ -2829,6 +3398,179 @@ namespace Onion.DataAccess.Migrations
                     b.ToTable("PurchaseOrderReceiptDetails");
                 });
 
+            modelBuilder.Entity("Onion.Domain.Quotations.Quotation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ConvertedSaleId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CustomerEmail")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("CustomerId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CustomerName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CustomerPhone")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("DiscountTotal")
+                        .HasColumnType("numeric");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("IssueDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Observations")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PaymentTerms")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("QuotationNumber")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Salesperson")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("SellerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("TaxTotal")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Total")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ValidUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("WarehouseId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Quotations");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Quotations.QuotationDetail", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("DiscountPercent")
+                        .HasColumnType("numeric");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProductCode")
+                        .HasColumnType("text");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("QuotationId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("TaxAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("TaxPercent")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("Total")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuotationId");
+
+                    b.ToTable("QuotationDetails");
+                });
+
             modelBuilder.Entity("Onion.Domain.Requests.ProcessedRequest", b =>
                 {
                     b.Property<long>("Id")
@@ -2998,6 +3740,9 @@ namespace Onion.DataAccess.Migrations
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("CreditNoteStatus")
+                        .HasColumnType("text");
+
                     b.Property<int?>("CustomerId")
                         .HasColumnType("integer");
 
@@ -3018,6 +3763,9 @@ namespace Onion.DataAccess.Migrations
 
                     b.Property<string>("FiscalRnc")
                         .HasColumnType("text");
+
+                    b.Property<bool>("HasPartialCreditNote")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("IdempotencyKey")
                         .HasColumnType("text");
@@ -3112,6 +3860,9 @@ namespace Onion.DataAccess.Migrations
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal>("CreditedQuantity")
+                        .HasColumnType("numeric");
+
                     b.Property<decimal>("Discount")
                         .HasColumnType("decimal(18,2)");
 
@@ -3124,6 +3875,9 @@ namespace Onion.DataAccess.Migrations
                     b.Property<string>("ModifiedBy")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<decimal>("OriginalQuantity")
+                        .HasColumnType("numeric");
 
                     b.Property<int>("ProductId")
                         .HasColumnType("integer");
@@ -3487,6 +4241,9 @@ namespace Onion.DataAccess.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CompanyId", "ProductId", "WarehouseId")
+                        .IsUnique();
+
                     b.ToTable("Inventories");
                 });
 
@@ -3528,6 +4285,9 @@ namespace Onion.DataAccess.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("MovementNumber")
+                        .HasColumnType("text");
+
                     b.Property<int>("ProductId")
                         .HasColumnType("integer");
 
@@ -3537,12 +4297,74 @@ namespace Onion.DataAccess.Migrations
                     b.Property<int?>("ToWarehouseId")
                         .HasColumnType("integer");
 
+                    b.Property<decimal>("TotalCost")
+                        .HasColumnType("numeric");
+
                     b.Property<int>("Type")
                         .HasColumnType("integer");
+
+                    b.Property<decimal>("UnitCost")
+                        .HasColumnType("numeric");
 
                     b.HasKey("Id");
 
                     b.ToTable("Movements");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Warehouses.MovementDetail", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("BarCode")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("MovementId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProductName")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("TotalCost")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("UnitCost")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MovementId");
+
+                    b.ToTable("MovementDetails");
                 });
 
             modelBuilder.Entity("Onion.Domain.Warehouses.Warehouse", b =>
@@ -3555,6 +4377,10 @@ namespace Onion.DataAccess.Migrations
 
                     b.Property<bool>("Active")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<int>("CompanyId")
                         .HasColumnType("integer");
@@ -3581,6 +4407,9 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "Code")
+                        .IsUnique();
 
                     b.ToTable("Warehouses");
                 });
@@ -3714,6 +4543,15 @@ namespace Onion.DataAccess.Migrations
                     b.Navigation("Credit");
                 });
 
+            modelBuilder.Entity("Onion.Domain.Distribution.DistributionRouteItem", b =>
+                {
+                    b.HasOne("Onion.Domain.Distribution.DistributionRoute", null)
+                        .WithMany("Items")
+                        .HasForeignKey("DistributionRouteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Onion.Domain.Finance.Installment", b =>
                 {
                     b.HasOne("Onion.Domain.Finance.PaymentPlan", null)
@@ -3750,6 +4588,15 @@ namespace Onion.DataAccess.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Onion.Domain.Quotations.QuotationDetail", b =>
+                {
+                    b.HasOne("Onion.Domain.Quotations.Quotation", null)
+                        .WithMany("Details")
+                        .HasForeignKey("QuotationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Onion.Domain.ReturnDetail", b =>
                 {
                     b.HasOne("Onion.Domain.Return", null)
@@ -3777,6 +4624,17 @@ namespace Onion.DataAccess.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Warehouses.MovementDetail", b =>
+                {
+                    b.HasOne("Onion.Domain.Warehouses.Movement", "Movement")
+                        .WithMany("Details")
+                        .HasForeignKey("MovementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Movement");
                 });
 
             modelBuilder.Entity("Onion.DataAccess.Clerk.ClerkOrganization", b =>
@@ -3825,6 +4683,11 @@ namespace Onion.DataAccess.Migrations
                     b.Navigation("StatusHistory");
                 });
 
+            modelBuilder.Entity("Onion.Domain.Distribution.DistributionRoute", b =>
+                {
+                    b.Navigation("Items");
+                });
+
             modelBuilder.Entity("Onion.Domain.Finance.PaymentPlan", b =>
                 {
                     b.Navigation("Installments");
@@ -3845,12 +4708,22 @@ namespace Onion.DataAccess.Migrations
                     b.Navigation("Details");
                 });
 
+            modelBuilder.Entity("Onion.Domain.Quotations.Quotation", b =>
+                {
+                    b.Navigation("Details");
+                });
+
             modelBuilder.Entity("Onion.Domain.Return", b =>
                 {
                     b.Navigation("Details");
                 });
 
             modelBuilder.Entity("Onion.Domain.Sale", b =>
+                {
+                    b.Navigation("Details");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Warehouses.Movement", b =>
                 {
                     b.Navigation("Details");
                 });

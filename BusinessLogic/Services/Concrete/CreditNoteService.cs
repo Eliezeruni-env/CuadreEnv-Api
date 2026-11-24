@@ -95,7 +95,8 @@ namespace Onion.BussinesLogic.Services.Concrete
                     SaleId = sale.Id,
                     CustomerId = request.CustomerId,
                     Date = DateTime.UtcNow,
-                    Reason = request.Reason
+                    Reason = request.Reason,
+                    ReturnToStock = request.ReturnToStock
                 };
 
                 // generate number simple sequential (could be improved)
@@ -119,6 +120,8 @@ namespace Onion.BussinesLogic.Services.Concrete
                 // Update sale status and notes based on returned quantities
                 if (sale != null)
                 {
+                    sale.Total = Math.Max(0m, sale.Total - note.TotalAmount);
+                    sale.PaidAmount = Math.Min(sale.PaidAmount, sale.Total);
                     var totalSoldUnits = sale.Details.Sum(sd => sd.Quantity);
                     var returnedByProduct = await _db.CreditNotes
                         .Where(x => x.CompanyId == companyId && x.SaleId == sale.Id && !x.IsDeleted)
@@ -129,7 +132,9 @@ namespace Onion.BussinesLogic.Services.Concrete
 
                     if (totalReturnedUnits >= totalSoldUnits)
                     {
-                        sale.Status = SaleStatus.CANCELLED;
+                        sale.Status = SaleStatus.CREDITED;
+                        sale.HasPartialCreditNote = false;
+                        sale.CreditNoteStatus = "Acreditada Totalmente";
                         sale.CancellationReason = $"Devuelta mediante Nota de Crédito {note.Number}";
                         sale.CancelledAt = DateTime.UtcNow;
                         sale.Notes = string.IsNullOrWhiteSpace(sale.Notes)
@@ -138,6 +143,9 @@ namespace Onion.BussinesLogic.Services.Concrete
                     }
                     else
                     {
+                        sale.Status = SaleStatus.PARTIALLY_CREDITED;
+                        sale.HasPartialCreditNote = true;
+                        sale.CreditNoteStatus = "Parcialmente Acreditada";
                         sale.Notes = string.IsNullOrWhiteSpace(sale.Notes)
                             ? $"[DEVOLUCIÓN PARCIAL CON NOTA DE CRÉDITO {note.Number}]"
                             : $"{sale.Notes} [DEVOLUCIÓN PARCIAL CON NOTA DE CRÉDITO {note.Number}]";
@@ -148,7 +156,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 await _db.SaveChangesAsync();
 
                 // Reingresar stock a almacén si aplica
-                if (!isPriceAdjustment)
+                if (!isPriceAdjustment && request.ReturnToStock)
                 {
                     foreach (var stockReturn in stockReturns)
                     {
@@ -163,14 +171,13 @@ namespace Onion.BussinesLogic.Services.Concrete
                     .FirstOrDefaultAsync(a => a.SaleId == sale.Id && a.CompanyId == companyId && a.Active && !a.IsDeleted);
 
                 decimal debtReduction = 0m;
-                if (ar != null && ar.Balance > 0)
+                if (ar != null)
                 {
                     debtReduction = Math.Min(ar.Balance, note.TotalAmount);
-                    ar.PaidAmount += debtReduction;
-                    if (ar.PaidAmount >= ar.TotalAmount)
-                    {
-                        ar.Status = Onion.Domain.Finance.ReceivableStatus.Paid;
-                    }
+                    ar.TotalAmount = Math.Max(0m, ar.TotalAmount - note.TotalAmount);
+                    ar.PaidAmount = Math.Min(ar.PaidAmount, ar.TotalAmount);
+                    ar.Status = ar.Balance <= 0 ? Onion.Domain.Finance.ReceivableStatus.Paid : Onion.Domain.Finance.ReceivableStatus.Open;
+                    ar.SettledDate = ar.Balance <= 0 ? DateTime.UtcNow : null;
                     _db.AccountReceivables.Update(ar);
 
                     await _db.Payments.AddAsync(new Payment
@@ -229,6 +236,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                     CustomerId = note.CustomerId,
                     TotalAmount = note.TotalAmount,
                     Reason = note.Reason,
+                    ReturnToStock = note.ReturnToStock,
                     Details = note.Details.Select(x => new CreditNoteDetailDto
                     {
                         Id = x.Id,

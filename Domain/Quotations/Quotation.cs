@@ -9,7 +9,8 @@ namespace Onion.Domain.Quotations
         SENT = 1,       // Enviada
         APPROVED = 2,   // Aprobada
         CONVERTED = 3,  // Convertida
-        EXPIRED = 4     // Vencida
+        EXPIRED = 4,    // Vencida
+        REJECTED = 5    // Rechazada
     }
 
     public class Quotation : BaseEntity
@@ -18,10 +19,14 @@ namespace Onion.Domain.Quotations
         public string QuotationNumber { get; set; } = string.Empty; // e.g. COT-00028
         public int? CustomerId { get; set; }
         public string? CustomerName { get; set; }
+        public string? CustomerEmail { get; set; }
+        public string? CustomerPhone { get; set; }
         public DateTime IssueDate { get; set; } = DateTime.UtcNow; // Fecha de emisión
         public DateTime ValidUntil { get; set; } // Válida hasta
         public string PaymentTerms { get; set; } = "Contado"; // Condiciones de pago (Contado, Crédito, etc.)
         public string? Salesperson { get; set; } // Vendedor
+        public int? SellerId { get; set; }
+        public int? WarehouseId { get; set; }
         public string? Observations { get; set; } // Observaciones
         public QuotationStatus Status { get; set; } = QuotationStatus.DRAFT;
 
@@ -29,6 +34,7 @@ namespace Onion.Domain.Quotations
         public decimal DiscountTotal { get; set; }
         public decimal TaxTotal { get; set; } // ITBIS (18%)
         public decimal Total { get; set; }
+        public string? Notes { get; set; }
 
         public int? ConvertedSaleId { get; set; } // ID de la venta creada si fue convertida
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -50,5 +56,6 @@ namespace Onion.Domain.Quotations
         public decimal TaxPercent { get; set; } = 18m;
         public decimal TaxAmount { get; set; }
         public decimal Total { get; set; }
+        public string? Notes { get; set; }
     }
 }

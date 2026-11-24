@@ -100,6 +100,7 @@ namespace Onion.DataAccess
         public DbSet<Onion.Domain.Warehouses.Warehouse> Warehouses { get; set; } = null!;
         public DbSet<Onion.Domain.Warehouses.Inventory> Inventories { get; set; } = null!;
         public DbSet<Onion.Domain.Warehouses.Movement> Movements { get; set; } = null!;
+        public DbSet<Onion.Domain.Warehouses.MovementDetail> MovementDetails { get; set; } = null!;
         public DbSet<Onion.Domain.Inventory.InventoryMovement> InventoryMovements { get; set; } = null!;
         public DbSet<Onion.Domain.Invoices.InvoiceSequence> InvoiceSequences { get; set; } = null!;
         public DbSet<Onion.Domain.Invoices.FiscalSequence> FiscalSequences { get; set; } = null!;
@@ -487,6 +488,12 @@ namespace Onion.DataAccess
 
             modelBuilder.Entity<Onion.Domain.Warehouses.Movement>()
                 .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+
+            modelBuilder.Entity<Onion.Domain.Warehouses.MovementDetail>()
+                .HasOne(e => e.Movement)
+                .WithMany(e => e.Details)
+                .HasForeignKey(e => e.MovementId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<Onion.Domain.Inventory.InventoryMovement>()
                 .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);

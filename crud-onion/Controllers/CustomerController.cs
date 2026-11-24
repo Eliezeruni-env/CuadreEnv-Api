@@ -46,9 +46,15 @@ namespace Onion.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null)
+        public async Task<IActionResult> GetAll(
+            [FromQuery] int? page = null,
+            [FromQuery] int? pageNumber = null,
+            [FromQuery] int? pageSize = null,
+            [FromQuery] string? search = null)
         {
-            var result = await _service.GetPagedAsync(pageNumber, pageSize, search);
+            var requestedPage = pageNumber ?? page ?? 1;
+            var requestedPageSize = pageSize ?? 20;
+            var result = await _service.GetPagedAsync(requestedPage, requestedPageSize, search);
             // Return paged result even if Items is empty. Empty pages are normal for new companies.
             return Ok(result);
         }
@@ -74,7 +80,7 @@ namespace Onion.Controllers
             {
                 id = c.Id,
                 companyName = c.Name,
-                rnc = c.Identification ?? "",
+                rnc = c.Rnc ?? c.Identification,
                 contactPerson = c.ContactPerson ?? c.Name,
                 phone = c.Phone ?? "",
                 email = c.Email ?? "",
@@ -105,15 +111,21 @@ namespace Onion.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> Post([FromBody] Customer customer)
+        public async Task<IActionResult> Post([FromBody] CustomerRequest request)
         {
+            if (request == null) return BadRequest();
+            var companyId = _currentUser.CompanyId;
+            if (companyId is not > 0) return BadRequest(new { code = "COMPANY_REQUIRED", message = "Authenticated company is required." });
+            var customer = request.ToEntity(companyId.Value);
             var created = await _service.CreateAsync(customer);
             return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
         }
 
         [HttpPut]
-        public async Task<IActionResult> Put([FromBody] Customer customer)
+        public async Task<IActionResult> Put([FromBody] CustomerRequest request)
         {
+            if (request == null || request.Id <= 0) return BadRequest();
+            var customer = request.ToEntity(_currentUser.CompanyId ?? 0);
             await _service.UpdateAsync(customer);
             return NoContent();
         }
@@ -126,5 +138,31 @@ namespace Onion.Controllers
         }
 
     public record MinimalCustomerRequest(string Name, string? Identification = null, string? Phone = null, int? CompanyId = null);
+
+    public sealed class CustomerRequest
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+        public string? CustomerName { get; set; }
+        public string? Identification { get; set; }
+        public string? Rnc { get; set; }
+        public string? Email { get; set; }
+        public string? Phone { get; set; }
+        public decimal CreditLimit { get; set; }
+        public bool Active { get; set; } = true;
+
+        public Customer ToEntity(int companyId) => new()
+        {
+            Id = Id,
+            CompanyId = companyId,
+            Name = string.IsNullOrWhiteSpace(Name) ? CustomerName ?? string.Empty : Name,
+            Identification = Identification,
+            Rnc = Rnc,
+            Email = Email,
+            Phone = Phone,
+            CreditLimit = CreditLimit,
+            Active = Active
+        };
+    }
     }
 }

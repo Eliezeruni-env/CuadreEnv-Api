@@ -352,7 +352,9 @@ namespace Onion.BussinesLogic.Services.Concrete
                 sale.Status = SaleStatus.PENDING;
 
             // Validate and deduct inventory before persisting the sale. Everything is committed atomically.
-            using var tx = await _uow.BeginTransactionAsync();
+            var existingTransaction = _uow.CurrentTransaction;
+            var ownsTransaction = existingTransaction is null;
+            var tx = existingTransaction ?? await _uow.BeginTransactionAsync();
             try
             {
                 var companySettingsList = await _uow.CompanySettingsRepo.FindAsync(cs => cs.CompanyId == sale.CompanyId);
@@ -582,12 +584,19 @@ namespace Onion.BussinesLogic.Services.Concrete
                 }
 
                 await _uow.SaveChangesAsync();
-                await tx.CommitAsync();
+                if (ownsTransaction)
+                    await tx.CommitAsync();
+                if (ownsTransaction)
+                    await tx.DisposeAsync();
                 return sale;
             }
             catch
             {
-                await tx.RollbackAsync();
+                if (ownsTransaction)
+                {
+                    await tx.RollbackAsync();
+                    await tx.DisposeAsync();
+                }
                 throw;
             }
         }
@@ -719,7 +728,10 @@ namespace Onion.BussinesLogic.Services.Concrete
                     : PaymentMethod.OTHER;
 
                 await _uow.Payments.AddAsync(payment);
-                sale.PaidAmount += payment.Amount;
+                var existingPayments = await _uow.Payments.Query()
+                    .Where(p => p.SaleId == saleId && p.Active && !p.IsDeleted)
+                    .SumAsync(p => p.Amount);
+                sale.PaidAmount = Math.Min(sale.Total, existingPayments);
                 if (sale.PaidAmount >= sale.Total) sale.Status = SaleStatus.PAID;
                 else if (sale.PaidAmount > 0) sale.Status = SaleStatus.PARTIAL;
 

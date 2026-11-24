@@ -52,10 +52,17 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (amount <= 0) throw new CustomException(new Onion.Common.Models.Error { Code = "INVALID_AMOUNT", Message = "Amount must be greater than zero", Language = "EN" });
             if (amount > ar.Balance) throw new CustomException(new Onion.Common.Models.Error { Code = "PAYMENT_EXCEEDS_BALANCE", Message = "Payment cannot exceed the account receivable balance", Language = "EN" });
 
-            ar.PaidAmount += amount;
-            if (ar.PaidAmount >= ar.TotalAmount)
+            if (amount >= ar.Balance)
             {
+                ar.PaidAmount = ar.TotalAmount;
                 ar.Status = ReceivableStatus.Paid;
+                ar.SettledDate = DateTime.UtcNow;
+            }
+            else
+            {
+                ar.PaidAmount = Math.Min(ar.TotalAmount, ar.PaidAmount + amount);
+                ar.Status = ReceivableStatus.Open;
+                ar.SettledDate = null;
             }
             _uow.AccountReceivables.Update(ar);
 
@@ -65,7 +72,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 var sale = await _uow.Sales.GetByIdAsync(ar.SaleId.Value);
                 if (sale != null)
                 {
-                    sale.PaidAmount = ar.PaidAmount;
+                    sale.PaidAmount = Math.Min(ar.PaidAmount, sale.Total);
                     if (sale.PaidAmount >= sale.Total)
                     {
                         sale.Status = Onion.Domain.SaleStatus.PAID;

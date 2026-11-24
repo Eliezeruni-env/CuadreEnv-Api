@@ -14,8 +14,11 @@ namespace Onion.BussinesLogic.Dtos
         public decimal Quantity { get; set; }
         public decimal UnitPrice { get; set; }
         public decimal DiscountPercent { get; set; }
+        public decimal DiscountRate { get => DiscountPercent; set => DiscountPercent = value; }
         public decimal Subtotal { get; set; }
         public decimal TaxPercent { get; set; }
+        public decimal ItbisRate { get => TaxPercent; set => TaxPercent = value; }
+        public string? Notes { get; set; }
         public decimal TaxAmount { get; set; }
         public decimal Total { get; set; }
     }
@@ -27,11 +30,19 @@ namespace Onion.BussinesLogic.Dtos
         public string QuotationNumber { get; set; } = string.Empty;
         public int? CustomerId { get; set; }
         public string? CustomerName { get; set; }
+        public string? CustomerEmail { get; set; }
+        public string? CustomerPhone { get; set; }
         public DateTime IssueDate { get; set; }
         public DateTime ValidUntil { get; set; }
         public string PaymentTerms { get; set; } = "Contado";
+        public string PaymentCondition { get => PaymentTerms; set => PaymentTerms = value; }
         public string? Salesperson { get; set; }
+        public int? SellerId { get; set; }
+        public string? SellerName { get => Salesperson; set => Salesperson = value; }
+        public int? WarehouseId { get; set; }
         public string? Observations { get; set; }
+        public string? Notes { get => Observations; set => Observations = value; }
+        public DateTime? ExpirationDate { get => ValidUntil; set => ValidUntil = value ?? default; }
         public QuotationStatus Status { get; set; }
         public string StatusName => Status switch
         {
@@ -40,6 +51,7 @@ namespace Onion.BussinesLogic.Dtos
             QuotationStatus.APPROVED => "Aprobada",
             QuotationStatus.CONVERTED => "Convertida",
             QuotationStatus.EXPIRED => "Vencida",
+            QuotationStatus.REJECTED => "Rechazada",
             _ => "Desconocido"
         };
         public decimal Subtotal { get; set; }
@@ -60,18 +72,29 @@ namespace Onion.BussinesLogic.Dtos
         public decimal Quantity { get; set; } = 1;
         public decimal UnitPrice { get; set; }
         public decimal DiscountPercent { get; set; }
+        public decimal DiscountRate { get => DiscountPercent; set => DiscountPercent = value; }
         public decimal TaxPercent { get; set; } = 18m;
+        public decimal ItbisRate { get => TaxPercent; set => TaxPercent = value; }
+        public string? Notes { get; set; }
     }
 
     public class CreateQuotationDto
     {
         public int? CustomerId { get; set; }
         public string? CustomerName { get; set; }
+        public string? CustomerEmail { get; set; }
+        public string? CustomerPhone { get; set; }
         public DateTime? IssueDate { get; set; }
         public DateTime? ValidUntil { get; set; }
         public string PaymentTerms { get; set; } = "Contado";
+        public string PaymentCondition { get => PaymentTerms; set => PaymentTerms = value; }
+        public int? SellerId { get; set; }
+        public string? SellerName { get => Salesperson; set => Salesperson = value; }
+        public int? WarehouseId { get; set; }
         public string? Salesperson { get; set; }
         public string? Observations { get; set; }
+        public string? Notes { get => Observations; set => Observations = value; }
+        public DateTime? ExpirationDate { get => ValidUntil; set => ValidUntil = value; }
         public QuotationStatus Status { get; set; } = QuotationStatus.DRAFT;
         public List<CreateQuotationDetailDto> Details { get; set; } = new List<CreateQuotationDetailDto>();
     }

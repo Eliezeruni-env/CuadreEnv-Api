@@ -47,6 +47,7 @@ namespace Onion.DataAccess.Repositories.Concrete
         IRepository<Onion.Domain.DataExchange.DataExchangeLog> DataExchangeLogs { get; }
 
         Task<int> SaveChangesAsync();
+        IDbContextTransaction? CurrentTransaction => null;
         Task<IDbContextTransaction> BeginTransactionAsync();
         Task<TResult> ExecuteStrategyAsync<TResult>(Func<Task<TResult>> operation);
         Task ExecuteStrategyAsync(Func<Task> operation);
@@ -156,6 +157,8 @@ namespace Onion.DataAccess.Repositories.Concrete
         {
             return await _context.Database.BeginTransactionAsync();
         }
+
+        public IDbContextTransaction? CurrentTransaction => _context.Database.CurrentTransaction;
 
 
         public async Task<int> SaveChangesAsync()

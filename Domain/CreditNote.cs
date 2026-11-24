@@ -12,6 +12,7 @@ namespace Onion.Domain
         public int CustomerId { get; set; }
         public decimal TotalAmount { get; set; }
         public string? Reason { get; set; }
+        public bool ReturnToStock { get; set; }
         public List<CreditNoteDetail> Details { get; set; } = new List<CreditNoteDetail>();
     }
 

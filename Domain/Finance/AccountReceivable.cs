@@ -14,6 +14,7 @@ namespace Onion.Domain.Finance
         public decimal PaidAmount { get; set; }
         public decimal Balance => TotalAmount - PaidAmount;
         public DateTime DueDate { get; set; }
+        public DateTime? SettledDate { get; set; }
         public ReceivableStatus Status { get; set; }
     }
 }
