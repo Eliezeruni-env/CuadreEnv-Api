@@ -2019,7 +2019,7 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("text");
 
                     b.Property<decimal>("PaidAmount")
-                        .HasColumnType("numeric");
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int?>("SaleId")
                         .HasColumnType("integer");
@@ -2031,9 +2031,13 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("integer");
 
                     b.Property<decimal>("TotalAmount")
-                        .HasColumnType("numeric");
+                        .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "SaleId")
+                        .IsUnique()
+                        .HasFilter("\"SaleId\" IS NOT NULL AND \"IsDeleted\" = false");
 
                     b.ToTable("AccountReceivables");
                 });
@@ -4286,7 +4290,8 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("MovementNumber")
-                        .HasColumnType("text");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<int>("ProductId")
                         .HasColumnType("integer");
@@ -4307,6 +4312,12 @@ namespace Onion.DataAccess.Migrations
                         .HasColumnType("numeric");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "CreationDate");
+
+                    b.HasIndex("CompanyId", "MovementNumber")
+                        .IsUnique()
+                        .HasFilter("\"MovementNumber\" IS NOT NULL AND \"MovementNumber\" <> '' AND \"IsDeleted\" = false");
 
                     b.ToTable("Movements");
                 });

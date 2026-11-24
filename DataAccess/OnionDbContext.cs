@@ -363,6 +363,15 @@ namespace Onion.DataAccess
                 entity.HasIndex(e => new { e.CompanyId, e.CashSessionId });
             });
 
+            modelBuilder.Entity<Onion.Domain.Finance.AccountReceivable>(entity =>
+            {
+                entity.HasIndex(e => new { e.CompanyId, e.SaleId })
+                    .IsUnique()
+                    .HasFilter(@"""SaleId"" IS NOT NULL AND ""IsDeleted"" = false");
+                entity.Property(e => e.TotalAmount).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.PaidAmount).HasColumnType("decimal(18,2)");
+            });
+
             modelBuilder.Entity<Onion.Domain.Finance.CashSession>(entity =>
             {
                 entity.Property(e => e.ExpectedCash).HasColumnType("decimal(18,2)");
@@ -486,8 +495,15 @@ namespace Onion.DataAccess
             modelBuilder.Entity<Onion.Domain.Warehouses.Inventory>()
                 .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
-            modelBuilder.Entity<Onion.Domain.Warehouses.Movement>()
-                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+            modelBuilder.Entity<Onion.Domain.Warehouses.Movement>(entity =>
+            {
+                entity.HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+                entity.Property(e => e.MovementNumber).HasMaxLength(100).IsRequired(false);
+                entity.HasIndex(e => new { e.CompanyId, e.MovementNumber })
+                    .IsUnique()
+                    .HasFilter(@"""MovementNumber"" IS NOT NULL AND ""MovementNumber"" <> '' AND ""IsDeleted"" = false");
+                entity.HasIndex(e => new { e.CompanyId, e.CreationDate });
+            });
 
             modelBuilder.Entity<Onion.Domain.Warehouses.MovementDetail>()
                 .HasOne(e => e.Movement)
@@ -664,7 +680,7 @@ namespace Onion.DataAccess
 
                     if (prop != null && tenantId.HasValue && tenantId.Value > 0)
                     {
-                        if (!isUserEntity && !isRefreshToken)
+                        if (!isRefreshToken)
                         {
                             if (prop.CurrentValue is int requestedCompanyId && requestedCompanyId > 0 && requestedCompanyId != tenantId.Value)
                                 throw new InvalidOperationException($"Tenant isolation violation: entity {entry.Metadata.ClrType.Name} belongs to company {requestedCompanyId}, current company is {tenantId.Value}.");
@@ -675,10 +691,9 @@ namespace Onion.DataAccess
                     }
                     else if (prop != null)
                     {
-                        // Users without a company are allowed during registration; a user already assigned to a company requires tenant context.
+                        // Tenant-owned users and entities require an active tenant context.
                         var userCompanyId = isUserEntity ? (entry.Entity as User)?.CompanyId : null;
-                        if (((!isUserEntity && !isRefreshToken) ||
-                             (isUserEntity && userCompanyId is > 0)) &&
+                        if ((!isRefreshToken || userCompanyId is > 0) &&
                             !IsGlobalTenantAccess)
                             throw new InvalidOperationException($"Tenant context is required to insert tenant-owned entity {entry.Metadata.ClrType.Name}.");
                     }

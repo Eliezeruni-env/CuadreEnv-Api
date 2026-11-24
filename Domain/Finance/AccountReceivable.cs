@@ -12,7 +12,7 @@ namespace Onion.Domain.Finance
         public int? SaleId { get; set; }
         public decimal TotalAmount { get; set; }
         public decimal PaidAmount { get; set; }
-        public decimal Balance => TotalAmount - PaidAmount;
+        public decimal Balance => Math.Max(0m, TotalAmount - PaidAmount);
         public DateTime DueDate { get; set; }
         public DateTime? SettledDate { get; set; }
         public ReceivableStatus Status { get; set; }

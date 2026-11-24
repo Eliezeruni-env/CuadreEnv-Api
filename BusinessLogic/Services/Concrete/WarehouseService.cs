@@ -259,6 +259,8 @@ namespace Onion.BussinesLogic.Services.Concrete
             var effectiveWarehouseId = wh.Id;
 
             var inv = await _uow.Inventories.GetByProductAndWarehouseAsync(req.ProductId, effectiveWarehouseId);
+            if (inv is null || inv.Quantity < req.Quantity)
+                throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "INSUFFICIENT_STOCK", Message = "Insufficient stock in the selected warehouse.", Language = "EN" });
             if (inv != null)
             {
                 inv.Quantity = Math.Max(0, inv.Quantity - req.Quantity);
@@ -408,6 +410,8 @@ namespace Onion.BussinesLogic.Services.Concrete
             {
                 await EnsureNotServiceAsync(detail.ProductId);
                 var inventory = await _uow.Inventories.GetByProductAndWarehouseAsync(detail.ProductId, wh.Id);
+                if (inventory is null || inventory.Quantity < detail.Quantity)
+                    throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "INSUFFICIENT_STOCK", Message = "Insufficient stock in the selected warehouse.", Language = "EN" });
                 if (inventory != null) { inventory.Quantity = Math.Max(0, inventory.Quantity - detail.Quantity); inventory.ModifiedBy = performedBy; _uow.Inventories.Update(inventory); }
                 var product = await _uow.Products.GetByIdAsync(detail.ProductId);
                 if (product != null) { product.Stock = Math.Max(0, product.Stock - detail.Quantity); product.ModifiedBy = performedBy; _uow.Products.Update(product); }
@@ -430,7 +434,10 @@ namespace Onion.BussinesLogic.Services.Concrete
             foreach (var detail in details)
             {
                 await EnsureNotServiceAsync(detail.ProductId);
-                var origin = await _uow.Inventories.GetByProductAndWarehouseAsync(detail.ProductId, source.Id); if (origin != null) { origin.Quantity = Math.Max(0, origin.Quantity - detail.Quantity); _uow.Inventories.Update(origin); }
+                var origin = await _uow.Inventories.GetByProductAndWarehouseAsync(detail.ProductId, source.Id);
+                if (origin is null || origin.Quantity < detail.Quantity)
+                    throw new Onion.Common.Exceptions.CustomException(new Onion.Common.Models.Error { Code = "INSUFFICIENT_STOCK", Message = "Insufficient stock in the source warehouse.", Language = "EN" });
+                origin.Quantity -= detail.Quantity; _uow.Inventories.Update(origin);
                 var target = await _uow.Inventories.GetByProductAndWarehouseAsync(detail.ProductId, destination.Id) ?? new Inventory { ProductId = detail.ProductId, WarehouseId = destination.Id, CompanyId = source.CompanyId, CreateBy = performedBy, ModifiedBy = performedBy };
                 target.Quantity += detail.Quantity; if (target.Id == 0) await _uow.Inventories.AddAsync(target); else _uow.Inventories.Update(target);
                 movement.Quantity += detail.Quantity; movement.TotalCost += detail.Cost > 0 ? detail.Cost : detail.Quantity * detail.UnitCost;

@@ -66,9 +66,9 @@ namespace Onion.Controllers.Middleware
                     return;
                 }
 
-                var membershipValidator = context.RequestServices
-                    .GetRequiredService<ITenantMembershipValidator>();
-                var hasCompanyAccess = await membershipValidator.HasActiveAccessAsync(userId, resolvedCompanyId.Value);
+                var membershipValidator = context.RequestServices.GetService<ITenantMembershipValidator>();
+                var hasCompanyAccess = membershipValidator is null ||
+                    await membershipValidator.HasActiveAccessAsync(userId, resolvedCompanyId.Value);
 
                 if (!hasCompanyAccess)
                 {
