@@ -500,7 +500,6 @@ namespace Onion.DataAccess
                 entity.HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
                 entity.Property(e => e.MovementNumber).HasMaxLength(100).IsRequired(false);
                 entity.HasIndex(e => new { e.CompanyId, e.MovementNumber })
-                    .IsUnique()
                     .HasFilter(@"""MovementNumber"" IS NOT NULL AND ""MovementNumber"" <> '' AND ""IsDeleted"" = false");
                 entity.HasIndex(e => new { e.CompanyId, e.CreationDate });
             });
@@ -710,8 +709,10 @@ namespace Onion.DataAccess
 
                     if (!tenantId.HasValue || tenantId.Value <= 0)
                     {
-                        // Allow updating existing users and tokens without tenant context (e.g. at login/refresh to record LastLoginAt/LastLoginIp).
-                        if (!isUser && !isToken)
+                        // A valid CompanyId already assigned by an authenticated service is sufficient
+                        // when the request tenant provider is unavailable. Never accept a missing or
+                        // zero tenant for tenant-owned entities.
+                        if (!isUser && !isToken && currentCompanyId <= 0 && originalCompanyId <= 0)
                             throw new InvalidOperationException($"Tenant context is required for entity {entry.Metadata.ClrType.Name}.");
                     }
                     else if ((currentCompanyId > 0 && currentCompanyId != tenantId.Value) ||
@@ -728,9 +729,15 @@ namespace Onion.DataAccess
                 }
 
                 var entityName = entry.Metadata.ClrType.Name;
+                var auditCompanyId = companyProperty?.CurrentValue is int currentAuditCompanyId && currentAuditCompanyId > 0
+                    ? currentAuditCompanyId
+                    : companyProperty?.OriginalValue is int originalAuditCompanyId && originalAuditCompanyId > 0
+                        ? originalAuditCompanyId
+                        : (int?)null;
+
                 AuditLogs.Add(new Onion.Domain.Audit.AuditLog
                 {
-                    CompanyId = companyProperty?.CurrentValue as int? ?? (companyProperty?.OriginalValue as int?),
+                    CompanyId = auditCompanyId,
                     UserId = currentUser?.UserId,
                     UserEmail = currentUser?.UserEmail,
                     UserRole = currentUser?.UserRole,

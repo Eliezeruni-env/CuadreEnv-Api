@@ -45,14 +45,14 @@ namespace Onion.DataAccess.Migrations
                 name: "IX_Movements_CompanyId_MovementNumber",
                 table: "Movements",
                 columns: new[] { "CompanyId", "MovementNumber" },
-                unique: true,
+                unique: false,
                 filter: "\"MovementNumber\" IS NOT NULL AND \"MovementNumber\" <> '' AND \"IsDeleted\" = false");
 
             migrationBuilder.CreateIndex(
                 name: "IX_AccountReceivables_CompanyId_SaleId",
                 table: "AccountReceivables",
                 columns: new[] { "CompanyId", "SaleId" },
-                unique: true,
+                unique: false,
                 filter: "\"SaleId\" IS NOT NULL AND \"IsDeleted\" = false");
         }
 

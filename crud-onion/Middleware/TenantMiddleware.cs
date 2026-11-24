@@ -53,12 +53,27 @@ namespace Onion.Controllers.Middleware
                     return;
                 }
 
-                var db = context.RequestServices.GetRequiredService<Onion.DataAccess.OnionDbContext>();
-                var primaryCompanyId = await db.Users.IgnoreQueryFilters().AsNoTracking()
-                    .Where(x => x.Id == userId && x.Active && !x.IsDeleted)
-                    .Select(x => x.CompanyId)
-                    .FirstOrDefaultAsync();
-                var resolvedCompanyId = requestedCompanyId ?? primaryCompanyId;
+                var resolvedCompanyId = requestedCompanyId;
+                if (resolvedCompanyId is not > 0)
+                {
+                    try
+                    {
+                        var db = context.RequestServices.GetRequiredService<Onion.DataAccess.OnionDbContext>();
+                        resolvedCompanyId = await db.Users.IgnoreQueryFilters().AsNoTracking()
+                            .Where(x => x.Id == userId && x.Active && !x.IsDeleted)
+                            .Select(x => x.CompanyId)
+                            .FirstOrDefaultAsync(context.RequestAborted);
+                    }
+                    catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception)
+                    {
+                        await WriteServiceUnavailableAsync(context);
+                        return;
+                    }
+                }
 
                 if (resolvedCompanyId is not > 0)
                 {
@@ -66,9 +81,18 @@ namespace Onion.Controllers.Middleware
                     return;
                 }
 
-                var membershipValidator = context.RequestServices.GetService<ITenantMembershipValidator>();
-                var hasCompanyAccess = membershipValidator is null ||
-                    await membershipValidator.HasActiveAccessAsync(userId, resolvedCompanyId.Value);
+                bool hasCompanyAccess;
+                try
+                {
+                    var membershipValidator = context.RequestServices.GetService<ITenantMembershipValidator>();
+                    hasCompanyAccess = membershipValidator is null ||
+                        await membershipValidator.HasActiveAccessAsync(userId, resolvedCompanyId.Value);
+                }
+                catch (Exception)
+                {
+                    await WriteServiceUnavailableAsync(context);
+                    return;
+                }
 
                 if (!hasCompanyAccess)
                 {
@@ -119,6 +143,28 @@ namespace Onion.Controllers.Middleware
                 message = "Acceso denegado: no tiene membresía activa en la empresa solicitada.",
             };
             await context.Response.WriteAsync(JsonSerializer.Serialize(response));
+        }
+
+        private static async Task WriteUnauthorizedAsync(HttpContext context, string message)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                errorCode = "UNAUTHORIZED",
+                message
+            }));
+        }
+
+        private static async Task WriteServiceUnavailableAsync(HttpContext context)
+        {
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new
+            {
+                errorCode = "TENANT_RESOLUTION_UNAVAILABLE",
+                message = "No fue posible validar el contexto de empresa en este momento."
+            }));
         }
 
         private static async Task WriteCompanyRequiredAsync(HttpContext context)

@@ -2039,7 +2039,6 @@ namespace Onion.DataAccess.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CompanyId", "SaleId")
-                        .IsUnique()
                         .HasFilter("\"SaleId\" IS NOT NULL AND \"IsDeleted\" = false");
 
                     b.ToTable("AccountReceivables");
@@ -4319,7 +4318,6 @@ namespace Onion.DataAccess.Migrations
                     b.HasIndex("CompanyId", "CreationDate");
 
                     b.HasIndex("CompanyId", "MovementNumber")
-                        .IsUnique()
                         .HasFilter("\"MovementNumber\" IS NOT NULL AND \"MovementNumber\" <> '' AND \"IsDeleted\" = false");
 
                     b.ToTable("Movements");
