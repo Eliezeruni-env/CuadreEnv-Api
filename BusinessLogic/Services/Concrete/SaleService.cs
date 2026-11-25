@@ -581,6 +581,17 @@ namespace Onion.BussinesLogic.Services.Concrete
                         Reference = !string.IsNullOrEmpty(sale.InvoiceFolio) ? sale.InvoiceFolio : $"Venta #{sale.Id}",
                         Comment = $"Deducción de venta #{sale.Id} - Almacén {deduction.warehouseId}"
                     });
+
+                    await _uow.Movements.AddAsync(new Onion.Domain.Warehouses.Movement
+                    {
+                        CompanyId = sale.CompanyId,
+                        Type = Onion.Domain.Warehouses.MovementType.Outbound,
+                        ProductId = deduction.productId,
+                        FromWarehouseId = deduction.warehouseId,
+                        Quantity = deduction.quantity,
+                        MovementNumber = !string.IsNullOrEmpty(sale.InvoiceFolio) ? sale.InvoiceFolio : $"VTA-{sale.Id}",
+                        CreatedBy = !string.IsNullOrWhiteSpace(sale.CreateBy) ? sale.CreateBy : "system"
+                    });
                 }
 
                 await _uow.SaveChangesAsync();
