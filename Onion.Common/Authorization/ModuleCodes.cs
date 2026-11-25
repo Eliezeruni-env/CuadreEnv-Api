@@ -35,7 +35,8 @@ public static class ModuleCodes
             ["admin-approvals"] = "audit", ["company-settings"] = "company", ["mobile-pos"] = "cashregister",
             // Legacy names retained only as aliases to a canonical module.
             ["user_management"] = "company", ["user-management"] = "company", ["rbac"] = "company",
-            ["appointments"] = "company", ["projects"] = "company", ["proyectos"] = "company"
+            ["appointments"] = "appointments", ["agenda"] = "appointments", ["citas"] = "appointments", ["reservas"] = "appointments", ["booking"] = "appointments",
+            ["projects"] = "company", ["proyectos"] = "company"
         };
 
     public static string? Normalize(string? value)
