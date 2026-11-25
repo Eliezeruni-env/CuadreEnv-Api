@@ -222,6 +222,17 @@ public sealed record SwitchCompanyRequest(int CompanyId, string? DeviceId = null
 
             var hasAllAssignedModules = assignedModules.Contains(ModuleCodes.All, StringComparer.Ordinal);
             var hasAllLicensedModules = licensedModules.Contains(ModuleCodes.All, StringComparer.Ordinal);
+
+            if (isAdmin && !hasAllAssignedModules && licensedModules.Count > 0)
+            {
+                var combined = new HashSet<string>(assignedModules, StringComparer.OrdinalIgnoreCase);
+                foreach (var lic in licensedModules)
+                {
+                    combined.Add(lic);
+                }
+                assignedModules = combined.ToArray();
+                hasAllAssignedModules = assignedModules.Contains(ModuleCodes.All, StringComparer.Ordinal);
+            }
             var effectiveModules = hasAllAssignedModules && hasAllLicensedModules
                 ? new[] { ModuleCodes.All }
                 : hasAllAssignedModules
