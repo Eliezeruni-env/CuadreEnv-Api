@@ -143,6 +143,20 @@ namespace Onion.DataAccess.Migrations
                     b.Property<bool>("Active")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("AppointmentServiceId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BillingStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("BookingCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<int>("CompanyId")
                         .HasColumnType("integer");
 
@@ -153,14 +167,36 @@ namespace Onion.DataAccess.Migrations
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("CustomerEmail")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<int?>("CustomerId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("CustomerName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("CustomerPhone")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<DateTime>("EndAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ManagementTokenExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ManagementTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<DateTime?>("ModificationDate")
                         .HasColumnType("timestamp with time zone");
@@ -173,7 +209,16 @@ namespace Onion.DataAccess.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<int>("Origin")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ProfessionalId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("ResourceId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SaleId")
                         .HasColumnType("integer");
 
                     b.Property<int?>("ServiceId")
@@ -187,11 +232,598 @@ namespace Onion.DataAccess.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AppointmentServiceId");
+
                     b.HasIndex("CompanyId");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("ManagementTokenHash");
+
+                    b.HasIndex("ProfessionalId");
 
                     b.HasIndex("ResourceId");
 
+                    b.HasIndex("SaleId")
+                        .IsUnique()
+                        .HasFilter("\"SaleId\" IS NOT NULL");
+
+                    b.HasIndex("CompanyId", "BookingCode")
+                        .IsUnique()
+                        .HasFilter("\"BookingCode\" IS NOT NULL");
+
+                    b.HasIndex("CompanyId", "ProfessionalId", "StartAt", "EndAt");
+
                     b.ToTable("Appointments");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentAvailabilityException", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<TimeSpan?>("EndTime")
+                        .HasColumnType("interval");
+
+                    b.Property<bool>("IsAllDay")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("ProfessionalId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<TimeSpan?>("StartTime")
+                        .HasColumnType("interval");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("ProfessionalId");
+
+                    b.HasIndex("CompanyId", "ProfessionalId", "Date");
+
+                    b.ToTable("AppointmentAvailabilityExceptions");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentEmployeeAvailability", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<TimeSpan?>("BreakEndTime")
+                        .HasColumnType("interval");
+
+                    b.Property<TimeSpan?>("BreakStartTime")
+                        .HasColumnType("interval");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeSpan>("EndTime")
+                        .HasColumnType("interval");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsWorkingDay")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("ProfessionalId")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeSpan>("StartTime")
+                        .HasColumnType("interval");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("ProfessionalId");
+
+                    b.HasIndex("CompanyId", "ProfessionalId", "DayOfWeek");
+
+                    b.ToTable("AppointmentEmployeeAvailabilities");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentNotification", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("AppointmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PayloadPreview")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("SentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("TriggerType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppointmentId");
+
+                    b.HasIndex("CompanyId");
+
+                    b.ToTable("AppointmentNotifications");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentProfessional", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsOwner")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SpecialtyTitle")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("AppointmentProfessionals");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentProfessionalService", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("AppointmentServiceId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CustomDurationMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("CustomPrice")
+                        .HasColumnType("numeric");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("ProfessionalId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppointmentServiceId");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("ProfessionalId");
+
+                    b.HasIndex("CompanyId", "ProfessionalId", "AppointmentServiceId")
+                        .IsUnique();
+
+                    b.ToTable("AppointmentProfessionalServices");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentRescheduleRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("AppointmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("ProposedEndAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ProposedStartAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestedBy")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppointmentId");
+
+                    b.HasIndex("CompanyId");
+
+                    b.ToTable("AppointmentRescheduleRequests");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentService", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("BufferTimeMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ColorHex")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPubliclyBookable")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("CompanyId", "ProductId")
+                        .IsUnique();
+
+                    b.ToTable("AppointmentServices");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ChannelEmail")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ChannelWhatsApp")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ConfirmationMode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DefaultDurationMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("HoldSlotTimeoutMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("MaxFutureBookingDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MinCancelLeadTimeHours")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MinLeadTimeHours")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("SendReminder1h")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SendReminder24h")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("SlotIntervalMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId")
+                        .IsUnique();
+
+                    b.ToTable("AppointmentSettings");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentStatusHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("AppointmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ChangeReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ChangedByUserId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("NewStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PreviousStatus")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppointmentId");
+
+                    b.HasIndex("CompanyId");
+
+                    b.ToTable("AppointmentStatusHistories");
                 });
 
             modelBuilder.Entity("Onion.Domain.Appointments.Availability", b =>
@@ -244,6 +876,86 @@ namespace Onion.DataAccess.Migrations
                     b.HasIndex("ResourceId");
 
                     b.ToTable("Availabilities");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.BookingPageSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("BrandColorHex")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("BusinessName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CoverImageUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("CreateBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPublicActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LogoUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("ModificationDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("WhatsAppNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId")
+                        .IsUnique();
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.ToTable("BookingPageSettings");
                 });
 
             modelBuilder.Entity("Onion.Domain.Appointments.Resource", b =>
@@ -4316,7 +5028,6 @@ namespace Onion.DataAccess.Migrations
                     b.HasIndex("CompanyId", "CreationDate");
 
                     b.HasIndex("CompanyId", "MovementNumber")
-                        .IsUnique()
                         .HasFilter("\"MovementNumber\" IS NOT NULL AND \"MovementNumber\" <> '' AND \"IsDeleted\" = false");
 
                     b.ToTable("Movements");
@@ -4457,10 +5168,133 @@ namespace Onion.DataAccess.Migrations
 
             modelBuilder.Entity("Onion.Domain.Appointments.Appointment", b =>
                 {
+                    b.HasOne("Onion.Domain.Appointments.AppointmentService", "AppointmentService")
+                        .WithMany()
+                        .HasForeignKey("AppointmentServiceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Onion.Domain.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Onion.Domain.Appointments.AppointmentProfessional", "Professional")
+                        .WithMany()
+                        .HasForeignKey("ProfessionalId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Onion.Domain.Appointments.Resource", null)
                         .WithMany()
                         .HasForeignKey("ResourceId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Onion.Domain.Sale", "Sale")
+                        .WithMany()
+                        .HasForeignKey("SaleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AppointmentService");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Professional");
+
+                    b.Navigation("Sale");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentAvailabilityException", b =>
+                {
+                    b.HasOne("Onion.Domain.Appointments.AppointmentProfessional", "Professional")
+                        .WithMany("Exceptions")
+                        .HasForeignKey("ProfessionalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Professional");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentEmployeeAvailability", b =>
+                {
+                    b.HasOne("Onion.Domain.Appointments.AppointmentProfessional", "Professional")
+                        .WithMany("Availabilities")
+                        .HasForeignKey("ProfessionalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Professional");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentNotification", b =>
+                {
+                    b.HasOne("Onion.Domain.Appointments.Appointment", "Appointment")
+                        .WithMany("Notifications")
+                        .HasForeignKey("AppointmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Appointment");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentProfessional", b =>
+                {
+                    b.HasOne("Onion.Domain.Users.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentProfessionalService", b =>
+                {
+                    b.HasOne("Onion.Domain.Appointments.AppointmentService", "AppointmentService")
+                        .WithMany("ProfessionalServices")
+                        .HasForeignKey("AppointmentServiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Onion.Domain.Appointments.AppointmentProfessional", "Professional")
+                        .WithMany("ProfessionalServices")
+                        .HasForeignKey("ProfessionalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AppointmentService");
+
+                    b.Navigation("Professional");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentRescheduleRequest", b =>
+                {
+                    b.HasOne("Onion.Domain.Appointments.Appointment", "Appointment")
+                        .WithMany("RescheduleRequests")
+                        .HasForeignKey("AppointmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Appointment");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentService", b =>
+                {
+                    b.HasOne("Onion.Domain.Products.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentStatusHistory", b =>
+                {
+                    b.HasOne("Onion.Domain.Appointments.Appointment", "Appointment")
+                        .WithMany("StatusHistories")
+                        .HasForeignKey("AppointmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Appointment");
                 });
 
             modelBuilder.Entity("Onion.Domain.Appointments.Availability", b =>
@@ -4658,6 +5492,29 @@ namespace Onion.DataAccess.Migrations
             modelBuilder.Entity("Onion.DataAccess.Clerk.ClerkUser", b =>
                 {
                     b.Navigation("OrganizationMemberships");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.Appointment", b =>
+                {
+                    b.Navigation("Notifications");
+
+                    b.Navigation("RescheduleRequests");
+
+                    b.Navigation("StatusHistories");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentProfessional", b =>
+                {
+                    b.Navigation("Availabilities");
+
+                    b.Navigation("Exceptions");
+
+                    b.Navigation("ProfessionalServices");
+                });
+
+            modelBuilder.Entity("Onion.Domain.Appointments.AppointmentService", b =>
+                {
+                    b.Navigation("ProfessionalServices");
                 });
 
             modelBuilder.Entity("Onion.Domain.Appointments.Resource", b =>

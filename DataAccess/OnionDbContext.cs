@@ -127,6 +127,16 @@ namespace Onion.DataAccess
         public DbSet<Onion.Domain.Credits.CreditStatusHistory> CreditStatusHistory { get; set; } = null!;
         // Appointments module
         public DbSet<Onion.Domain.Appointments.Appointment> Appointments { get; set; } = null!;
+        public DbSet<Onion.Domain.Appointments.AppointmentService> AppointmentServices { get; set; } = null!;
+        public DbSet<Onion.Domain.Appointments.AppointmentProfessional> AppointmentProfessionals { get; set; } = null!;
+        public DbSet<Onion.Domain.Appointments.AppointmentProfessionalService> AppointmentProfessionalServices { get; set; } = null!;
+        public DbSet<Onion.Domain.Appointments.AppointmentEmployeeAvailability> AppointmentEmployeeAvailabilities { get; set; } = null!;
+        public DbSet<Onion.Domain.Appointments.AppointmentAvailabilityException> AppointmentAvailabilityExceptions { get; set; } = null!;
+        public DbSet<Onion.Domain.Appointments.AppointmentSettings> AppointmentSettings { get; set; } = null!;
+        public DbSet<Onion.Domain.Appointments.BookingPageSettings> BookingPageSettings { get; set; } = null!;
+        public DbSet<Onion.Domain.Appointments.AppointmentStatusHistory> AppointmentStatusHistories { get; set; } = null!;
+        public DbSet<Onion.Domain.Appointments.AppointmentRescheduleRequest> AppointmentRescheduleRequests { get; set; } = null!;
+        public DbSet<Onion.Domain.Appointments.AppointmentNotification> AppointmentNotifications { get; set; } = null!;
         public DbSet<Onion.Domain.Appointments.Resource> Resources { get; set; } = null!;
         public DbSet<Onion.Domain.Appointments.Availability> Availabilities { get; set; } = null!;
         // Credit notes
@@ -567,13 +577,205 @@ namespace Onion.DataAccess
             modelBuilder.Entity<Onion.Domain.Appointments.Appointment>()
                 .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentService>()
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentProfessional>()
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentProfessionalService>()
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentEmployeeAvailability>()
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentAvailabilityException>()
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentSettings>()
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+
+            modelBuilder.Entity<Onion.Domain.Appointments.BookingPageSettings>()
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentStatusHistory>()
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentRescheduleRequest>()
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentNotification>()
+                .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
+
             modelBuilder.Entity<Onion.Domain.Appointments.Resource>()
                 .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
             modelBuilder.Entity<Onion.Domain.Appointments.Availability>()
                 .HasQueryFilter(e => this.IsGlobalTenantAccess || EF.Property<int>(e, "CompanyId") == this.TenantCompanyIdForQuery);
 
-            // Resource-Availability relationship
+            // AppointmentService configuration
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentService>(eb =>
+            {
+                eb.HasOne(s => s.Product)
+                  .WithMany()
+                  .HasForeignKey(s => s.ProductId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+                eb.HasIndex(s => new { s.CompanyId, s.ProductId }).IsUnique();
+                eb.HasIndex("CompanyId");
+            });
+
+            // AppointmentProfessional configuration
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentProfessional>(eb =>
+            {
+                eb.HasOne(p => p.User)
+                  .WithMany()
+                  .HasForeignKey(p => p.UserId)
+                  .IsRequired(false)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+                eb.HasIndex("CompanyId");
+            });
+
+            // AppointmentProfessionalService configuration
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentProfessionalService>(eb =>
+            {
+                eb.HasOne(ps => ps.Professional)
+                  .WithMany(p => p.ProfessionalServices)
+                  .HasForeignKey(ps => ps.ProfessionalId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+                eb.HasOne(ps => ps.AppointmentService)
+                  .WithMany(s => s.ProfessionalServices)
+                  .HasForeignKey(ps => ps.AppointmentServiceId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+                eb.HasIndex(ps => new { ps.CompanyId, ps.ProfessionalId, ps.AppointmentServiceId }).IsUnique();
+                eb.HasIndex("CompanyId");
+            });
+
+            // AppointmentEmployeeAvailability configuration
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentEmployeeAvailability>(eb =>
+            {
+                eb.HasOne(a => a.Professional)
+                  .WithMany(p => p.Availabilities)
+                  .HasForeignKey(a => a.ProfessionalId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+                eb.HasIndex(a => new { a.CompanyId, a.ProfessionalId, a.DayOfWeek });
+                eb.HasIndex("CompanyId");
+            });
+
+            // AppointmentAvailabilityException configuration
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentAvailabilityException>(eb =>
+            {
+                eb.HasOne(ex => ex.Professional)
+                  .WithMany(p => p.Exceptions)
+                  .HasForeignKey(ex => ex.ProfessionalId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+                eb.HasIndex(ex => new { ex.CompanyId, ex.ProfessionalId, ex.Date });
+                eb.HasIndex("CompanyId");
+            });
+
+            // AppointmentSettings configuration
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentSettings>(eb =>
+            {
+                eb.HasIndex(s => s.CompanyId).IsUnique();
+            });
+
+            // BookingPageSettings configuration
+            modelBuilder.Entity<Onion.Domain.Appointments.BookingPageSettings>(eb =>
+            {
+                eb.HasIndex(b => b.Slug).IsUnique();
+                eb.HasIndex(b => b.CompanyId).IsUnique();
+            });
+
+            // Appointment configuration
+            modelBuilder.Entity<Onion.Domain.Appointments.Appointment>(eb =>
+            {
+                eb.HasOne(a => a.Customer)
+                  .WithMany()
+                  .HasForeignKey(a => a.CustomerId)
+                  .IsRequired(false)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+                eb.HasOne(a => a.AppointmentService)
+                  .WithMany()
+                  .HasForeignKey(a => a.AppointmentServiceId)
+                  .IsRequired(false)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+                eb.HasOne(a => a.Professional)
+                  .WithMany()
+                  .HasForeignKey(a => a.ProfessionalId)
+                  .IsRequired(false)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+                eb.HasOne(a => a.Sale)
+                  .WithMany()
+                  .HasForeignKey(a => a.SaleId)
+                  .IsRequired(false)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+                // Optional relationship to legacy Resource
+                eb.HasOne<Onion.Domain.Appointments.Resource>()
+                  .WithMany()
+                  .HasForeignKey("ResourceId")
+                  .IsRequired(false)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+                // Unique 1-to-1 invoicing constraint: An appointment can only be linked to at most one sale, and a sale to at most one appointment
+                eb.HasIndex(a => a.SaleId)
+                  .IsUnique()
+                  .HasFilter("\"SaleId\" IS NOT NULL");
+
+                eb.HasIndex(a => new { a.CompanyId, a.BookingCode })
+                  .IsUnique()
+                  .HasFilter("\"BookingCode\" IS NOT NULL");
+
+                eb.HasIndex(a => new { a.CompanyId, a.ProfessionalId, a.StartAt, a.EndAt });
+                eb.HasIndex("CompanyId");
+                eb.HasIndex(a => a.ManagementTokenHash);
+            });
+
+            // AppointmentStatusHistory configuration
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentStatusHistory>(eb =>
+            {
+                eb.HasOne(h => h.Appointment)
+                  .WithMany(a => a.StatusHistories)
+                  .HasForeignKey(h => h.AppointmentId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+                eb.HasIndex(h => h.AppointmentId);
+                eb.HasIndex("CompanyId");
+            });
+
+            // AppointmentRescheduleRequest configuration
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentRescheduleRequest>(eb =>
+            {
+                eb.HasOne(r => r.Appointment)
+                  .WithMany(a => a.RescheduleRequests)
+                  .HasForeignKey(r => r.AppointmentId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+                eb.HasIndex(r => r.AppointmentId);
+                eb.HasIndex("CompanyId");
+            });
+
+            // AppointmentNotification configuration
+            modelBuilder.Entity<Onion.Domain.Appointments.AppointmentNotification>(eb =>
+            {
+                eb.HasOne(n => n.Appointment)
+                  .WithMany(a => a.Notifications)
+                  .HasForeignKey(n => n.AppointmentId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+                eb.HasIndex(n => n.AppointmentId);
+                eb.HasIndex("CompanyId");
+            });
+
+            // Resource-Availability relationship (legacy compatibility)
             modelBuilder.Entity<Onion.Domain.Appointments.Resource>(eb =>
             {
                 eb.HasMany(r => r.Availabilities)
@@ -587,18 +789,6 @@ namespace Onion.DataAccess
             modelBuilder.Entity<Onion.Domain.Appointments.Availability>(eb =>
             {
                 eb.HasIndex(a => a.ResourceId);
-                eb.HasIndex("CompanyId");
-            });
-
-            modelBuilder.Entity<Onion.Domain.Appointments.Appointment>(eb =>
-            {
-                // Optional relationship to Resource
-                eb.HasOne<Onion.Domain.Appointments.Resource>()
-                  .WithMany()
-                  .HasForeignKey("ResourceId")
-                  .IsRequired(false)
-                  .OnDelete(DeleteBehavior.Restrict);
-
                 eb.HasIndex("CompanyId");
             });
 

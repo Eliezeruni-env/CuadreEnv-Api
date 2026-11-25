@@ -52,6 +52,7 @@ builder.Services.AddResponseCompression(options =>
 });
 builder.Services.AddSignalR();
 builder.Services.AddScoped<Onion.Common.Services.ISecurityAlertPublisher, SignalRSecurityAlertPublisher>();
+builder.Services.AddScoped<Onion.Common.Services.IAgendaNotificationPublisher, SignalRAgendaNotificationPublisher>();
 builder.Services.AddHttpClient("Dgii", client =>
 {
     var baseUrl = builder.Configuration["Dgii:BaseUrl"];
@@ -239,6 +240,11 @@ builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IQuotationServi
 builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IDistributionRouteService, Onion.BussinesLogic.Services.Concrete.DistributionRouteService>();
 builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IFraudGuardianService, Onion.BussinesLogic.Services.Concrete.FraudGuardianService>();
 builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IBankReconciliationService, Onion.BussinesLogic.Services.Concrete.BankReconciliationService>();
+// Appointments and Agenda module
+builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IAvailabilityEngine, Onion.BussinesLogic.Services.Concrete.AvailabilityEngine>();
+builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IAppointmentAgendaService, Onion.BussinesLogic.Services.Concrete.AppointmentAgendaService>();
+builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IAgendaAdminService, Onion.BussinesLogic.Services.Concrete.AgendaAdminService>();
+builder.Services.AddScoped<Onion.BussinesLogic.Services.Abstract.IAppointmentService, Onion.BussinesLogic.Services.Concrete.AppointmentService>();
 // Register email service (production default). Tests may replace this registration in WebApplicationFactory.
 builder.Services.AddTransient<IEmailService, SmtpEmailService>();
 // Rate limiting for sensitive endpoints (login / refresh)
