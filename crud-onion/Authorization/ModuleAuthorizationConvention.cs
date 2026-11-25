@@ -10,7 +10,7 @@ public sealed class ModuleAuthorizationConvention : IApplicationModelConvention
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["AccountReceivableController"] = "receivables", ["CreditsController"] = "receivables",
-            ["AppointmentsController"] = "company", ["CategoryController"] = "sales", ["CompanyController"] = "company",
+            ["AppointmentsController"] = "company", ["AgendaController"] = "company", ["CategoryController"] = "sales", ["CompanyController"] = "company",
             ["CompanySettingsController"] = "company", ["CreditNoteController"] = "sales", ["CustomerController"] = "customers",
             ["DashboardController"] = "reports", ["DeletionApprovalController"] = "audit", ["InvitationsController"] = "company",
             ["InventoryController"] = "inventory", ["ManageRequestController"] = "company", ["MeController"] = "company",
@@ -41,7 +41,7 @@ public sealed class ModuleAuthorizationConvention : IApplicationModelConvention
                 continue;
 
             var controllerName = controller.ControllerType.Name;
-            if (controllerName is "AuthController" or "ClerkWebhookController" or "WeatherForecastController" or "WarehouseController" ||
+            if (controllerName is "AuthController" or "ClerkWebhookController" or "WeatherForecastController" or "WarehouseController" or "PublicBookingController" ||
                 controllerName.StartsWith("Internal", StringComparison.OrdinalIgnoreCase))
                 continue;
 
