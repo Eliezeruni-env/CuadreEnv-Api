@@ -407,6 +407,24 @@ try
         UPDATE ""Warehouses"" SET ""Code"" = 'WH-' || ""Id"" WHERE ""Code"" = '' OR ""Code"" IS NULL;
         CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Warehouses_CompanyId_Code"" ON ""Warehouses"" (""CompanyId"", ""Code"");
         CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Inventories_CompanyId_ProductId_WarehouseId"" ON ""Inventories"" (""CompanyId"", ""ProductId"", ""WarehouseId"");
+        -- POS, Sales & Inventory Enhancements
+        ALTER TABLE IF EXISTS ""Sales"" ADD COLUMN IF NOT EXISTS ""CreditNoteStatus"" text NULL;
+        ALTER TABLE IF EXISTS ""Sales"" ADD COLUMN IF NOT EXISTS ""HasPartialCreditNote"" boolean NOT NULL DEFAULT false;
+        ALTER TABLE IF EXISTS ""SaleDetails"" ADD COLUMN IF NOT EXISTS ""CreditedQuantity"" numeric NOT NULL DEFAULT 0;
+        ALTER TABLE IF EXISTS ""SaleDetails"" ADD COLUMN IF NOT EXISTS ""OriginalQuantity"" numeric NOT NULL DEFAULT 0;
+        ALTER TABLE IF EXISTS ""Customers"" ADD COLUMN IF NOT EXISTS ""Rnc"" text NULL;
+        ALTER TABLE IF EXISTS ""Customers"" ADD COLUMN IF NOT EXISTS ""CommercialRegister"" text NULL;
+        ALTER TABLE IF EXISTS ""Customers"" ADD COLUMN IF NOT EXISTS ""ContactPerson"" text NULL;
+        ALTER TABLE IF EXISTS ""Customers"" ADD COLUMN IF NOT EXISTS ""CorporateStatus"" text NULL;
+        ALTER TABLE IF EXISTS ""Customers"" ADD COLUMN IF NOT EXISTS ""CreditDays"" integer NOT NULL DEFAULT 0;
+        ALTER TABLE IF EXISTS ""Customers"" ADD COLUMN IF NOT EXISTS ""CreditLimit"" numeric NOT NULL DEFAULT 0;
+        ALTER TABLE IF EXISTS ""Customers"" ADD COLUMN IF NOT EXISTS ""IsCorporate"" boolean NOT NULL DEFAULT false;
+        ALTER TABLE IF EXISTS ""CreditNotes"" ADD COLUMN IF NOT EXISTS ""ReturnToStock"" boolean NOT NULL DEFAULT false;
+        ALTER TABLE IF EXISTS ""AccountReceivables"" ADD COLUMN IF NOT EXISTS ""SettledDate"" timestamp with time zone NULL;
+        ALTER TABLE IF EXISTS ""Movements"" ADD COLUMN IF NOT EXISTS ""MovementNumber"" character varying(100) NULL;
+        ALTER TABLE IF EXISTS ""Movements"" ADD COLUMN IF NOT EXISTS ""TotalCost"" numeric NOT NULL DEFAULT 0;
+        ALTER TABLE IF EXISTS ""Movements"" ADD COLUMN IF NOT EXISTS ""UnitCost"" numeric NOT NULL DEFAULT 0;
+
         ALTER TABLE IF EXISTS ""CreditNotes"" ADD COLUMN IF NOT EXISTS ""SaleId"" integer NULL;
         CREATE INDEX IF NOT EXISTS ""IX_CreditNotes"" ON ""CreditNotes"" (""CompanyId"", ""SaleId"");
 
