@@ -21,6 +21,8 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<bool> CompanyHasFeatureAsync(int companyId, string featureKey)
         {
+            var normalizedKey = ModuleCodes.Normalize(featureKey) ?? featureKey;
+
             if (_entitlementService != null && companyId > 0)
             {
                 try
@@ -28,10 +30,9 @@ namespace Onion.BussinesLogic.Services.Concrete
                     var entitlements = await _entitlementService.GetAsync(companyId);
                     if (entitlements != null && entitlements.Modules != null)
                     {
-                        var normalized = ModuleCodes.Normalize(featureKey) ?? featureKey;
                         if (entitlements.Modules.Contains("*") ||
                             entitlements.Modules.Contains(featureKey, StringComparer.OrdinalIgnoreCase) ||
-                            entitlements.Modules.Contains(normalized, StringComparer.OrdinalIgnoreCase))
+                            entitlements.Modules.Contains(normalizedKey, StringComparer.OrdinalIgnoreCase))
                         {
                             return true;
                         }
@@ -45,12 +46,31 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             var csList = await _uow.CompanySubscriptions.FindAsync(s => s.CompanyId == companyId);
             var cs = csList.FirstOrDefault();
-            if (cs == null) return false;
-            var plan = await _uow.SubscriptionPlans.GetByIdAsync(cs.SubscriptionPlanId);
-            if (plan == null) return false;
-            var features = (plan.Features ?? string.Empty).Split(',', System.StringSplitOptions.RemoveEmptyEntries).Select(f => f.Trim());
-            return features.Contains(featureKey, StringComparer.OrdinalIgnoreCase) ||
-                   features.Contains(ModuleCodes.Normalize(featureKey) ?? featureKey, StringComparer.OrdinalIgnoreCase);
+            if (cs != null)
+            {
+                var plan = await _uow.SubscriptionPlans.GetByIdAsync(cs.SubscriptionPlanId);
+                if (plan != null)
+                {
+                    var features = (plan.Features ?? string.Empty).Split(',', System.StringSplitOptions.RemoveEmptyEntries).Select(f => f.Trim());
+                    if (features.Contains("*") ||
+                        features.Contains(featureKey, StringComparer.OrdinalIgnoreCase) ||
+                        features.Contains(normalizedKey, StringComparer.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            // For appointments / agenda module, permit access if company is valid
+            if (string.Equals(normalizedKey, "appointments", StringComparison.OrdinalIgnoreCase))
+            {
+                if (companyId > 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }
