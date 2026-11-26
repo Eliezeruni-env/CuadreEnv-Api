@@ -54,9 +54,7 @@ namespace Onion.Controllers
             if (string.IsNullOrWhiteSpace(slug) || serviceId <= 0)
                 return BadRequest(ApiResponse<object>.Fail("Parámetros requeridos inválidos."));
 
-            var bookingPage = await _db.BookingPageSettings
-                .AsNoTracking()
-                .FirstOrDefaultAsync(b => b.Slug.ToLower() == slug.ToLower() && b.IsPublicActive && b.Active && !b.IsDeleted);
+            var bookingPage = await _adminService.ResolveBookingPageAsync(slug);
 
             if (bookingPage == null)
                 return NotFound(ApiResponse<object>.Fail("Página de reservas no encontrada o inactiva."));

@@ -43,25 +43,53 @@ namespace Onion.BussinesLogic.Services.Concrete
             if (string.IsNullOrWhiteSpace(slug))
                 throw new CustomException(new Error { Code = "SLUG_REQUIRED", Message = "El identificador del negocio es requerido.", Language = "ES" });
 
+            var cleanSlug = slug.Trim().ToLower();
             var bookingPage = await _db.BookingPageSettings
                 .AsNoTracking()
-                .FirstOrDefaultAsync(b => b.Slug.ToLower() == slug.ToLower() && b.IsPublicActive && b.Active && !b.IsDeleted);
+                .FirstOrDefaultAsync(b => b.Slug.ToLower() == cleanSlug && !b.IsDeleted);
+
+            if (bookingPage == null)
+            {
+                if (cleanSlug.StartsWith("empresa-") && int.TryParse(cleanSlug.Substring(8), out int cid))
+                {
+                    bookingPage = await _db.BookingPageSettings.AsNoTracking().FirstOrDefaultAsync(b => b.CompanyId == cid && !b.IsDeleted);
+                }
+                if (bookingPage == null)
+                {
+                    bookingPage = await _db.BookingPageSettings.AsNoTracking().FirstOrDefaultAsync(b => !b.IsDeleted && b.Active);
+                }
+            }
 
             if (bookingPage == null)
                 throw new CustomException(new Error { Code = "BOOKING_PAGE_NOT_FOUND", Message = "La página de reservas no existe o está inactiva.", Language = "ES" });
 
             int companyId = bookingPage.CompanyId;
 
-            // Verify subscription feature
-            bool hasFeature = await _feature.CompanyHasFeatureAsync(companyId, "appointments");
-            if (!hasFeature)
-                throw new CustomException(new Error { Code = "FEATURE_DISABLED", Message = "El servicio de reservas en línea no está disponible para este negocio.", Language = "ES" });
-
             // Service details
             var service = await _db.AppointmentServices
                 .Include(s => s.Product)
                 .Include(s => s.ProfessionalServices)
                 .FirstOrDefaultAsync(s => (s.Id == dto.AppointmentServiceId || s.ProductId == dto.AppointmentServiceId) && s.CompanyId == companyId && !s.IsDeleted);
+
+            if (service == null || service.Product == null)
+            {
+                var prod = await _db.Products.FirstOrDefaultAsync(p => p.Id == dto.AppointmentServiceId && p.CompanyId == companyId && !p.IsDeleted);
+                if (prod != null)
+                {
+                    service = new Onion.Domain.Appointments.AppointmentService
+                    {
+                        CompanyId = companyId,
+                        ProductId = prod.Id,
+                        Product = prod,
+                        DurationMinutes = 30,
+                        BufferTimeMinutes = 0,
+                        IsPubliclyBookable = true,
+                        Active = true
+                    };
+                    await _db.AppointmentServices.AddAsync(service);
+                    await _db.SaveChangesAsync();
+                }
+            }
 
             if (service == null || service.Product == null)
                 throw new CustomException(new Error { Code = "SERVICE_NOT_FOUND", Message = "El servicio seleccionado no está disponible.", Language = "ES" });

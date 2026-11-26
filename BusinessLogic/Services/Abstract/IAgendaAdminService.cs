@@ -24,6 +24,7 @@ namespace Onion.BussinesLogic.Services.Abstract
         Task<(AppointmentSettingsDto Settings, BookingPageSettingsDto BookingPage)> GetSettingsAsync(int companyId);
         Task<AppointmentSettingsDto> UpdateOperationalSettingsAsync(int companyId, AppointmentSettingsDto dto);
         Task<BookingPageSettingsDto> UpdateBookingPageSettingsAsync(int companyId, BookingPageSettingsDto dto);
+        Task<BookingPageSettings?> ResolveBookingPageAsync(string slug);
         Task<PublicBusinessProfileDto?> GetPublicBusinessProfileAsync(string slug);
 
         Task<AppointmentFullDetailDto> CreateManualAppointmentAsync(int companyId, CreateManualAppointmentDto dto, string? userId = null);
