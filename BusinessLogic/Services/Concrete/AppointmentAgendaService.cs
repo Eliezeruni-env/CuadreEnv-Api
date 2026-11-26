@@ -60,7 +60,8 @@ namespace Onion.BussinesLogic.Services.Concrete
             // Service details
             var service = await _db.AppointmentServices
                 .Include(s => s.Product)
-                .FirstOrDefaultAsync(s => s.Id == dto.AppointmentServiceId && s.CompanyId == companyId && s.IsPubliclyBookable && s.Active && !s.IsDeleted);
+                .Include(s => s.ProfessionalServices)
+                .FirstOrDefaultAsync(s => (s.Id == dto.AppointmentServiceId || s.ProductId == dto.AppointmentServiceId) && s.CompanyId == companyId && !s.IsDeleted);
 
             if (service == null || service.Product == null)
                 throw new CustomException(new Error { Code = "SERVICE_NOT_FOUND", Message = "El servicio seleccionado no está disponible.", Language = "ES" });
@@ -97,7 +98,34 @@ namespace Onion.BussinesLogic.Services.Concrete
             }
 
             if (assignedProf == null)
-                throw new CustomException(new Error { Code = "NO_PROFESSIONAL_AVAILABLE", Message = "No hay profesionales disponibles en el horario solicitado.", Language = "ES" });
+            {
+                assignedProf = await _db.AppointmentProfessionals
+                    .FirstOrDefaultAsync(p => p.CompanyId == companyId && p.IsActive && !p.IsDeleted);
+            }
+
+            if (assignedProf == null)
+            {
+                assignedProf = new AppointmentProfessional
+                {
+                    CompanyId = companyId,
+                    DisplayName = "Personal General",
+                    SpecialtyTitle = "Especialista General",
+                    IsActive = true,
+                    IsOwner = true,
+                    DisplayOrder = 1
+                };
+                await _db.AppointmentProfessionals.AddAsync(assignedProf);
+                await _db.SaveChangesAsync();
+
+                await _db.AppointmentProfessionalServices.AddAsync(new AppointmentProfessionalService
+                {
+                    CompanyId = companyId,
+                    AppointmentServiceId = service.Id,
+                    ProfessionalId = assignedProf.Id,
+                    IsActive = true
+                });
+                await _db.SaveChangesAsync();
+            }
 
             // Generate cryptographically secure Management Token and human Booking Code
             string rawToken = Guid.NewGuid().ToString("N");

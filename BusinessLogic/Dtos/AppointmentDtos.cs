@@ -278,12 +278,18 @@ namespace Onion.BussinesLogic.Dtos
     public record UpsertProfessionalDto(
         int? Id,
         int? UserId,
-        string DisplayName,
+        string? DisplayName,
+        string? FullName,
         string? SpecialtyTitle,
+        string? Specialties,
         bool IsOwner,
         bool IsActive,
         int DisplayOrder,
-        List<int>? AssignedServiceIds);
+        List<int>? AssignedServiceIds)
+    {
+        public string GetEffectiveName() => !string.IsNullOrWhiteSpace(DisplayName) ? DisplayName.Trim() : (!string.IsNullOrWhiteSpace(FullName) ? FullName.Trim() : "Profesional");
+        public string? GetEffectiveSpecialty() => !string.IsNullOrWhiteSpace(SpecialtyTitle) ? SpecialtyTitle.Trim() : Specialties?.Trim();
+    }
 
     public record WeeklyScheduleInputDto(
         DayOfWeek DayOfWeek,
@@ -312,14 +318,18 @@ namespace Onion.BussinesLogic.Dtos
         List<int>? AssignedProfessionalIds);
 
     public record CreateManualAppointmentDto(
-        int AppointmentServiceId,
+        int? AppointmentServiceId,
+        int? ServiceId,
         int ProfessionalId,
         DateTime StartAt,
         int? CustomerId,
         string CustomerName,
         string CustomerPhone,
         string? CustomerEmail,
-        string? Notes);
+        string? Notes)
+    {
+        public int GetEffectiveServiceId() => (AppointmentServiceId.HasValue && AppointmentServiceId.Value > 0) ? AppointmentServiceId.Value : ServiceId.GetValueOrDefault(0);
+    }
 
     // Public Portal DTOs
     public record PublicBusinessProfileDto(

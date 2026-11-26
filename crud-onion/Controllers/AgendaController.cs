@@ -143,10 +143,21 @@ namespace Onion.Controllers
         [HttpPost("appointments")]
         public async Task<IActionResult> CreateManual([FromBody] CreateManualAppointmentDto dto)
         {
-            int companyId = await GetCompanyIdAsync();
-            var username = User.Identity?.Name ?? "Admin";
-            var created = await _adminService.CreateManualAppointmentAsync(companyId, dto, username);
-            return CreatedAtAction(nameof(GetAppointment), new { id = created.Id }, ApiResponse<AppointmentFullDetailDto>.Ok(created));
+            try
+            {
+                int companyId = await GetCompanyIdAsync();
+                var username = User.Identity?.Name ?? "Admin";
+                var created = await _adminService.CreateManualAppointmentAsync(companyId, dto, username);
+                return CreatedAtAction(nameof(GetAppointment), new { id = created.Id }, ApiResponse<AppointmentFullDetailDto>.Ok(created));
+            }
+            catch (CustomException ex)
+            {
+                return BadRequest(ApiResponse<object>.Fail(ex.Error?.Message ?? ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ApiResponse<object>.Fail(ex.Message));
+            }
         }
 
         [HttpPut("appointments/{id:int}/status")]
@@ -325,18 +336,40 @@ namespace Onion.Controllers
         [HttpPost("professionals")]
         public async Task<IActionResult> UpsertProfessional([FromBody] UpsertProfessionalDto dto)
         {
-            int companyId = await GetCompanyIdAsync();
-            var result = await _adminService.UpsertProfessionalAsync(companyId, dto);
-            return Ok(ApiResponse<AppointmentProfessionalDto>.Ok(result));
+            try
+            {
+                int companyId = await GetCompanyIdAsync();
+                var result = await _adminService.UpsertProfessionalAsync(companyId, dto);
+                return Ok(ApiResponse<AppointmentProfessionalDto>.Ok(result));
+            }
+            catch (CustomException ex)
+            {
+                return BadRequest(ApiResponse<object>.Fail(ex.Error?.Message ?? ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ApiResponse<object>.Fail(ex.Message));
+            }
         }
 
         [HttpPut("professionals/{id:int}")]
         public async Task<IActionResult> UpdateProfessional(int id, [FromBody] UpsertProfessionalDto dto)
         {
-            int companyId = await GetCompanyIdAsync();
-            var input = dto with { Id = id };
-            var result = await _adminService.UpsertProfessionalAsync(companyId, input);
-            return Ok(ApiResponse<AppointmentProfessionalDto>.Ok(result));
+            try
+            {
+                int companyId = await GetCompanyIdAsync();
+                var input = dto with { Id = id };
+                var result = await _adminService.UpsertProfessionalAsync(companyId, input);
+                return Ok(ApiResponse<AppointmentProfessionalDto>.Ok(result));
+            }
+            catch (CustomException ex)
+            {
+                return BadRequest(ApiResponse<object>.Fail(ex.Error?.Message ?? ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ApiResponse<object>.Fail(ex.Message));
+            }
         }
 
         [HttpPut("professionals/{id:int}/schedule")]

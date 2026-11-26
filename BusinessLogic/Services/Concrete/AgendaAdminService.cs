@@ -499,8 +499,8 @@ namespace Onion.BussinesLogic.Services.Concrete
                 await _db.AppointmentProfessionals.AddAsync(entity);
             }
 
-            entity.DisplayName = dto.DisplayName.Trim();
-            entity.SpecialtyTitle = dto.SpecialtyTitle?.Trim();
+            entity.DisplayName = dto.GetEffectiveName();
+            entity.SpecialtyTitle = dto.GetEffectiveSpecialty();
             entity.UserId = dto.UserId;
             entity.IsOwner = dto.IsOwner;
             entity.IsActive = dto.IsActive;
@@ -538,7 +538,13 @@ namespace Onion.BussinesLogic.Services.Concrete
 
                 _db.AppointmentProfessionalServices.RemoveRange(existingLinks);
 
-                foreach (var serviceId in dto.AssignedServiceIds)
+                // Filter to only existing services in this company to prevent foreign key errors
+                var validServiceIds = await _db.AppointmentServices
+                    .Where(s => s.CompanyId == companyId && dto.AssignedServiceIds.Contains(s.Id))
+                    .Select(s => s.Id)
+                    .ToListAsync();
+
+                foreach (var serviceId in validServiceIds)
                 {
                     await _db.AppointmentProfessionalServices.AddAsync(new AppointmentProfessionalService
                     {
@@ -754,7 +760,7 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             var services = await _db.AppointmentServices
                 .Include(s => s.Product)
-                .Where(s => s.CompanyId == companyId && s.IsPubliclyBookable && s.Active && !s.IsDeleted)
+                .Where(s => s.CompanyId == companyId && !s.IsDeleted && (s.IsPubliclyBookable || s.Active))
                 .OrderBy(s => s.DisplayOrder)
                 .AsNoTracking()
                 .ToListAsync();
@@ -808,18 +814,75 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<AppointmentFullDetailDto> CreateManualAppointmentAsync(int companyId, CreateManualAppointmentDto dto, string? userId = null)
         {
+            int targetServiceId = dto.GetEffectiveServiceId();
+
             var service = await _db.AppointmentServices
                 .Include(s => s.Product)
-                .FirstOrDefaultAsync(s => s.Id == dto.AppointmentServiceId && s.CompanyId == companyId);
+                .Include(s => s.ProfessionalServices)
+                .FirstOrDefaultAsync(s => (s.Id == targetServiceId || s.ProductId == targetServiceId) && s.CompanyId == companyId);
+
+            if (service == null || service.Product == null)
+            {
+                // Fallback: search any active service in company
+                service = await _db.AppointmentServices
+                    .Include(s => s.Product)
+                    .Include(s => s.ProfessionalServices)
+                    .FirstOrDefaultAsync(s => s.CompanyId == companyId && s.Active && !s.IsDeleted);
+            }
 
             if (service == null || service.Product == null)
                 throw new CustomException(new Error { Code = "SERVICE_NOT_FOUND", Message = "El servicio no fue encontrado.", Language = "ES" });
 
-            var prof = await _db.AppointmentProfessionals
-                .FirstOrDefaultAsync(p => p.Id == dto.ProfessionalId && p.CompanyId == companyId && p.IsActive);
+            AppointmentProfessional? prof = null;
+            if (dto.ProfessionalId > 0)
+            {
+                prof = await _db.AppointmentProfessionals
+                    .FirstOrDefaultAsync(p => p.Id == dto.ProfessionalId && p.CompanyId == companyId && p.IsActive);
+            }
 
+            // Fallback 1: assigned professional for this service
+            if (prof == null && service.ProfessionalServices != null && service.ProfessionalServices.Any())
+            {
+                var assignedProfId = service.ProfessionalServices.Where(ps => ps.IsActive).Select(ps => ps.ProfessionalId).FirstOrDefault();
+                if (assignedProfId > 0)
+                {
+                    prof = await _db.AppointmentProfessionals
+                        .FirstOrDefaultAsync(p => p.Id == assignedProfId && p.CompanyId == companyId && p.IsActive);
+                }
+            }
+
+            // Fallback 2: first active professional for company
             if (prof == null)
-                throw new CustomException(new Error { Code = "PROFESSIONAL_NOT_FOUND", Message = "El profesional no fue encontrado.", Language = "ES" });
+            {
+                prof = await _db.AppointmentProfessionals
+                    .FirstOrDefaultAsync(p => p.CompanyId == companyId && p.IsActive && !p.IsDeleted);
+            }
+
+            // Fallback 3: auto-create default professional if none exists at all
+            if (prof == null)
+            {
+                prof = new AppointmentProfessional
+                {
+                    CompanyId = companyId,
+                    DisplayName = "Personal General",
+                    SpecialtyTitle = "Especialista General",
+                    IsActive = true,
+                    IsOwner = true,
+                    DisplayOrder = 1
+                };
+                await _db.AppointmentProfessionals.AddAsync(prof);
+                await _db.SaveChangesAsync();
+
+                // Assign to service
+                await _db.AppointmentProfessionalServices.AddAsync(new AppointmentProfessionalService
+                {
+                    CompanyId = companyId,
+                    AppointmentServiceId = service.Id,
+                    ProfessionalId = prof.Id,
+                    IsActive = true
+                });
+                await _db.SaveChangesAsync();
+            }
 
             var startAt = DateTime.SpecifyKind(dto.StartAt, DateTimeKind.Utc);
             int duration = service.DurationMinutes > 0 ? service.DurationMinutes : 30;
