@@ -373,18 +373,31 @@ namespace Onion.BussinesLogic.Services.Concrete
             }
             else
             {
-                // Verify Product exists and belongs to company
-                var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == dto.ProductId && p.CompanyId == companyId);
-                if (product == null)
-                    throw new CustomException(new Error { Code = "PRODUCT_NOT_FOUND", Message = "El producto/servicio no existe en el catálogo.", Language = "ES" });
+                // Check if already exists for this Company and Product to prevent unique index violation
+                entity = await _db.AppointmentServices
+                    .Include(s => s.ProfessionalServices)
+                    .Include(s => s.Product)
+                    .FirstOrDefaultAsync(s => s.ProductId == dto.ProductId && s.CompanyId == companyId);
 
-                entity = new AppointmentServiceEntity
+                if (entity == null)
                 {
-                    CompanyId = companyId,
-                    ProductId = dto.ProductId,
-                    Product = product
-                };
-                await _db.AppointmentServices.AddAsync(entity);
+                    // Verify Product exists and belongs to company (or system product)
+                    var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == dto.ProductId && (p.CompanyId == companyId || p.CompanyId == 0));
+                    if (product == null)
+                    {
+                        product = await _db.Products.FirstOrDefaultAsync(p => p.Id == dto.ProductId);
+                        if (product == null)
+                            throw new CustomException(new Error { Code = "PRODUCT_NOT_FOUND", Message = "El producto/servicio no existe en el catálogo.", Language = "ES" });
+                    }
+
+                    entity = new AppointmentServiceEntity
+                    {
+                        CompanyId = companyId,
+                        ProductId = dto.ProductId,
+                        Product = product
+                    };
+                    await _db.AppointmentServices.AddAsync(entity);
+                }
             }
 
             entity.DurationMinutes = dto.DurationMinutes > 0 ? dto.DurationMinutes : 30;
@@ -405,7 +418,13 @@ namespace Onion.BussinesLogic.Services.Concrete
 
                 _db.AppointmentProfessionalServices.RemoveRange(existingLinks);
 
-                foreach (var profId in dto.AssignedProfessionalIds)
+                // Filter to only existing professionals in this company to prevent foreign key errors
+                var validProfIds = await _db.AppointmentProfessionals
+                    .Where(p => p.CompanyId == companyId && dto.AssignedProfessionalIds.Contains(p.Id))
+                    .Select(p => p.Id)
+                    .ToListAsync();
+
+                foreach (var profId in validProfIds)
                 {
                     await _db.AppointmentProfessionalServices.AddAsync(new AppointmentProfessionalService
                     {

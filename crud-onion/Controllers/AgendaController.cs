@@ -278,18 +278,40 @@ namespace Onion.Controllers
         [HttpPost("services")]
         public async Task<IActionResult> UpsertService([FromBody] UpsertAppointmentServiceInputDto dto)
         {
-            int companyId = await GetCompanyIdAsync();
-            var result = await _adminService.UpsertServiceAsync(companyId, dto);
-            return Ok(ApiResponse<AppointmentServiceConfigDto>.Ok(result));
+            try
+            {
+                int companyId = await GetCompanyIdAsync();
+                var result = await _adminService.UpsertServiceAsync(companyId, dto);
+                return Ok(ApiResponse<AppointmentServiceConfigDto>.Ok(result));
+            }
+            catch (CustomException ex)
+            {
+                return BadRequest(ApiResponse<object>.Fail(ex.Error?.Message ?? ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ApiResponse<object>.Fail("Error al guardar servicio reservable: " + ex.Message));
+            }
         }
 
         [HttpPut("services/{id:int}")]
         public async Task<IActionResult> UpdateService(int id, [FromBody] UpsertAppointmentServiceInputDto dto)
         {
-            int companyId = await GetCompanyIdAsync();
-            var input = dto with { Id = id };
-            var result = await _adminService.UpsertServiceAsync(companyId, input);
-            return Ok(ApiResponse<AppointmentServiceConfigDto>.Ok(result));
+            try
+            {
+                int companyId = await GetCompanyIdAsync();
+                var input = dto with { Id = id };
+                var result = await _adminService.UpsertServiceAsync(companyId, input);
+                return Ok(ApiResponse<AppointmentServiceConfigDto>.Ok(result));
+            }
+            catch (CustomException ex)
+            {
+                return BadRequest(ApiResponse<object>.Fail(ex.Error?.Message ?? ex.Message));
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ApiResponse<object>.Fail("Error al actualizar servicio reservable: " + ex.Message));
+            }
         }
 
         [HttpGet("professionals")]
