@@ -394,7 +394,8 @@ namespace Onion.BussinesLogic.Services.Concrete
                     {
                         CompanyId = companyId,
                         ProductId = dto.ProductId,
-                        Product = product
+                        Active = true,
+                        IsDeleted = false
                     };
                     await _db.AppointmentServices.AddAsync(entity);
                 }
@@ -406,43 +407,57 @@ namespace Onion.BussinesLogic.Services.Concrete
             entity.DisplayOrder = dto.DisplayOrder;
             entity.ColorHex = dto.ColorHex ?? "#3B82F6";
             entity.Active = dto.IsActive;
+            entity.IsDeleted = false;
 
-            await _db.SaveChangesAsync(); // save to get entity.Id
+            await _db.SaveChangesAsync(); // save to guarantee entity.Id is assigned
 
-            // Update assigned professionals
+            // Safely synchronize assigned professionals without triggering PostgreSQL unique constraint race
             if (dto.AssignedProfessionalIds != null)
             {
                 var existingLinks = await _db.AppointmentProfessionalServices
                     .Where(ps => ps.AppointmentServiceId == entity.Id && ps.CompanyId == companyId)
                     .ToListAsync();
 
-                _db.AppointmentProfessionalServices.RemoveRange(existingLinks);
-
-                // Filter to only existing professionals in this company to prevent foreign key errors
                 var validProfIds = await _db.AppointmentProfessionals
                     .Where(p => p.CompanyId == companyId && dto.AssignedProfessionalIds.Contains(p.Id))
                     .Select(p => p.Id)
                     .ToListAsync();
 
-                foreach (var profId in validProfIds)
+                var targetSet = validProfIds.Distinct().ToHashSet();
+
+                // 1. Remove links no longer in target
+                var toRemove = existingLinks.Where(ps => !targetSet.Contains(ps.ProfessionalId)).ToList();
+                if (toRemove.Count > 0)
                 {
-                    await _db.AppointmentProfessionalServices.AddAsync(new AppointmentProfessionalService
+                    _db.AppointmentProfessionalServices.RemoveRange(toRemove);
+                }
+
+                // 2. Add only links that don't already exist
+                var existingSet = existingLinks.Select(ps => ps.ProfessionalId).ToHashSet();
+                foreach (var profId in targetSet)
+                {
+                    if (!existingSet.Contains(profId))
                     {
-                        CompanyId = companyId,
-                        AppointmentServiceId = entity.Id,
-                        ProfessionalId = profId,
-                        IsActive = true
-                    });
+                        await _db.AppointmentProfessionalServices.AddAsync(new AppointmentProfessionalService
+                        {
+                            CompanyId = companyId,
+                            AppointmentServiceId = entity.Id,
+                            ProfessionalId = profId,
+                            IsActive = true
+                        });
+                    }
                 }
 
                 await _db.SaveChangesAsync();
             }
 
+            var prod = entity.Product ?? await _db.Products.FirstOrDefaultAsync(p => p.Id == entity.ProductId);
+
             return new AppointmentServiceConfigDto(
                 Id: entity.Id,
                 ProductId: entity.ProductId,
-                ProductName: entity.Product?.Description ?? "Servicio",
-                Price: entity.Product?.Price ?? 0m,
+                ProductName: prod?.Description ?? "Servicio",
+                Price: prod?.Price ?? 0m,
                 DurationMinutes: entity.DurationMinutes,
                 BufferTimeMinutes: entity.BufferTimeMinutes,
                 IsPubliclyBookable: entity.IsPubliclyBookable,
@@ -461,21 +476,65 @@ namespace Onion.BussinesLogic.Services.Concrete
         {
             var professionals = await _db.AppointmentProfessionals
                 .Include(p => p.ProfessionalServices)
+                .Include(p => p.Availabilities)
+                .Include(p => p.Exceptions)
+                .Include(p => p.User)
                 .Where(p => p.CompanyId == companyId && p.Active && !p.IsDeleted)
                 .OrderBy(p => p.DisplayOrder)
                 .AsNoTracking()
                 .ToListAsync();
 
-            return professionals.Select(p => new AppointmentProfessionalDto(
-                Id: p.Id,
-                UserId: p.UserId,
-                DisplayName: p.DisplayName,
-                SpecialtyTitle: p.SpecialtyTitle,
-                IsOwner: p.IsOwner,
-                IsActive: p.IsActive,
-                DisplayOrder: p.DisplayOrder,
-                AssignedServiceIds: p.ProfessionalServices?.Where(ps => ps.IsActive).Select(ps => ps.AppointmentServiceId).ToList() ?? new List<int>()
-            )).ToList();
+            return professionals.Select(p =>
+            {
+                string name = !string.IsNullOrWhiteSpace(p.DisplayName)
+                    ? p.DisplayName.Trim()
+                    : (p.User != null && !string.IsNullOrWhiteSpace(p.User.FirstName) ? $"{p.User.FirstName} {p.User.LastName}".Trim() : $"Colaborador #{p.Id}");
+
+                string specialty = !string.IsNullOrWhiteSpace(p.SpecialtyTitle)
+                    ? p.SpecialtyTitle.Trim()
+                    : "Servicios Generales";
+
+                var weekly = p.Availabilities != null && p.Availabilities.Any()
+                    ? p.Availabilities.Select(a => new ProfessionalWeeklyScheduleDto(
+                        (int)a.DayOfWeek,
+                        a.StartTime.ToString(@"hh\:mm\:ss"),
+                        a.EndTime.ToString(@"hh\:mm\:ss"),
+                        a.BreakStartTime.HasValue ? a.BreakStartTime.Value.ToString(@"hh\:mm\:ss") : null,
+                        a.BreakEndTime.HasValue ? a.BreakEndTime.Value.ToString(@"hh\:mm\:ss") : null,
+                        a.IsWorkingDay
+                    )).ToList()
+                    : new List<ProfessionalWeeklyScheduleDto>
+                    {
+                        new(1, "09:00:00", "18:00:00", "12:00:00", "13:00:00", true),
+                        new(2, "09:00:00", "18:00:00", "12:00:00", "13:00:00", true),
+                        new(3, "09:00:00", "18:00:00", "12:00:00", "13:00:00", true),
+                        new(4, "09:00:00", "18:00:00", "12:00:00", "13:00:00", true),
+                        new(5, "09:00:00", "18:00:00", "12:00:00", "13:00:00", true),
+                        new(6, "09:00:00", "18:00:00", "12:00:00", "13:00:00", true),
+                        new(0, "09:00:00", "18:00:00", null, null, false)
+                    };
+
+                var exceptions = p.Exceptions?.Select(e => new ProfessionalExceptionDto(
+                    e.Id,
+                    e.Date,
+                    e.Date,
+                    e.IsAllDay,
+                    e.Reason
+                )).ToList() ?? new List<ProfessionalExceptionDto>();
+
+                return new AppointmentProfessionalDto(
+                    Id: p.Id,
+                    UserId: p.UserId,
+                    DisplayName: name,
+                    SpecialtyTitle: specialty,
+                    IsOwner: p.IsOwner,
+                    IsActive: p.IsActive,
+                    DisplayOrder: p.DisplayOrder,
+                    AssignedServiceIds: p.ProfessionalServices?.Where(ps => ps.IsActive).Select(ps => ps.AppointmentServiceId).ToList() ?? new List<int>(),
+                    WeeklyAvailabilities: weekly,
+                    Exceptions: exceptions
+                );
+            }).ToList();
         }
 
         public async Task<AppointmentProfessionalDto> UpsertProfessionalAsync(int companyId, UpsertProfessionalDto dto)
@@ -529,30 +588,39 @@ namespace Onion.BussinesLogic.Services.Concrete
                 await _db.SaveChangesAsync();
             }
 
-            // Update assigned services
+            // Safely synchronize assigned services without triggering unique constraint race
             if (dto.AssignedServiceIds != null)
             {
                 var existingLinks = await _db.AppointmentProfessionalServices
                     .Where(ps => ps.ProfessionalId == entity.Id && ps.CompanyId == companyId)
                     .ToListAsync();
 
-                _db.AppointmentProfessionalServices.RemoveRange(existingLinks);
-
-                // Filter to only existing services in this company to prevent foreign key errors
                 var validServiceIds = await _db.AppointmentServices
                     .Where(s => s.CompanyId == companyId && dto.AssignedServiceIds.Contains(s.Id))
                     .Select(s => s.Id)
                     .ToListAsync();
 
-                foreach (var serviceId in validServiceIds)
+                var targetSet = validServiceIds.Distinct().ToHashSet();
+
+                var toRemove = existingLinks.Where(ps => !targetSet.Contains(ps.AppointmentServiceId)).ToList();
+                if (toRemove.Count > 0)
                 {
-                    await _db.AppointmentProfessionalServices.AddAsync(new AppointmentProfessionalService
+                    _db.AppointmentProfessionalServices.RemoveRange(toRemove);
+                }
+
+                var existingSet = existingLinks.Select(ps => ps.AppointmentServiceId).ToHashSet();
+                foreach (var serviceId in targetSet)
+                {
+                    if (!existingSet.Contains(serviceId))
                     {
-                        CompanyId = companyId,
-                        ProfessionalId = entity.Id,
-                        AppointmentServiceId = serviceId,
-                        IsActive = true
-                    });
+                        await _db.AppointmentProfessionalServices.AddAsync(new AppointmentProfessionalService
+                        {
+                            CompanyId = companyId,
+                            ProfessionalId = entity.Id,
+                            AppointmentServiceId = serviceId,
+                            IsActive = true
+                        });
+                    }
                 }
 
                 await _db.SaveChangesAsync();
@@ -580,7 +648,11 @@ namespace Onion.BussinesLogic.Services.Concrete
                 .Where(a => a.ProfessionalId == professionalId && a.CompanyId == companyId)
                 .ToListAsync();
 
-            _db.AppointmentEmployeeAvailabilities.RemoveRange(existing);
+            if (existing.Count > 0)
+            {
+                _db.AppointmentEmployeeAvailabilities.RemoveRange(existing);
+                await _db.SaveChangesAsync();
+            }
 
             foreach (var item in schedule)
             {
@@ -765,6 +837,32 @@ namespace Onion.BussinesLogic.Services.Concrete
                 .AsNoTracking()
                 .ToListAsync();
 
+            // If no appointment services are linked yet, fall back to active catalog services for this company
+            if (services.Count == 0)
+            {
+                var catalogServices = await _db.Products
+                    .Where(p => p.CompanyId == companyId && (p.ProductTypeId == 2 || (p.Barcode != null && p.Barcode.StartsWith("SERV-")) || (p.Reference != null && p.Reference.StartsWith("SERV-"))) && p.Active && !p.IsDeleted)
+                    .OrderBy(p => p.Description)
+                    .Take(30)
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                foreach (var cs in catalogServices)
+                {
+                    services.Add(new AppointmentServiceEntity
+                    {
+                        Id = cs.Id,
+                        CompanyId = companyId,
+                        ProductId = cs.Id,
+                        Product = cs,
+                        DurationMinutes = 30,
+                        BufferTimeMinutes = 0,
+                        IsPubliclyBookable = true,
+                        Active = true
+                    });
+                }
+            }
+
             var professionals = await _db.AppointmentProfessionals
                 .Include(p => p.ProfessionalServices)
                 .Where(p => p.CompanyId == companyId && p.IsActive && p.Active && !p.IsDeleted)
@@ -823,7 +921,33 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             if (service == null || service.Product == null)
             {
-                // Fallback: search any active service in company
+                // Fallback 1: check if targetServiceId is a Product in the catalog
+                if (targetServiceId > 0)
+                {
+                    var prod = await _db.Products.FirstOrDefaultAsync(p => p.Id == targetServiceId && (p.CompanyId == companyId || p.CompanyId == 0));
+                    if (prod != null)
+                    {
+                        var createdService = new AppointmentServiceEntity
+                        {
+                            CompanyId = companyId,
+                            ProductId = prod.Id,
+                            DurationMinutes = 30,
+                            BufferTimeMinutes = 0,
+                            IsPubliclyBookable = true,
+                            Active = true,
+                            IsDeleted = false
+                        };
+                        await _db.AppointmentServices.AddAsync(createdService);
+                        await _db.SaveChangesAsync();
+                        createdService.Product = prod;
+                        service = createdService;
+                    }
+                }
+            }
+
+            if (service == null || service.Product == null)
+            {
+                // Fallback 2: search any active service in company
                 service = await _db.AppointmentServices
                     .Include(s => s.Product)
                     .Include(s => s.ProfessionalServices)
@@ -831,7 +955,30 @@ namespace Onion.BussinesLogic.Services.Concrete
             }
 
             if (service == null || service.Product == null)
-                throw new CustomException(new Error { Code = "SERVICE_NOT_FOUND", Message = "El servicio no fue encontrado.", Language = "ES" });
+            {
+                // Fallback 3: check if company has any product of type service (ProductTypeId = 2 or SERV-)
+                var anyServiceProduct = await _db.Products.FirstOrDefaultAsync(p => p.CompanyId == companyId && (p.ProductTypeId == 2 || (p.Barcode != null && p.Barcode.StartsWith("SERV-")) || (p.Reference != null && p.Reference.StartsWith("SERV-"))) && p.Active && !p.IsDeleted);
+                if (anyServiceProduct != null)
+                {
+                    var autoCreated = new AppointmentServiceEntity
+                    {
+                        CompanyId = companyId,
+                        ProductId = anyServiceProduct.Id,
+                        DurationMinutes = 30,
+                        BufferTimeMinutes = 0,
+                        IsPubliclyBookable = true,
+                        Active = true,
+                        IsDeleted = false
+                    };
+                    await _db.AppointmentServices.AddAsync(autoCreated);
+                    await _db.SaveChangesAsync();
+                    autoCreated.Product = anyServiceProduct;
+                    service = autoCreated;
+                }
+            }
+
+            if (service == null || service.Product == null)
+                throw new CustomException(new Error { Code = "SERVICE_NOT_FOUND", Message = "El servicio no fue encontrado. Vincula al menos un servicio en Servicios Reservables.", Language = "ES" });
 
             AppointmentProfessional? prof = null;
             if (dto.ProfessionalId > 0)

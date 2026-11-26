@@ -148,6 +148,21 @@ namespace Onion.BussinesLogic.Dtos
         string? WhatsAppNumber,
         bool IsPublicActive);
 
+    public record ProfessionalWeeklyScheduleDto(
+        int DayOfWeek,
+        string StartTime,
+        string EndTime,
+        string? BreakStartTime,
+        string? BreakEndTime,
+        bool IsWorkingDay);
+
+    public record ProfessionalExceptionDto(
+        int Id,
+        DateTime StartDateTime,
+        DateTime EndDateTime,
+        bool IsAllDay,
+        string? Reason);
+
     public record AppointmentProfessionalDto(
         int Id,
         int? UserId,
@@ -156,7 +171,13 @@ namespace Onion.BussinesLogic.Dtos
         bool IsOwner,
         bool IsActive,
         int DisplayOrder,
-        List<int> AssignedServiceIds);
+        List<int> AssignedServiceIds,
+        List<ProfessionalWeeklyScheduleDto>? WeeklyAvailabilities = null,
+        List<ProfessionalExceptionDto>? Exceptions = null)
+    {
+        public string FullName => DisplayName;
+        public string? Specialties => SpecialtyTitle;
+    }
 
     public record AppointmentServiceConfigDto(
         int Id,
@@ -276,16 +297,16 @@ namespace Onion.BussinesLogic.Dtos
 
     // Upsert Inputs
     public record UpsertProfessionalDto(
-        int? Id,
-        int? UserId,
-        string? DisplayName,
-        string? FullName,
-        string? SpecialtyTitle,
-        string? Specialties,
-        bool IsOwner,
-        bool IsActive,
-        int DisplayOrder,
-        List<int>? AssignedServiceIds)
+        int? Id = null,
+        int? UserId = null,
+        string? DisplayName = null,
+        string? FullName = null,
+        string? SpecialtyTitle = null,
+        string? Specialties = null,
+        bool IsOwner = false,
+        bool IsActive = true,
+        int DisplayOrder = 0,
+        List<int>? AssignedServiceIds = null)
     {
         public string GetEffectiveName() => !string.IsNullOrWhiteSpace(DisplayName) ? DisplayName.Trim() : (!string.IsNullOrWhiteSpace(FullName) ? FullName.Trim() : "Profesional");
         public string? GetEffectiveSpecialty() => !string.IsNullOrWhiteSpace(SpecialtyTitle) ? SpecialtyTitle.Trim() : Specialties?.Trim();
