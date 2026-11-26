@@ -1036,6 +1036,17 @@ namespace Onion.BussinesLogic.Services.Concrete
             var endAt = startAt.AddMinutes(duration + service.BufferTimeMinutes);
 
             bool isFree = await _availability.IsProfessionalAvailableAsync(companyId, prof.Id, startAt, endAt);
+            if (!isFree && dto.ProfessionalId <= 0)
+            {
+                // Try to find another professional who is free at this slot
+                var otherProf = await _availability.AutoAssignProfessionalAsync(companyId, service.Id, startAt, endAt);
+                if (otherProf != null)
+                {
+                    prof = otherProf;
+                    isFree = true;
+                }
+            }
+
             if (!isFree)
                 throw new CustomException(new Error { Code = "SLOT_NOT_AVAILABLE", Message = "El horario ya se encuentra ocupado para este profesional.", Language = "ES" });
 

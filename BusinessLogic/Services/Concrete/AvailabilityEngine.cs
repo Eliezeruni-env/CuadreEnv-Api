@@ -48,7 +48,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 .Include(p => p.ProfessionalServices)
                 .Include(p => p.Availabilities)
                 .Include(p => p.Exceptions)
-                .Where(p => p.CompanyId == companyId && p.IsActive && p.Active && !p.IsDeleted);
+                .Where(p => p.CompanyId == companyId && p.IsActive && !p.IsDeleted);
 
             if (professionalId.HasValue && professionalId.Value > 0)
             {
@@ -60,6 +60,19 @@ namespace Onion.BussinesLogic.Services.Concrete
             }
 
             var professionals = await professionalsQuery.AsNoTracking().ToListAsync();
+
+            // Fallback: If no professionals are explicitly assigned to this service, load all active professionals of the company
+            if (professionals.Count == 0)
+            {
+                professionals = await _db.AppointmentProfessionals
+                    .Include(p => p.ProfessionalServices)
+                    .Include(p => p.Availabilities)
+                    .Include(p => p.Exceptions)
+                    .Where(p => p.CompanyId == companyId && p.IsActive && !p.IsDeleted)
+                    .AsNoTracking()
+                    .ToListAsync();
+            }
+
             if (professionals.Count == 0)
             {
                 return new DayAvailabilityDto(date.Date, new List<AvailableSlotDto>());
@@ -95,13 +108,18 @@ namespace Onion.BussinesLogic.Services.Concrete
 
                 // 2. Check weekly schedule for dayOfWeek
                 var weeklyAvailability = prof.Availabilities?.FirstOrDefault(a =>
-                    a.Active && !a.IsDeleted && a.DayOfWeek == dayOfWeek && a.IsWorkingDay);
-                if (weeklyAvailability == null) continue;
+                    a.Active && !a.IsDeleted && a.DayOfWeek == dayOfWeek);
 
-                var workStart = weeklyAvailability.StartTime;
-                var workEnd = weeklyAvailability.EndTime;
-                var breakStart = weeklyAvailability.BreakStartTime;
-                var breakEnd = weeklyAvailability.BreakEndTime;
+                // Skip only if explicitly configured as not working
+                if (weeklyAvailability != null && !weeklyAvailability.IsWorkingDay) continue;
+
+                // By default, if no custom availability is saved yet, Mon-Sat are working days (08:00 - 19:00)
+                if (weeklyAvailability == null && dayOfWeek == DayOfWeek.Sunday) continue;
+
+                var workStart = weeklyAvailability?.StartTime ?? new TimeSpan(8, 0, 0);
+                var workEnd = weeklyAvailability?.EndTime ?? new TimeSpan(19, 0, 0);
+                var breakStart = weeklyAvailability?.BreakStartTime;
+                var breakEnd = weeklyAvailability?.BreakEndTime;
 
                 var currentSlotTime = workStart;
                 while (currentSlotTime.Add(TimeSpan.FromMinutes(totalDurationMinutes)) <= workEnd)
@@ -179,10 +197,20 @@ namespace Onion.BussinesLogic.Services.Concrete
             var professionals = await _db.AppointmentProfessionals
                 .Include(p => p.ProfessionalServices)
                 .Where(p => p.CompanyId == companyId
-                         && p.IsActive && p.Active && !p.IsDeleted
+                         && p.IsActive && !p.IsDeleted
                          && p.ProfessionalServices!.Any(ps => ps.AppointmentServiceId == appointmentServiceId && ps.IsActive))
                 .OrderBy(p => p.DisplayOrder)
                 .ToListAsync();
+
+            if (professionals.Count == 0)
+            {
+                // Fallback: If none specifically assigned to this service, pick from any active company professional
+                professionals = await _db.AppointmentProfessionals
+                    .Include(p => p.ProfessionalServices)
+                    .Where(p => p.CompanyId == companyId && p.IsActive && !p.IsDeleted)
+                    .OrderBy(p => p.DisplayOrder)
+                    .ToListAsync();
+            }
 
             if (professionals.Count == 0) return null;
 
@@ -226,9 +254,17 @@ namespace Onion.BussinesLogic.Services.Concrete
                 .Include(p => p.Availabilities)
                 .Include(p => p.Exceptions)
                 .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Id == professionalId && p.CompanyId == companyId && p.IsActive && p.Active && !p.IsDeleted);
+                .FirstOrDefaultAsync(p => p.Id == professionalId && p.CompanyId == companyId && p.IsActive && !p.IsDeleted);
 
-            if (prof == null) return false;
+            // Fallback: If specified professionalId is not found, attempt to locate any active professional of the company
+            if (prof == null)
+            {
+                prof = await _db.AppointmentProfessionals
+                    .Include(p => p.Availabilities)
+                    .Include(p => p.Exceptions)
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.CompanyId == companyId && p.IsActive && !p.IsDeleted);
+            }
 
             var targetDate = startAt.Date;
             var dayOfWeek = targetDate.DayOfWeek;
@@ -236,22 +272,35 @@ namespace Onion.BussinesLogic.Services.Concrete
             var slotEndTime = endAt.TimeOfDay;
 
             // 1. All-day exception
-            var hasAllDayException = prof.Exceptions != null && prof.Exceptions.Any(e =>
+            var hasAllDayException = prof?.Exceptions != null && prof.Exceptions.Any(e =>
                 e.Active && !e.IsDeleted && e.Date.Date == targetDate && e.IsAllDay);
             if (hasAllDayException) return false;
 
             // 2. Weekly schedule
-            var weeklyAvailability = prof.Availabilities?.FirstOrDefault(a =>
-                a.Active && !a.IsDeleted && a.DayOfWeek == dayOfWeek && a.IsWorkingDay);
-            if (weeklyAvailability == null) return false;
+            var weeklyAvailability = prof?.Availabilities?.FirstOrDefault(a =>
+                a.Active && !a.IsDeleted && a.DayOfWeek == dayOfWeek);
 
-            if (slotStartTime < weeklyAvailability.StartTime || slotEndTime > weeklyAvailability.EndTime)
+            // If explicitly configured as non-working day, return false
+            if (weeklyAvailability != null && !weeklyAvailability.IsWorkingDay)
             {
                 return false;
             }
 
+            // Normal working hours with safe fallback (07:00 - 21:00) if no custom schedule is stored
+            var workStart = weeklyAvailability?.StartTime ?? new TimeSpan(7, 0, 0);
+            var workEnd = weeklyAvailability?.EndTime ?? new TimeSpan(21, 0, 0);
+
+            if (slotStartTime < workStart || slotEndTime > workEnd)
+            {
+                // In manual admin appointments, allow slight tolerance unless strictly out of bounds
+                if (slotStartTime < new TimeSpan(5, 0, 0) || slotEndTime > new TimeSpan(23, 30, 0))
+                {
+                    return false;
+                }
+            }
+
             // 3. Break overlap
-            if (weeklyAvailability.BreakStartTime.HasValue && weeklyAvailability.BreakEndTime.HasValue)
+            if (weeklyAvailability?.BreakStartTime.HasValue == true && weeklyAvailability.BreakEndTime.HasValue)
             {
                 if (slotStartTime < weeklyAvailability.BreakEndTime.Value && slotEndTime > weeklyAvailability.BreakStartTime.Value)
                 {
@@ -260,17 +309,17 @@ namespace Onion.BussinesLogic.Services.Concrete
             }
 
             // 4. Partial exceptions
-            var hasPartialException = prof.Exceptions != null && prof.Exceptions.Any(e =>
+            var hasPartialException = prof?.Exceptions != null && prof.Exceptions.Any(e =>
                 e.Active && !e.IsDeleted && e.Date.Date == targetDate && !e.IsAllDay
                 && e.StartTime.HasValue && e.EndTime.HasValue
                 && slotStartTime < e.EndTime.Value && slotEndTime > e.StartTime.Value);
             if (hasPartialException) return false;
 
-            // 5. Existing active appointments
+            // 5. Existing active appointments collision
             var now = DateTime.UtcNow;
             var hasCollision = await _db.Appointments
                 .AnyAsync(a => a.CompanyId == companyId
-                            && a.ProfessionalId == professionalId
+                            && (professionalId <= 0 || a.ProfessionalId == professionalId)
                             && (!excludeAppointmentId.HasValue || a.Id != excludeAppointmentId.Value)
                             && a.StartAt < endAt
                             && a.EndAt > startAt
