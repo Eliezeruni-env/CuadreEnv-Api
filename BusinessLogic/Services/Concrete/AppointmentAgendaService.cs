@@ -64,8 +64,13 @@ namespace Onion.BussinesLogic.Services.Concrete
                 throw new CustomException(new Error { Code = "BOOKING_PAGE_NOT_FOUND", Message = "La página de reservas no existe o está inactiva.", Language = "ES" });
 
             int companyId = bookingPage.CompanyId;
+            var prevTenant = Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId;
 
-            // Service details
+            try
+            {
+                Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = companyId;
+
+                // Service details
             var service = await _db.AppointmentServices
                 .Include(s => s.Product)
                 .Include(s => s.ProfessionalServices)
@@ -236,6 +241,11 @@ namespace Onion.BussinesLogic.Services.Concrete
                 DurationMinutes: service.DurationMinutes,
                 Notes: appointment.Notes
             );
+            }
+            finally
+            {
+                Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = prevTenant;
+            }
         }
 
         public async Task<AppointmentPublicStatusDto?> GetPublicAppointmentStatusAsync(string slug, string bookingCode, string managementToken)
