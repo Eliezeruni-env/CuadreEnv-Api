@@ -39,7 +39,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 var prod = await _db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == appointmentServiceId && (p.CompanyId == companyId || p.CompanyId == 0));
                 if (prod != null)
                 {
-                    service = new AppointmentServiceEntity
+                    service = new Onion.Domain.Appointments.AppointmentService
                     {
                         Id = prod.Id,
                         CompanyId = companyId,
@@ -52,7 +52,7 @@ namespace Onion.BussinesLogic.Services.Concrete
                 }
                 else
                 {
-                    service = new AppointmentServiceEntity
+                    service = new Onion.Domain.Appointments.AppointmentService
                     {
                         Id = appointmentServiceId > 0 ? appointmentServiceId : 1,
                         CompanyId = companyId,
