@@ -266,6 +266,7 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<AgendaClientsOverviewDto> GetClientsOverviewAsync(int companyId, string? search = null)
         {
+            Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = companyId;
             var query = _db.Appointments
                 .Include(a => a.AppointmentService)
                     .ThenInclude(s => s!.Product)
@@ -317,6 +318,38 @@ namespace Onion.BussinesLogic.Services.Concrete
                 .OrderByDescending(c => c.TotalCitas)
                 .ToList();
 
+            // Also include registered Customers of the company
+            var registeredCustomers = await _db.Customers
+                .Where(c => c.CompanyId == companyId && c.Active && !c.IsDeleted)
+                .AsNoTracking()
+                .ToListAsync();
+
+            var phoneSet = grouped.Where(c => !string.IsNullOrWhiteSpace(c.Phone)).Select(c => c.Phone.Trim()).ToHashSet();
+            foreach (var reg in registeredCustomers)
+            {
+                if (!string.IsNullOrWhiteSpace(reg.Phone) && phoneSet.Contains(reg.Phone.Trim()))
+                    continue;
+
+                if (!string.IsNullOrWhiteSpace(search))
+                {
+                    var s = search.ToLower().Trim();
+                    if (!(reg.Name?.ToLower().Contains(s) == true || reg.Phone?.Contains(s) == true))
+                        continue;
+                }
+
+                grouped.Add(new AgendaClientListItemDto(
+                    CustomerId: reg.Id,
+                    Name: reg.Name ?? "Cliente",
+                    Phone: reg.Phone ?? string.Empty,
+                    Email: reg.Email,
+                    UltimaCita: null,
+                    ProximaCita: null,
+                    TotalCitas: 0,
+                    Estado: "Nuevo",
+                    Historial: new List<AgendaClientHistoryItemDto>()
+                ));
+            }
+
             int totalClientes = grouped.Count;
             int nuevosEsteMes = grouped.Count(c => c.Historial.Count > 0 && c.Historial.Min(h => h.Date) >= startOfMonth);
             int recurrentes = grouped.Count(c => c.TotalCitas >= 2);
@@ -360,6 +393,7 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<AppointmentServiceConfigDto> UpsertServiceAsync(int companyId, UpsertAppointmentServiceInputDto dto)
         {
+            Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = companyId;
             AppointmentServiceEntity? entity;
             if (dto.Id.HasValue && dto.Id.Value > 0)
             {
@@ -474,6 +508,42 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<List<AppointmentProfessionalDto>> ListProfessionalsAsync(int companyId)
         {
+            Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = companyId;
+
+            // Auto-seed default professional for this tenant if none exists (similar to default Cliente Contado)
+            if (!await _db.AppointmentProfessionals.AnyAsync(p => p.CompanyId == companyId && !p.IsDeleted))
+            {
+                var defaultProf = new AppointmentProfessional
+                {
+                    CompanyId = companyId,
+                    DisplayName = "Personal General",
+                    SpecialtyTitle = "Atención General",
+                    IsActive = true,
+                    Active = true,
+                    IsOwner = false,
+                    DisplayOrder = 1
+                };
+                await _db.AppointmentProfessionals.AddAsync(defaultProf);
+                await _db.SaveChangesAsync();
+
+                for (int day = 0; day <= 6; day++)
+                {
+                    bool isWork = day != 0; // Lun - Sab laborables
+                    await _db.AppointmentEmployeeAvailabilities.AddAsync(new AppointmentEmployeeAvailability
+                    {
+                        CompanyId = companyId,
+                        ProfessionalId = defaultProf.Id,
+                        DayOfWeek = (DayOfWeek)day,
+                        StartTime = new TimeSpan(8, 0, 0),
+                        EndTime = new TimeSpan(19, 0, 0),
+                        BreakStartTime = isWork ? new TimeSpan(12, 0, 0) : null,
+                        BreakEndTime = isWork ? new TimeSpan(13, 0, 0) : null,
+                        IsWorkingDay = isWork
+                    });
+                }
+                await _db.SaveChangesAsync();
+            }
+
             var professionals = await _db.AppointmentProfessionals
                 .Include(p => p.ProfessionalServices)
                 .Include(p => p.Availabilities)
@@ -640,6 +710,7 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<bool> UpdateWeeklyScheduleAsync(int companyId, int professionalId, List<WeeklyScheduleInputDto> schedule)
         {
+            Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = companyId;
             var prof = await _db.AppointmentProfessionals.FirstOrDefaultAsync(p => p.Id == professionalId && p.CompanyId == companyId);
             if (prof == null)
                 throw new CustomException(new Error { Code = "NOT_FOUND", Message = "El profesional no fue encontrado.", Language = "ES" });
@@ -675,6 +746,7 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<AppointmentAvailabilityException> AddExceptionAsync(int companyId, int professionalId, AvailabilityExceptionInputDto dto)
         {
+            Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = companyId;
             var prof = await _db.AppointmentProfessionals.FirstOrDefaultAsync(p => p.Id == professionalId && p.CompanyId == companyId);
             if (prof == null)
                 throw new CustomException(new Error { Code = "NOT_FOUND", Message = "El profesional no fue encontrado.", Language = "ES" });
@@ -697,6 +769,7 @@ namespace Onion.BussinesLogic.Services.Concrete
 
         public async Task<bool> DeleteExceptionAsync(int companyId, int exceptionId)
         {
+            Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = companyId;
             var exception = await _db.AppointmentAvailabilityExceptions
                 .FirstOrDefaultAsync(e => e.Id == exceptionId && e.CompanyId == companyId);
 

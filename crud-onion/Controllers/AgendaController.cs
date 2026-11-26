@@ -58,6 +58,7 @@ namespace Onion.Controllers
                     throw new CustomException(new Error { Code = "FEATURE_NOT_SUBSCRIBED", Message = "El módulo de Citas y Reservas no está incluido en su plan actual.", Language = "ES" });
             }
 
+            Onion.DataAccess.Tenant.AmbientTenantProvider.CurrentCompanyId = companyId.Value;
             return companyId.Value;
         }
 

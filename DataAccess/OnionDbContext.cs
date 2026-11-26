@@ -880,11 +880,19 @@ namespace Onion.DataAccess
                     }
                     else if (prop != null)
                     {
-                        // Tenant-owned users and entities require an active tenant context.
-                        var userCompanyId = isUserEntity ? (entry.Entity as User)?.CompanyId : null;
-                        if ((!isRefreshToken || userCompanyId is > 0) &&
-                            !IsGlobalTenantAccess)
-                            throw new InvalidOperationException($"Tenant context is required to insert tenant-owned entity {entry.Metadata.ClrType.Name}.");
+                        // If entity already has a valid CompanyId assigned, accept it
+                        if (prop.CurrentValue is int validCompanyId && validCompanyId > 0)
+                        {
+                            // Already has valid tenant assigned by application service
+                        }
+                        else
+                        {
+                            // Tenant-owned users and entities require an active tenant context.
+                            var userCompanyId = isUserEntity ? (entry.Entity as User)?.CompanyId : null;
+                            if ((!isRefreshToken || userCompanyId is > 0) &&
+                                !IsGlobalTenantAccess)
+                                throw new InvalidOperationException($"Tenant context is required to insert tenant-owned entity {entry.Metadata.ClrType.Name}.");
+                        }
                     }
                 }
 
