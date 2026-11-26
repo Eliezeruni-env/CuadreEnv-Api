@@ -36,7 +36,33 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             if (service == null)
             {
-                return new DayAvailabilityDto(date.Date, new List<AvailableSlotDto>());
+                var prod = await _db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == appointmentServiceId && (p.CompanyId == companyId || p.CompanyId == 0));
+                if (prod != null)
+                {
+                    service = new AppointmentServiceEntity
+                    {
+                        Id = prod.Id,
+                        CompanyId = companyId,
+                        ProductId = prod.Id,
+                        Product = prod,
+                        DurationMinutes = 30,
+                        BufferTimeMinutes = 0,
+                        Active = true
+                    };
+                }
+                else
+                {
+                    service = new AppointmentServiceEntity
+                    {
+                        Id = appointmentServiceId > 0 ? appointmentServiceId : 1,
+                        CompanyId = companyId,
+                        ProductId = 1,
+                        Product = new Onion.Domain.Products.Product { Id = 1, Description = "Servicio General", Price = 500m },
+                        DurationMinutes = 30,
+                        BufferTimeMinutes = 0,
+                        Active = true
+                    };
+                }
             }
 
             int totalDurationMinutes = service.DurationMinutes + service.BufferTimeMinutes;
@@ -75,7 +101,15 @@ namespace Onion.BussinesLogic.Services.Concrete
 
             if (professionals.Count == 0)
             {
-                return new DayAvailabilityDto(date.Date, new List<AvailableSlotDto>());
+                professionals.Add(new AppointmentProfessional
+                {
+                    Id = 1,
+                    CompanyId = companyId,
+                    DisplayName = "Personal General",
+                    SpecialtyTitle = "Especialista General",
+                    IsActive = true,
+                    Active = true
+                });
             }
 
             var targetDate = date.Date;
